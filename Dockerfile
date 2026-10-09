@@ -3,7 +3,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 COPY vendor ./vendor
 COPY . .
-RUN CGO_ENABLED=1 go build -mod=vendor -trimpath -o /out/inventory ./cmd/inventory
+RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=1 go build -mod=vendor -trimpath -o /out/inventory ./cmd/inventory
 
 FROM debian:bookworm-slim
 RUN mkdir -p /data && chown 1000:1000 /data

@@ -15,7 +15,7 @@ import (
 var assets embed.FS
 
 func Open(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on&_journal_mode=WAL&_synchronous=FULL&_busy_timeout=5000")
+	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on&_journal_mode=WAL&_synchronous=FULL&_busy_timeout=5000&_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}
@@ -40,11 +40,11 @@ func Migrate(db *sql.DB) error {
 	if err = tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 2 {
+	if version > 3 {
 		return fmt.Errorf("unsupported schema version %d", version)
 	}
-	for next := version + 1; next <= 2; next++ {
-		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_auth.sql"}[next]
+	for next := version + 1; next <= 3; next++ {
+		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_auth.sql", 3: "migrations/003_stock.sql"}[next]
 		script, err := assets.ReadFile(name)
 		if err != nil {
 			return err
@@ -55,6 +55,26 @@ func Migrate(db *sql.DB) error {
 		if _, err = tx.Exec(`INSERT INTO schema_migrations VALUES(?)`, next); err != nil {
 			return err
 		}
+	}
+	rows, err := tx.Query(`PRAGMA foreign_key_check`)
+	if err != nil {
+		return err
+	}
+	if rows.Next() {
+		rows.Close()
+		return fmt.Errorf("foreign key integrity check failed")
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	var integrity string
+	if err = tx.QueryRow(`PRAGMA integrity_check`).Scan(&integrity); err != nil {
+		return err
+	}
+	if integrity != "ok" {
+		return fmt.Errorf("database integrity check failed")
 	}
 	return tx.Commit()
 }
@@ -71,6 +91,8 @@ func SeedDemo(db *sql.DB) error {
 		`INSERT INTO sites VALUES('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','Demo-Betriebsstätte') ON CONFLICT(id) DO NOTHING`,
 		`INSERT INTO locations VALUES('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002','Demo-Materiallager') ON CONFLICT(id) DO NOTHING`,
 		`INSERT INTO locations VALUES('00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000002','Demo-Sanitätskoffer') ON CONFLICT(id) DO NOTHING`,
+		`INSERT INTO product_types VALUES('00000000-0000-4000-8000-000000000010','Demo-Kompresse (synthetisch)','Stück') ON CONFLICT(id) DO NOTHING`,
+		`INSERT INTO batches(id,product_id,lot,expires_on) VALUES('00000000-0000-4000-8000-000000000011','00000000-0000-4000-8000-000000000010','DEMO-2026','2028-12-31') ON CONFLICT(id) DO NOTHING`,
 	} {
 		if _, err = tx.Exec(s); err != nil {
 			return err
@@ -84,15 +106,15 @@ func Ready(ctx context.Context, db *sql.DB) error {
 	if err := db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version != 2 {
+	if version != 3 {
 		return fmt.Errorf("schema migration required")
 	}
 	var count int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM locations`).Scan(&count); err != nil {
 		return err
 	}
-	var users, roles, sessions bool
-	return db.QueryRowContext(ctx, `SELECT EXISTS(SELECT id,password_hash,active FROM users), EXISTS(SELECT user_id,site_id,role FROM role_assignments), EXISTS(SELECT token_hash,csrf_hash FROM sessions)`).Scan(&users, &roles, &sessions)
+	var users, roles, sessions, stock bool
+	return db.QueryRowContext(ctx, `SELECT EXISTS(SELECT id,password_hash,active FROM users), EXISTS(SELECT user_id,site_id,role FROM role_assignments), EXISTS(SELECT token_hash,csrf_hash FROM sessions), EXISTS(SELECT 1 FROM product_types JOIN batches ON 1=0 JOIN stock_balances ON 1=0 JOIN stock_movements ON 1=0 JOIN movement_lines ON 1=0 JOIN audit_events ON 1=0 JOIN outbox ON 1=0 JOIN idempotency_keys ON 1=0)`).Scan(&users, &roles, &sessions, &stock)
 }
 
 type Location struct {
@@ -100,6 +122,7 @@ type Location struct {
 	Name     string `json:"name"`
 	Site     string `json:"site"`
 	Operator string `json:"operator"`
+	SiteID   string `json:"site_id"`
 }
 
 func Handler(db *sql.DB) http.Handler { return HandlerWithOrigin(db, "https://localhost:8080") }
@@ -108,6 +131,7 @@ func HandlerWithOrigin(db *sql.DB, origin string) http.Handler {
 	auth := newAuth(db, origin)
 	mux := http.NewServeMux()
 	auth.routes(mux)
+	stockRoutes(mux, auth)
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
 		if Ready(r.Context(), db) != nil {
@@ -122,7 +146,7 @@ func HandlerWithOrigin(db *sql.DB, origin string) http.Handler {
 			auth.sessionError(w, err)
 			return
 		}
-		rows, err := db.QueryContext(r.Context(), `SELECT l.id,l.name,s.name,o.name FROM locations l JOIN sites s ON s.id=l.site_id JOIN operators o ON o.id=s.operator_id JOIN role_assignments a ON a.site_id=s.id WHERE a.user_id=? AND a.role='viewer' ORDER BY l.name,l.id`, user.ID)
+		rows, err := db.QueryContext(r.Context(), `SELECT DISTINCT l.id,l.name,s.name,o.name,l.site_id FROM locations l JOIN sites s ON s.id=l.site_id JOIN operators o ON o.id=s.operator_id JOIN role_assignments a ON a.site_id=s.id WHERE a.user_id=? AND a.role IN ('viewer','helper','material_manager') ORDER BY l.name,l.id`, user.ID)
 		if err != nil {
 			http.Error(w, "database unavailable", 503)
 			return
@@ -131,7 +155,7 @@ func HandlerWithOrigin(db *sql.DB, origin string) http.Handler {
 		result := []Location{}
 		for rows.Next() {
 			var l Location
-			if err = rows.Scan(&l.ID, &l.Name, &l.Site, &l.Operator); err != nil {
+			if err = rows.Scan(&l.ID, &l.Name, &l.Site, &l.Operator, &l.SiteID); err != nil {
 				http.Error(w, "database unavailable", 503)
 				return
 			}
@@ -151,7 +175,7 @@ func HandlerWithOrigin(db *sql.DB, origin string) http.Handler {
 			return
 		}
 		var l Location
-		err = db.QueryRowContext(r.Context(), `SELECT l.id,l.name,s.name,o.name FROM locations l JOIN sites s ON s.id=l.site_id JOIN operators o ON o.id=s.operator_id JOIN role_assignments a ON a.site_id=s.id WHERE l.id=? AND a.user_id=? AND a.role='viewer'`, r.PathValue("id"), user.ID).Scan(&l.ID, &l.Name, &l.Site, &l.Operator)
+		err = db.QueryRowContext(r.Context(), `SELECT DISTINCT l.id,l.name,s.name,o.name,l.site_id FROM locations l JOIN sites s ON s.id=l.site_id JOIN operators o ON o.id=s.operator_id JOIN role_assignments a ON a.site_id=s.id WHERE l.id=? AND a.user_id=? AND a.role IN ('viewer','helper','material_manager')`, r.PathValue("id"), user.ID).Scan(&l.ID, &l.Name, &l.Site, &l.Operator, &l.SiteID)
 		if err == sql.ErrNoRows {
 			apiError(w, 404, "not_found", "Lagerort nicht gefunden.")
 			return

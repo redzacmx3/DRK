@@ -70,6 +70,15 @@ func passwordMatches(encoded, password string) bool {
 
 // CreateViewer is a local administrative operation, never an unauthenticated HTTP route.
 func CreateViewer(db *sql.DB, username, password, site string) error {
+	return CreateUser(db, username, password, site, "viewer")
+}
+func validRole(role string) bool {
+	return role == "viewer" || role == "helper" || role == "material_manager"
+}
+func CreateUser(db *sql.DB, username, password, site, role string) error {
+	if !validRole(role) {
+		return fmt.Errorf("unknown role")
+	}
 	if strings.TrimSpace(username) != username || len(username) < 3 || len(username) > 100 {
 		return fmt.Errorf("username must have 3–100 characters without surrounding whitespace")
 	}
@@ -86,7 +95,7 @@ func CreateViewer(db *sql.DB, username, password, site string) error {
 	if _, err = tx.Exec(`INSERT INTO users(id,username,password_hash) VALUES(?,?,?)`, id, username, hash); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(`INSERT INTO role_assignments VALUES(?,?,'viewer')`, id, site); err != nil {
+	if _, err = tx.Exec(`INSERT INTO role_assignments VALUES(?,?,?)`, id, site, role); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -94,6 +103,12 @@ func CreateViewer(db *sql.DB, username, password, site string) error {
 
 // SetViewerSites replaces scopes and revokes sessions atomically.
 func SetViewerSites(db *sql.DB, username string, sites []string) error {
+	return SetSiteRole(db, username, sites, "viewer")
+}
+func SetSiteRole(db *sql.DB, username string, sites []string, role string) error {
+	if !validRole(role) {
+		return fmt.Errorf("unknown role")
+	}
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -107,7 +122,7 @@ func SetViewerSites(db *sql.DB, username string, sites []string) error {
 		return err
 	}
 	for _, site := range sites {
-		if _, err = tx.Exec(`INSERT INTO role_assignments VALUES(?,?,'viewer')`, id, site); err != nil {
+		if _, err = tx.Exec(`INSERT INTO role_assignments VALUES(?,?,?)`, id, site, role); err != nil {
 			return err
 		}
 	}

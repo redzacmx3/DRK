@@ -75,12 +75,12 @@ func TestUnsupportedSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	db.Exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);INSERT INTO schema_migrations VALUES(3)`)
+	db.Exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);INSERT INTO schema_migrations VALUES(4)`)
 	if Migrate(db) == nil {
 		t.Fatal("accepted future schema")
 	}
 }
-func TestReadOnlyAPI(t *testing.T) {
+func TestLocationsRemainReadOnly(t *testing.T) {
 	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func TestMigrationFromVersionOne(t *testing.T) {
 	if _, err = db.Exec(string(script) + `;CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);INSERT INTO schema_migrations VALUES(1)`); err != nil {
 		t.Fatal(err)
 	}
-	if err = SeedDemo(db); err != nil {
+	if _, err = db.Exec(`INSERT INTO operators VALUES('operator','Demo');INSERT INTO sites VALUES('site','operator','Demo');INSERT INTO locations VALUES('one','site','One');INSERT INTO locations VALUES('two','site','Two')`); err != nil {
 		t.Fatal(err)
 	}
 	snapshot := filepath.Join(t.TempDir(), "backup.db")
@@ -119,7 +119,7 @@ func TestMigrationFromVersionOne(t *testing.T) {
 	if err = Migrate(db); err != nil {
 		t.Fatal(err)
 	}
-	if err = CreateViewer(db, "viewer", testPassword, demoSite); err != nil {
+	if err = CreateViewer(db, "viewer", testPassword, "site"); err != nil {
 		t.Fatal(err)
 	}
 	var count int

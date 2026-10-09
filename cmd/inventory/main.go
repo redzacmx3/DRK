@@ -17,6 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 )
 
 func main() {
@@ -59,7 +60,7 @@ func run() error {
 	}
 
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: inventory backup|migrate|seed-demo|create-user|set-sites|disable-user|serve --db PATH [--listen 127.0.0.1:8080]")
+		return fmt.Errorf("usage: inventory backup|migrate|seed-demo|create-product|create-batch|create-user|set-sites|disable-user|serve --db PATH [--listen 127.0.0.1:8080]")
 	}
 	flags := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
 	path := flags.String("db", "inventory.db", "SQLite path")
@@ -68,6 +69,12 @@ func run() error {
 	origin := flags.String("origin", "https://localhost:8080", "exact HTTPS browser origin")
 	out := flags.String("out", "", "new SQLite backup destination")
 	username := flags.String("username", "", "account username")
+	role := flags.String("role", "viewer", "viewer, helper or material_manager")
+	name := flags.String("name", "", "product name")
+	unit := flags.String("unit", "", "explicit base unit")
+	product := flags.String("product", "", "product UUID")
+	lot := flags.String("lot", "", "manufacturer lot")
+	expires := flags.String("expires-on", "", "exact expiry day YYYY-MM-DD, empty if unknown")
 	site := flags.String("site", "", "viewer site UUID (comma-separated for set-sites)")
 	addr := flags.String("listen", "127.0.0.1:8080", "loopback listen address")
 	if err := flags.Parse(os.Args[2:]); err != nil {
@@ -95,6 +102,18 @@ func run() error {
 	}
 	defer db.Close()
 	switch os.Args[1] {
+	case "create-product":
+		id, err := app.CreateProduct(db, *name, *unit)
+		if err == nil {
+			fmt.Println(id)
+		}
+		return err
+	case "create-batch":
+		id, err := app.CreateBatch(db, *product, *lot, *expires)
+		if err == nil {
+			fmt.Println(id)
+		}
+		return err
 	case "backup":
 		if *out == "" {
 			return fmt.Errorf("--out is required")
@@ -117,13 +136,13 @@ func run() error {
 			return fmt.Errorf("password input too long")
 		}
 		password := strings.TrimSuffix(strings.TrimSuffix(string(bytes), "\n"), "\r")
-		return app.CreateViewer(db, *username, password, *site)
+		return app.CreateUser(db, *username, password, *site, *role)
 	case "set-sites":
 		sites := []string{}
 		if *site != "" {
 			sites = strings.Split(*site, ",")
 		}
-		return app.SetViewerSites(db, *username, sites)
+		return app.SetSiteRole(db, *username, sites, *role)
 	case "disable-user":
 		return app.DisableUser(db, *username)
 	case "serve":
