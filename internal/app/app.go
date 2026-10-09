@@ -40,15 +40,19 @@ func Migrate(db *sql.DB) error {
 	if err = tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 1 {
+	if version > 2 {
 		return fmt.Errorf("unsupported schema version %d", version)
 	}
-	if version == 0 {
-		script, _ := assets.ReadFile("migrations/001_initial.sql")
+	for next := version + 1; next <= 2; next++ {
+		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_auth.sql"}[next]
+		script, err := assets.ReadFile(name)
+		if err != nil {
+			return err
+		}
 		if _, err = tx.Exec(string(script)); err != nil {
 			return err
 		}
-		if _, err = tx.Exec(`INSERT INTO schema_migrations VALUES(1)`); err != nil {
+		if _, err = tx.Exec(`INSERT INTO schema_migrations VALUES(?)`, next); err != nil {
 			return err
 		}
 	}
@@ -80,11 +84,15 @@ func Ready(ctx context.Context, db *sql.DB) error {
 	if err := db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version != 1 {
+	if version != 2 {
 		return fmt.Errorf("schema migration required")
 	}
 	var count int
-	return db.QueryRowContext(ctx, `SELECT COUNT(*) FROM locations`).Scan(&count)
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM locations`).Scan(&count); err != nil {
+		return err
+	}
+	var users, roles, sessions bool
+	return db.QueryRowContext(ctx, `SELECT EXISTS(SELECT id,password_hash,active FROM users), EXISTS(SELECT user_id,site_id,role FROM role_assignments), EXISTS(SELECT token_hash,csrf_hash FROM sessions)`).Scan(&users, &roles, &sessions)
 }
 
 type Location struct {
@@ -94,8 +102,12 @@ type Location struct {
 	Operator string `json:"operator"`
 }
 
-func Handler(db *sql.DB) http.Handler {
+func Handler(db *sql.DB) http.Handler { return HandlerWithOrigin(db, "https://localhost:8080") }
+
+func HandlerWithOrigin(db *sql.DB, origin string) http.Handler {
+	auth := newAuth(db, origin)
 	mux := http.NewServeMux()
+	auth.routes(mux)
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
 		if Ready(r.Context(), db) != nil {
@@ -105,7 +117,12 @@ func Handler(db *sql.DB) http.Handler {
 		w.Write([]byte("ok\n"))
 	})
 	mux.HandleFunc("GET /api/v1/locations", func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.QueryContext(r.Context(), `SELECT l.id,l.name,s.name,o.name FROM locations l JOIN sites s ON s.id=l.site_id JOIN operators o ON o.id=s.operator_id ORDER BY l.name,l.id`)
+		user, err := auth.session(r)
+		if err != nil {
+			auth.sessionError(w, err)
+			return
+		}
+		rows, err := db.QueryContext(r.Context(), `SELECT l.id,l.name,s.name,o.name FROM locations l JOIN sites s ON s.id=l.site_id JOIN operators o ON o.id=s.operator_id JOIN role_assignments a ON a.site_id=s.id WHERE a.user_id=? AND a.role='viewer' ORDER BY l.name,l.id`, user.ID)
 		if err != nil {
 			http.Error(w, "database unavailable", 503)
 			return
@@ -126,6 +143,25 @@ func Handler(db *sql.DB) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)
+	})
+	mux.HandleFunc("GET /api/v1/locations/{id}", func(w http.ResponseWriter, r *http.Request) {
+		user, err := auth.session(r)
+		if err != nil {
+			auth.sessionError(w, err)
+			return
+		}
+		var l Location
+		err = db.QueryRowContext(r.Context(), `SELECT l.id,l.name,s.name,o.name FROM locations l JOIN sites s ON s.id=l.site_id JOIN operators o ON o.id=s.operator_id JOIN role_assignments a ON a.site_id=s.id WHERE l.id=? AND a.user_id=? AND a.role='viewer'`, r.PathValue("id"), user.ID).Scan(&l.ID, &l.Name, &l.Site, &l.Operator)
+		if err == sql.ErrNoRows {
+			apiError(w, 404, "not_found", "Lagerort nicht gefunden.")
+			return
+		}
+		if err != nil {
+			apiError(w, 503, "unavailable", "Datenbank nicht verfügbar.")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(l)
 	})
 	web, _ := fs.Sub(assets, "web")
 	mux.Handle("GET /", http.FileServer(http.FS(web)))

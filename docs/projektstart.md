@@ -2,9 +2,9 @@
 
 ## Stand des ersten Meilensteins
 
-Implementiert: Go-Dienst, eingebettete HTML/JS-Oberfläche, explizite SQLite-Migration v1, synthetische Betreiber-/Betriebsstätten-/Lagerortdaten und lesende Lagerort-API. SQLite-Treiber: mattn/go-sqlite3 mit CGO. Die Readiness prüft das Schema und Datenbankzugriff. Dockerfile und Compose-Entwicklungskonfiguration sind vorhanden.
+Implementiert: Go-Dienst, eingebettete HTML/JS-Oberfläche, explizite SQLite-Migrationen v1/v2, synthetische Betreiber-/Betriebsstätten-/Lagerortdaten und lesende Lagerort-API. HTTPS-Anmeldung mit Argon2id, widerrufbaren Sessions und Viewer-Rechten je Betriebsstätte schützt die Lagerortliste und direkte Objektzugriffe. Lokale CLI für Kontoanlage, Bereichsänderung und Kontosperre. SQLite-Treiber: mattn/go-sqlite3 mit CGO. Die Readiness prüft das Schema und Datenbankzugriff. Dockerfile und Compose-Entwicklungskonfiguration sind vorhanden.
 
-Offen: Authentifizierung, Objektberechtigungen, Fachbuchungen, PWA-Funktionen, Dokumente und Backup/Restore. Die aktuelle Oberfläche ist nur für synthetische Entwicklungsdaten vorgesehen.
+Offen: weitere Rollen und Fachrechte, Fachbuchungen, PWA-Funktionen, Dokumente und vollständige Backup/Restore-Abnahme. Ein SQLite-Snapshot vor Migrationen ist über die CLI möglich. Die aktuelle Oberfläche ist nur für synthetische Entwicklungsdaten vorgesehen.
 
 ## Weitere Umsetzung
 

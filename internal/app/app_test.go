@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -38,13 +37,7 @@ func TestWorkflow(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var got []Location
-	if err = json.Unmarshal(check("/api/v1/locations", 200).Body.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 || got[0].Operator != "Demo-Betreiber (synthetisch)" {
-		t.Fatalf("unexpected locations: %+v", got)
-	}
+	check("/api/v1/locations", 401)
 	check("/", 200)
 	check("/app.js", 200)
 	for name, want := range map[string]any{"foreign_keys": 1, "journal_mode": "wal", "synchronous": 2} {
@@ -65,7 +58,7 @@ func TestWorkflow(t *testing.T) {
 	}
 	db.Close()
 	check("/health/ready", 503)
-	check("/api/v1/locations", 503)
+	check("/api/v1/locations", 401)
 	db2, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +75,7 @@ func TestUnsupportedSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	db.Exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);INSERT INTO schema_migrations VALUES(2)`)
+	db.Exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);INSERT INTO schema_migrations VALUES(3)`)
 	if Migrate(db) == nil {
 		t.Fatal("accepted future schema")
 	}
@@ -100,5 +93,50 @@ func TestReadOnlyAPI(t *testing.T) {
 	Handler(db).ServeHTTP(r, httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil))
 	if r.Code != 405 {
 		t.Fatalf("status %d", r.Code)
+	}
+}
+
+func TestMigrationFromVersionOne(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "v1.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	script, err := assets.ReadFile("migrations/001_initial.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(string(script) + `;CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);INSERT INTO schema_migrations VALUES(1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err = SeedDemo(db); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := filepath.Join(t.TempDir(), "backup.db")
+	if _, err = db.Exec(`VACUUM INTO ?`, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err = Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	if err = CreateViewer(db, "viewer", testPassword, demoSite); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err = db.QueryRow(`SELECT COUNT(*) FROM locations`).Scan(&count); err != nil || count != 2 {
+		t.Fatal("migration changed locations")
+	}
+	restored, err := Open(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	var version int
+	if err = restored.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 1 {
+		t.Fatal("backup not pre-migration")
+	}
+	var integrity string
+	if err = restored.QueryRow(`PRAGMA integrity_check`).Scan(&integrity); err != nil || integrity != "ok" {
+		t.Fatal("backup integrity")
 	}
 }

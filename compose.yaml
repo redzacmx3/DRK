@@ -1,10 +1,10 @@
-# Development only: no login yet. Loopback binding is intentional.
+# Development only: HTTPS with a local development certificate. Loopback binding is intentional.
 services:
   inventory:
     build: .
     image: drk-inventory:dev
     network_mode: host
-    command: ["serve", "--db", "/data/inventory.db", "--listen", "127.0.0.1:8080"]
+    command: ["serve", "--db", "/data/inventory.db", "--listen", "127.0.0.1:8080", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
     user: "1000:1000"
     read_only: true
     init: true
@@ -12,13 +12,16 @@ services:
     security_opt: ["no-new-privileges:true"]
     volumes:
       - inventory_data:/data
+      - ./var/tls:/certs:ro
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m,uid=1000,gid=1000,mode=1770
     healthcheck:
-      test: ["CMD", "/app/inventory", "healthcheck", "--url", "http://127.0.0.1:8080/health/ready"]
+      test: ["CMD", "/app/inventory", "healthcheck", "--url", "https://localhost:8080/health/ready", "--ca", "/certs/cert.pem"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
+      start_interval: 1s
     stop_grace_period: 10s
 volumes:
   inventory_data:
