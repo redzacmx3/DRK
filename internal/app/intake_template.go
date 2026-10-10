@@ -58,12 +58,18 @@ func code39PNG(value string) ([]byte, error) {
 // IDs and embedded images are fixed within each file; a new file gets a fresh
 // namespace. No font, macro, external image service or workbook formula creates IDs.
 func NewDeviceIntakeTemplate() ([]byte, error) {
+	return newIntakeTemplate("device-intake.xlsx", "D-")
+}
+func NewStockIntakeTemplate() ([]byte, error) {
+	return newIntakeTemplate("stock-intake.xlsx", "M-")
+}
+func newIntakeTemplate(template, namespace string) ([]byte, error) {
 	var random [6]byte
 	if _, err := rand.Read(random[:]); err != nil {
 		return nil, err
 	}
-	prefix := "D-" + strings.ToUpper(hex.EncodeToString(random[:]))
-	skeleton, err := assets.ReadFile("templates/device-intake.xlsx")
+	prefix := namespace + strings.ToUpper(hex.EncodeToString(random[:]))
+	skeleton, err := assets.ReadFile("templates/" + template)
 	if err != nil {
 		return nil, err
 	}

@@ -55,4 +55,4 @@ XLSX-Struktur, geschützte Nummern, Textspalten und alle eingebetteten Barcodes 
 
 Die Python-Datei `scripts/generate-intake-template.py` erzeugt nur das eingebettete leere Grundgerüst. Dafür wird XlsxWriter benötigt; Go-Build, Webdienst und CLI brauchen weder Python noch Office. Das Programm ersetzt Nummern und Barcodebilder pro neuer Vorlage und liefert eine normale `.xlsx`-Datei.
 
-Verbrauchsmaterialien erhalten im nächsten Schritt eine eigene Tabelle und einen eigenen Import mit Mengen, Basiseinheiten, Chargen und Verfall.
+Für Verbrauchsmaterialien gibt es eine [eigene Excel-Tabelle und Importanleitung](verbrauchsmaterial-erfassung.md) mit Mengen, Basiseinheiten, Chargen und Verfall.

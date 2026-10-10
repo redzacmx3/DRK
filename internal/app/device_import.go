@@ -227,7 +227,10 @@ func parseIntakeCSV(input string) ([]intakeRow, int, error) {
 	return rows, unused, nil
 }
 func intakeLocations(ctx context.Context, tx *sql.Tx, user string) ([]intakeLocation, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT l.id,l.name,s.name FROM locations l JOIN sites s ON s.id=l.site_id JOIN role_assignments a ON a.site_id=l.site_id WHERE a.user_id=? AND a.role='device_manager' ORDER BY l.name,l.id`, user)
+	return roleIntakeLocations(ctx, tx, user, "device_manager")
+}
+func roleIntakeLocations(ctx context.Context, tx *sql.Tx, user, role string) ([]intakeLocation, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT l.id,l.name,s.name FROM locations l JOIN sites s ON s.id=l.site_id JOIN role_assignments a ON a.site_id=l.site_id WHERE a.user_id=? AND a.role=? ORDER BY l.name,l.id`, user, role)
 	if err != nil {
 		return nil, err
 	}

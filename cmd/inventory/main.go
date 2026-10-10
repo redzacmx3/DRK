@@ -60,7 +60,7 @@ func run() error {
 	}
 
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: inventory device-template|backup|migrate|seed-demo|create-product|create-batch|create-user|set-sites|disable-user|serve --db PATH [--listen 127.0.0.1:8080]")
+		return fmt.Errorf("usage: inventory device-template|stock-template|backup|migrate|seed-demo|create-product|create-batch|create-user|set-sites|disable-user|serve --db PATH [--listen 127.0.0.1:8080]")
 	}
 	flags := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
 	path := flags.String("db", "inventory.db", "SQLite path")
@@ -96,11 +96,17 @@ func run() error {
 			return fmt.Errorf("origin must be an HTTPS origin without path or credentials")
 		}
 	}
-	if os.Args[1] == "device-template" {
+	if os.Args[1] == "device-template" || os.Args[1] == "stock-template" {
 		if *out == "" {
 			return fmt.Errorf("--out is required")
 		}
-		body, err := app.NewDeviceIntakeTemplate()
+		var body []byte
+		var err error
+		if os.Args[1] == "stock-template" {
+			body, err = app.NewStockIntakeTemplate()
+		} else {
+			body, err = app.NewDeviceIntakeTemplate()
+		}
 		if err != nil {
 			return err
 		}

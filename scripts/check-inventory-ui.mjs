@@ -52,6 +52,7 @@ try {
  const realFetch = window.fetch.bind(window);
  window.testBalances = [{batch_id:'batch',location_id:'warehouse',state:'available',quantity:10,usable_quantity:10,version:1,product:'Demo',unit:'Stück',lot:'DEMO',location:'Lager',expires_on:'2030-01-01',blocked:false}];
  window.posted = []; window.devicePosted=[];window.deviceReplies=new Map();window.loseDeviceReply=false;window.testDocuments=[];window.documentPosted=[];window.documentReplies=new Map();window.loseDocumentReply=false;window.deviceVersion=0;window.deviceBlocks=[{id:"recall-block",reason:"recall",note:"Synthetic recall"}];
+ window.stockIntakePosted=[];window.stockIntakePreviewPosted=[];window.stockIntakeReplies=new Map();window.stockIntakeBasis='1'.repeat(64);window.loseStockIntakeReply=false;
  window.intakePosted=[];window.intakePreviewPosted=[];window.intakeReplies=new Map();window.intakeBasis='1'.repeat(64);window.loseIntakeReply=false;
  window.pack = {id:'pack',location_id:'warehouse',version:1,title:'Material',check_valid_hours:24,created_at:new Date().toISOString(),note:'Synthetic',items:[{product_id:'product',quantity:5,min_remaining_days:30}]};
  window.testIdentifiers = [];window.identifierPosted = [];window.identifierReplies = new Map();window.loseIdentifierReply = false;window.nonInventoryStockPosts = [];
@@ -91,6 +92,16 @@ try {
    if(window.intakeReplies.has(key))return new Response(JSON.stringify(window.intakeReplies.get(key)),{status:201,headers:{'Content-Type':'application/json'}});
    if(request.basis_hash!==window.intakeBasis)return new Response(JSON.stringify({message:'Vorschau geändert; CSV erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
    data={import_id:'import',created_count:1,unchanged_count:0,created_device_ids:['created-device']};window.intakeReplies.set(key,data);if(window.loseIntakeReply){window.loseIntakeReply=false;throw new Error('Lost import reply');}
+  }
+  else if (path === '/api/v1/stock-import/preview') {
+   const request=JSON.parse(options.body);window.stockIntakePreviewPosted.push(request);const mapped=request.locations?.['Offline Lager']==='warehouse';
+   data={basis_hash:window.stockIntakeBasis,new_count:mapped?1:0,unchanged_count:0,error_count:mapped?0:1,unused_count:99,location_values:['Offline Lager'],location_choices:[{id:'warehouse',name:'Lager',site:'Demo'}],rows:[{row:2,data:{source_id:'M-UI-1',name:'<img src=x onerror=alert(1)>',quantity:12,base_unit:'Stück',lot:'000123',expires_on:'2030-12-31',source_location:'Offline Lager'},status:mapped?'new':'error',message:mapped?'Einmaliger Zugang.':'Standort zuordnen.'}]};
+  }
+  else if(path==='/api/v1/stock-import/commit'){
+   const request=JSON.parse(options.body),key=options.headers['Idempotency-Key'];window.stockIntakePosted.push({key,body:options.body});
+   if(window.stockIntakeReplies.has(key))return new Response(JSON.stringify(window.stockIntakeReplies.get(key)),{status:201,headers:{'Content-Type':'application/json'}});
+   if(request.basis_hash!==window.stockIntakeBasis)return new Response(JSON.stringify({message:'Vorschau geändert; CSV erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
+   data={import_id:'import',created_count:1,unchanged_count:0,created_device_ids:['created-device']};window.stockIntakeReplies.set(key,data);if(window.loseStockIntakeReply){window.loseStockIntakeReply=false;throw new Error('Lost import reply');}
   }
   else if (path === '/api/v1/devices') data = [{id:'device',location_id:'warehouse',version:window.deviceVersion,active_blocks:window.deviceBlocks,inventory_number:'SYNTH-1',name:'<img src=x onerror=alert(1)>',manufacturer:'Demo',model:'Model',serial_or_lot:'SERIAL'}];
   else if(path==='/api/v1/devices/device/documents' && !options.method)data=window.testDocuments;
@@ -322,9 +333,41 @@ try {
  assert.deepEqual(await evaluate('window.intakePosted[1]'),await evaluate('window.intakePosted[2]'));
  assert.equal(await evaluate("JSON.parse(window.intakePosted[2].body).locations['Offline Lager']"),'warehouse');
  assert.equal(await evaluate("JSON.parse(window.intakePosted[2].body).csv.includes('000123')"),true);
+ assert.equal(await evaluate("document.querySelector('#stock-import').hidden"),false);
+ assert.equal(await evaluate("document.querySelector('#stock-import-commit').disabled"),true);
+ await evaluate("const stockCSVTransfer=new DataTransfer();stockCSVTransfer.items.add(new File(['Erfassungsnummer;Bezeichnung;Standort;Menge;Basiseinheit;Fremdcode\\nM-UI-1;Material;Offline Lager;12;Stück;000123\\n'],'intake.csv',{type:'text/csv'}));document.querySelector('#stock-import-file').files=stockCSVTransfer.files;document.querySelector('#stock-import-file').dispatchEvent(new Event('change'));document.querySelector('#stock-import-form').requestSubmit()");
+ await until("document.querySelector('#stock-import-status').textContent.includes('1 Fehler')");
+ assert.equal(await evaluate("document.querySelector('#stock-import-commit').disabled"),true);
+ assert.equal(await evaluate("document.querySelector('#stock-import-rows img')===null"),true);
+ assert.equal(await evaluate("document.querySelector('#stock-import-rows').textContent.includes('<img src=x onerror=alert(1)>')"),true);
+ await evaluate("const stockSelect=document.querySelector('#stock-import-locations select');stockSelect.value='warehouse';stockSelect.dispatchEvent(new Event('change'))");
+ assert.equal(await evaluate("document.querySelector('#stock-import-commit').disabled"),true);
+ await evaluate("document.querySelector('#stock-import-form').requestSubmit()");
+ await until("!document.querySelector('#stock-import-commit').disabled");
+ await evaluate("window.stockIntakeBasis='2'.repeat(64);document.querySelector('#stock-import-commit').click()");
+ await until("document.querySelector('#stock-import-status').textContent.includes('Vorschau geändert')");
+ assert.equal(await evaluate("document.querySelector('#stock-import-commit').disabled"),true);
+ assert.equal(await evaluate("JSON.parse(window.stockIntakePosted[0].body).basis_hash"),'1'.repeat(64));
+ await evaluate("document.querySelector('#stock-import-form').requestSubmit()");
+ await until("!document.querySelector('#stock-import-commit').disabled");
+ await evaluate("document.querySelector('#stock-import-mode').value='receipt';document.querySelector('#stock-import-mode').dispatchEvent(new Event('change'))");
+ assert.equal(await evaluate("document.querySelector('#stock-import-commit').disabled"),true);
+ await evaluate("document.querySelector('#stock-import-form').requestSubmit()");
+ await until("!document.querySelector('#stock-import-commit').disabled");
+ assert.equal(await evaluate("window.stockIntakePreviewPosted.at(-1).mode"),'receipt');
+ await evaluate("window.loseStockIntakeReply=true;document.querySelector('#stock-import-commit').click()");
+ await until("document.querySelector('#stock-import-status').textContent.includes('Import nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#stock-import-file').disabled"),true);
+ assert.equal(await evaluate("document.querySelector('#stock-import-locations select').disabled"),true);
+ await evaluate("document.querySelector('#stock-import-commit').click()");
+ await until("document.querySelector('#stock-import-status').textContent.includes('Import bestätigt: 1 neu')");
+ assert.equal(await evaluate('window.stockIntakePosted.length'),3);
+ assert.deepEqual(await evaluate('window.stockIntakePosted[1]'),await evaluate('window.stockIntakePosted[2]'));
+ assert.equal(await evaluate("JSON.parse(window.stockIntakePosted[2].body).locations['Offline Lager']"),'warehouse');
+ assert.equal(await evaluate("JSON.parse(window.stockIntakePosted[2].body).csv.includes('000123')"),true);
  await evaluate("signedOut('Test logout')");
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');

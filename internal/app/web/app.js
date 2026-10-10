@@ -8,6 +8,7 @@ let csrf = '', user = null, locations = [], balances = [], catalog = [], movemen
 const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Entnahme',inventory:'Inventur',reversal:'Gegenbuchung'};
 const stateNames = {available:'Verfügbar',quarantined:'Quarantäne',damaged:'Beschädigt'};
 function signedOut(message) {
+ stockIntakeDraft=null;stockIntakeLoading=false;document.querySelector("#stock-import-file").value="";document.querySelector("#stock-import-rows").replaceChildren();document.querySelector("#stock-import-locations").replaceChildren();document.querySelector("#stock-import-status").textContent="";document.querySelector("#stock-import").hidden=true;
  intakeDraft=null;intakeLoading=false;document.querySelector("#device-import-file").value="";document.querySelector("#device-import-rows").replaceChildren();document.querySelector("#device-import-locations").replaceChildren();document.querySelector("#device-import-status").textContent="";document.querySelector("#device-import").hidden=true;
  deviceDraft = null; deviceRecords = []; document.querySelector('#document-file').value=''; document.querySelector('#document-list').replaceChildren(); document.querySelector('#document-status').textContent=''; document.querySelector('#document-upload-form').hidden=true; document.querySelector('#device-basis').textContent = ''; document.querySelector('#device-control-form').hidden = true; document.querySelector('#devices-list').replaceChildren(); document.querySelector('#devices-status').textContent = '';
  csrf = ''; user = null; deviceCheckDraft = null; packAssessment = null; document.querySelector('#physical-device-results').replaceChildren();document.querySelector('#device-proof-history').replaceChildren();document.querySelector('#last-device-proof').textContent='';document.querySelector('#physical-device-check').hidden=true; countDraft = null; checkDraft = null; packDraft = null; scannerReset(); list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
@@ -113,13 +114,13 @@ async function load() {
   const response = await fetch('/api/v1/locations', {cache:'no-store'});
   if (response.status === 401) { signedOut('Bitte erneut anmelden.'); return; }
   if (!response.ok) throw new Error('unavailable');
-  locations = await response.json();
+  locations = await response.json();stockIntakeControls();
   for (const location of locations) {
    const item = document.createElement('li'); const name = document.createElement('strong'); name.textContent = location.name;
    const detail = document.createElement('p'); detail.textContent = `${location.site} · ${location.operator}`;
    item.append(name,detail); list.append(item);
   }
-  status.textContent = (pending || packPending || identifierPending || intakePending) ? 'Ein Vorgang ist noch nicht bestätigt. Mit demselben Konto erneut senden.' : `${locations.length} Lagerorte geladen.`;
+  status.textContent = (pending || packPending || identifierPending || intakePending || stockIntakePending) ? 'Ein Vorgang ist noch nicht bestätigt. Mit demselben Konto erneut senden.' : `${locations.length} Lagerorte geladen.`;
   await loadStock();
   if (user) { await loadPacklists(); if (user) await loadScannerData(); if(user) {await loadDevices();lockDeviceForm();} }
  } catch { status.textContent = 'Daten konnten nicht geladen werden. Verbindung prüfen und erneut laden.'; if (!pending) booking.hidden = true; }
@@ -150,7 +151,7 @@ login.addEventListener('submit',async event => {
 document.querySelector('#logout').addEventListener('click',async () => {
  try {
   const response = await fetch('/api/v1/auth/logout',{method:'POST',headers:{'X-CSRF-Token':csrf}});
-  if (response.ok || response.status === 401) signedOut((pending || packPending || identifierPending || intakePending) ? 'Abgemeldet. Eine unbestätigte Buchung benötigt erneute Anmeldung mit demselben Konto.' : 'Abgemeldet.');
+  if (response.ok || response.status === 401) signedOut((pending || packPending || identifierPending || intakePending || stockIntakePending) ? 'Abgemeldet. Eine unbestätigte Buchung benötigt erneute Anmeldung mit demselben Konto.' : 'Abgemeldet.');
   else status.textContent = 'Abmeldung fehlgeschlagen. Bitte erneut versuchen.';
  } catch { status.textContent = 'Abmeldung konnte nicht bestätigt werden. Verbindung prüfen.'; }
 });
@@ -226,7 +227,7 @@ document.querySelector('#reload').addEventListener('click',load);
  document.querySelector('#history-older').addEventListener('click',async () => {historyOffset += 50;await loadHistory();bookingChoices();});
  document.querySelector('#history-newer').addEventListener('click',async () => {historyOffset = Math.max(0,historyOffset-50);await loadHistory();bookingChoices();});
 window.addEventListener('pagehide',stopCamera);
-window.addEventListener('beforeunload',event => {if (pending || packPending || identifierPending || devicePending || documentPending || intakePending) {event.preventDefault();event.returnValue = '';}});
+window.addEventListener('beforeunload',event => {if (pending || packPending || identifierPending || devicePending || documentPending || intakePending || stockIntakePending) {event.preventDefault();event.returnValue = '';}});
 
 
 let deviceCheckDraft = null, packAssessment = null;
@@ -497,6 +498,7 @@ restore();
 
 
 let intakeDraft = null, intakePending = null, intakeLoading = false;
+let stockIntakeDraft = null, stockIntakePending = null, stockIntakeLoading = false;
 let deviceRecords = [], deviceDraft = null, devicePending = null, documentPending = null;
 const deadlineNames = {UNKNOWN:'ungeklärt',NOT_APPLICABLE:'nachgewiesene Ausnahme',CURRENT:'aktuell',DUE_SOON:'bald fällig',OVERDUE:'überfällig'};
 async function loadDevices() {
@@ -704,3 +706,44 @@ document.querySelector('#device-import-commit').addEventListener('click',async()
  }catch{if(intakePending)intakePending.uncertain=true;if(user?.id===owner)message.textContent='Import nicht bestätigt. Erneut senden verwendet dieselben Daten und denselben Schlüssel. Seite bis zur Klärung nicht neu laden.';}
  finally{intakeLoading=false;intakeControls();}
 });
+
+function stockIntakeControls(){
+ if(!user)return;
+ const panel=document.querySelector('#stock-import');panel.hidden=!stockIntakePending&&!locations.some(location=>can(location,['material_manager']));
+ for(const control of document.querySelector('#stock-import-form').elements)control.disabled=Boolean(stockIntakePending)||stockIntakeLoading;
+ if(stockIntakePending?.owner===user.id&&!document.querySelector('#stock-import-status').textContent)document.querySelector('#stock-import-status').textContent='Ein CSV-Import ist noch nicht bestätigt. Mit denselben Daten erneut senden.';
+ const commit=document.querySelector('#stock-import-commit');commit.disabled=stockIntakeLoading||(stockIntakePending?stockIntakePending.owner!==user.id:!stockIntakeDraft?.preview||stockIntakeDraft.preview.error_count>0);
+ commit.textContent=stockIntakePending?'Import mit denselben Daten erneut senden':'Geprüften Import bestätigen';
+}
+function renderStockIntakePreview(preview){
+ const rows=document.querySelector('#stock-import-rows');rows.replaceChildren();
+ for(const row of preview.rows){const line=document.createElement('tr');for(const value of [row.row,row.data.source_id,row.data.name,`${row.data.quantity} ${row.data.base_unit}`,row.data.source_location,`${row.data.lot||'Charge ungeklärt'} / ${row.data.expires_on||'Verfall ungeklärt'}`,row.message]){const cell=document.createElement('td');cell.textContent=value;line.append(cell);}rows.append(line);}
+ const mappings=document.querySelector('#stock-import-locations');mappings.replaceChildren();
+ for(const value of preview.location_values){const label=document.createElement('label');label.textContent=`CSV-Standort „${value}“ zuordnen`;const select=document.createElement('select');select.dataset.source=value;options(select,[{id:'',label:'Name automatisch zuordnen; sonst ausdrücklich wählen'},...preview.location_choices.map(location=>({id:location.id,label:`${location.site} / ${location.name}`}))]);select.value=stockIntakeDraft.locations[value]||'';select.addEventListener('change',()=>{if(select.value)stockIntakeDraft.locations[value]=select.value;else delete stockIntakeDraft.locations[value];stockIntakeDraft.preview=null;document.querySelector('#stock-import-status').textContent='Standortzuordnung geändert. Vorschau erneut prüfen.';stockIntakeControls();});label.append(select);mappings.append(label);}
+ document.querySelector('#stock-import-status').textContent=`${preview.new_count} neu · ${preview.unchanged_count} unverändert · ${preview.error_count} Fehler · ${preview.unused_count} leere vorbereitete Zeilen ignoriert. ${preview.error_count?'Fehler korrigieren; erst danach bestätigen.':'Vorschau prüfen und Import ausdrücklich bestätigen.'}`;
+}
+document.querySelector('#stock-import-file').addEventListener('change',()=>{if(stockIntakePending)return;stockIntakeDraft=null;document.querySelector('#stock-import-rows').replaceChildren();document.querySelector('#stock-import-locations').replaceChildren();document.querySelector('#stock-import-status').textContent='Neue Datei ausgewählt. CSV zuerst prüfen.';stockIntakeControls();});
+document.querySelector('#stock-import-form').addEventListener('submit',async event=>{
+ event.preventDefault();const owner=user?.id;if(!owner||stockIntakePending||stockIntakeLoading)return;const message=document.querySelector('#stock-import-status');stockIntakeLoading=true;stockIntakeControls();
+ try{
+  if(!stockIntakeDraft){const file=document.querySelector('#stock-import-file').files[0];if(!file||file.size>1048576)throw new Error('CSV auswählen, höchstens 1 MiB.');const bytes=await file.arrayBuffer();const csv=new TextDecoder('utf-8',{fatal:true}).decode(bytes);if(user?.id!==owner)return;stockIntakeDraft={owner,csv,locations:{},mode:document.querySelector("#stock-import-mode").value,preview:null};}
+  const response=await fetch('/api/v1/stock-import/preview',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({csv:stockIntakeDraft.csv,locations:stockIntakeDraft.locations,mode:stockIntakeDraft.mode})});const result=await response.json();if(user?.id!==owner)return;
+  if(response.status===401){signedOut('Bitte erneut anmelden.');return;}if(!response.ok)throw new Error(result.message||'CSV-Vorschau nicht verfügbar.');stockIntakeDraft.preview=result;renderStockIntakePreview(result);
+ }catch(error){if(user?.id===owner){if(stockIntakeDraft)stockIntakeDraft.preview=null;message.textContent=error instanceof TypeError?'Datei muss CSV UTF-8 sein.':error.message;}}
+ finally{stockIntakeLoading=false;stockIntakeControls();}
+});
+document.querySelector('#stock-import-commit').addEventListener('click',async()=>{
+ const owner=user?.id;if(!owner||stockIntakeLoading||stockIntakePending&&stockIntakePending.owner!==owner)return;
+ if(!stockIntakePending){if(stockIntakeDraft?.owner!==owner||!stockIntakeDraft.preview||stockIntakeDraft.preview.error_count)return;stockIntakePending={owner,key:crypto.randomUUID(),data:{csv:stockIntakeDraft.csv,locations:{...stockIntakeDraft.locations},mode:stockIntakeDraft.mode,basis_hash:stockIntakeDraft.preview.basis_hash},uncertain:false};}
+ stockIntakeLoading=true;stockIntakeControls();const message=document.querySelector('#stock-import-status');
+ try{
+  const response=await fetch('/api/v1/stock-import/commit',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':stockIntakePending.key},body:JSON.stringify(stockIntakePending.data)});const result=await response.json();
+  if(response.status===401){stockIntakePending.uncertain=true;signedOut('Mit demselben Konto anmelden und offenen CSV-Import erneut senden.');return;}
+  if(response.status>=500||!response.ok&&stockIntakePending.uncertain)throw new Error('uncertain');stockIntakePending=null;if(user?.id!==owner)return;
+  if(!response.ok){if(stockIntakeDraft)stockIntakeDraft.preview=null;message.textContent=result.message||'Import abgelehnt; Vorschau erneut prüfen.';return;}
+  stockIntakeDraft=null;document.querySelector('#stock-import-file').value='';document.querySelector('#stock-import-rows').replaceChildren();document.querySelector('#stock-import-locations').replaceChildren();message.textContent=`Import bestätigt: ${result.created_count} neu, ${result.unchanged_count} unverändert. Mengen in Basiseinheiten gebucht; Quarantäne gemäß Vorschau.`;await loadStock();if(user)await loadScannerData();
+ }catch{if(stockIntakePending)stockIntakePending.uncertain=true;if(user?.id===owner)message.textContent='Import nicht bestätigt. Erneut senden verwendet dieselben Daten und denselben Schlüssel. Seite bis zur Klärung nicht neu laden.';}
+ finally{stockIntakeLoading=false;stockIntakeControls();}
+});
+
+document.querySelector("#stock-import-mode").addEventListener("change",()=>{if(stockIntakePending)return;if(stockIntakeDraft){stockIntakeDraft.mode=document.querySelector("#stock-import-mode").value;stockIntakeDraft.preview=null;}document.querySelector("#stock-import-status").textContent="Importart geändert. Vorschau erneut prüfen.";stockIntakeControls();});
