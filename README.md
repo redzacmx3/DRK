@@ -171,7 +171,7 @@ node scripts/check-inventory-ui.mjs
 # Abweichendes Chromium über CHROMIUM_BIN angeben.
 ```
 
-Dieser Check prüft die Oberfläche mit simulierter API: ausdrücklichen Zähl-/Prüfstart, eingefrorene Inventur-/Packlisten-/Prüfbasis trotz Neuladen, erneuten Start nach Konflikt, Nullzählung und identische Wiederholung nach verlorener Prüfantwort. Die Go-Tests prüfen die echte SQLite-Transaktion, Rechte, Migration und konkurrierende Korrekturen. Der Browsercheck ersetzt keinen HTTPS-/Compose-Funktionstest.
+Dieser Check prüft die Oberfläche mit simulierter API: ausdrücklichen Zähl-/Prüfstart, eingefrorene Inventur-/Packlisten-/Prüfbasis trotz Neuladen, erneuten Start nach Konflikt, Nullzählung, identische Wiederholung nach verlorener Prüf-/Kennungsantwort und explizite Scannerübernahme mit Packungsumrechnung ohne automatische Buchung. Kamera-Hardware wird durch diesen simulierten Test nicht verifiziert. Die Go-Tests prüfen die echte SQLite-Transaktion, Rechte, Migration und konkurrierende Korrekturen. Der Browsercheck ersetzt keinen HTTPS-/Compose-Funktionstest.
 
 ## Material-Sollpacklisten und physische Prüfung
 
@@ -209,6 +209,42 @@ Ausreichender Bestand ergibt zunächst `needs_check`. Vor einer physischen Prüf
 
 `ready` gilt ausschließlich für die Materialbewertung und verlangt erfüllte Sollpositionen sowie einen aktuellen positiven physischen Nachweis. Datenbasis enthält Sollversion, Berliner Kalendertag und sämtliche relevanten Chargen-/Bestandsdaten einschließlich Versionsnummer, Zustand, Sperre und Verfall. Eine Bestandsbuchung (auch später gegengebucht), Änderung relevanter Sperr-/Verfallsdaten, neue Sollversion, Tageswechsel oder Ablauf der Prüfgültigkeit verlangt erneute Prüfung. Die Gültigkeitsgrenze ist exklusiv. Der Server berechnet dies bei jedem Lesen; es ist kein Nachtjob erforderlich. Eine beim Speichern veränderte Grundlage liefert 409, ohne Nachweis zu schreiben. Unveränderlich gespeicherte frühere Datenstände ermöglichen die Nachvollziehbarkeit. Bei einer verlorenen Antwort exakt denselben Request samt Schlüssel erneut senden; die gespeicherte Antwort ist historisch, für die aktuelle Bewertung anschließend neu lesen.
 
+## Scanner, Verpackungskennungen und QR-Etiketten
+
+Handscanner mit Tastatureingabe beziehungsweise Code zum Einfügen werden unterstützt. Enter löst den Code auf, ohne Material zu buchen. Optional nutzt **Mit Kamera scannen** die native Browser-API `BarcodeDetector` und die ausdrücklich gestartete Kamera. Dafür sind HTTPS, Kameraberechtigung und eine unterstützte Browserimplementierung erforderlich. Unterstützte Kameratypen werden zur Laufzeit geprüft; ohne Unterstützung bleibt die Tastatur-/Texteingabe verfügbar. Eine physische Kamera beziehungsweise ein konkretes Scannergerät ist noch nicht als Hardwareintegration abgenommen. Kamerabilder werden lokal ausgewertet, nicht zum Server hochgeladen; gesendet wird nur der erkannte begrenzte Text. Abmelden, Verlassen/Verbergen der Seite oder Kamera beenden stoppt die Aufnahme.
+
+| Endpunkt | Funktion |
+|---|---|
+| `POST /api/v1/scanner/resolve` | Text auflösen, keine Buchung oder Stammdatenanlage |
+| `GET /api/v1/product-identifiers` | Aktive und widerrufene Verpackungskennungen, maximal 500; optional `product_id` |
+| `POST /api/v1/product-identifiers` | GTIN/PZN/REF mit expliziter Packungsmenge zuordnen, nur Materialwart |
+| `POST /api/v1/product-identifiers/{id}/revoke` | Falsche Zuordnung mit Begründung widerrufen, nur Materialwart |
+| `GET /api/v1/labels/{kind}/{id}` | Geschütztes druckbares QR-PNG für `location`, `product` oder `batch` |
+
+Scanner-Auflösung benötigt Session, Origin und CSRF, aber keinen Idempotenzschlüssel, da sie keine Änderung schreibt. Texte: 1–1024 UTF-8-Bytes; JSON-Body maximal 4096 Bytes. `format` kann `auto`, `gtin`, `pzn`, `gs1`, `ref` oder `internal` sein. Unbekannte fremde URLs bleiben Daten; es erfolgt keine Navigation, externe Produktabfrage oder automatische Stammdatenanlage.
+
+```json
+{"text":"(01)04006381333931(10)DEMO-2026(17)281231","format":"auto"}
+```
+
+EAN-8, UPC-A, EAN-13 und GTIN-14 werden mit Modulo-10-Prüfziffer validiert und als 14-stellige GTIN mit führenden Nullen gespeichert. Unterschiedliche echte Verpackungs-GTINs werden nicht zusammengelegt. UPC-E-Kompression wird nicht expandiert; Scanner dafür auf Ausgabe der vollständigen UPC-A konfigurieren. PZN-7/PZN-8 wird mit der PZN-Prüfziffer validiert, PZN-7 auf acht Ziffern aufgefüllt. `PZN:` und der führende Bindestrich eines PZN-Code-39 werden erkannt. Eine achtstellige Ziffernfolge kann beide Prüfziffernregeln erfüllen: dann ausdrücklich GTIN oder PZN wählen, auch wenn nur eine Zuordnung im Katalog existiert. Hersteller-REF wird nur bei ausdrücklicher Formatwahl verwendet und bleibt hinsichtlich Groß-/Kleinschreibung exakt.
+
+GS1 unterstützt AI `01` (GTIN), `10` (Charge), `17` (Verfall) und `21` (Seriennummer), mit ASCII-Gruppentrenner 29/FNC1-Ausgabe und Klammerdarstellung `(01)...(10)...`. Variable Felder brauchen den Trenner, wenn weitere Felder folgen; es werden keine Verfallsfelder aus dem Chargentext geraten. Bei verdächtigem ungetrenntem Verfallssuffix wird Klärung verlangt. AIM-Präfixe für GS1 (`]d2`, `]C1`, `]Q3`), EAN (`]E0`) und gebräuchliche nicht-GS1-Symbologien werden berücksichtigt. Unbekannte oder doppelte AIs und ungültige Felder liefern keine Teilauflösung. Der GS1-Text braucht eine GTIN; weitere AIs/UDI-Datenstrukturen folgen später.
+
+GS1 `YYMMDD` bleibt als Originalangabe erhalten. Ein zweistelliges Jahr erhält kein geratenes Jahrhundert: der Chargenabgleich vergleicht gegen den ausdrücklich hinterlegten vollständigen Grenztag. Tag `00` wird als Monatspräzision erkannt, aber ohne bestätigte Hersteller-/Produktregel nicht in einen nutzbaren Grenztag umgerechnet. Seriennummern werden angezeigt; individuelle Geräte-/Serienverfolgung ist noch offen, deshalb keine direkte Buchungsübernahme für solche Scans. Widerspruch zwischen gescanntem und hinterlegtem Verfall verhindert ebenfalls die Übernahme. Ein Scan hebt weder Sperren noch Verfall auf.
+
+Unbekannte validierte Verpackungskennung in der Oberfläche auflösen; Materialwart wählt ausdrücklich Artikel, geprüfte Basiseinheiten je Packung und Begründung. Artikel müssen derzeit zuvor mit Charge per CLI angelegt sein, damit sie im Oberflächenkatalog erscheinen. Beispiel-Zuordnung:
+
+```json
+{"product_id":"PRODUCT_UUID","kind":"gtin","value":"4006381333931","pack_quantity":10,"note":"Packungsinhalt zehn Stück am Material geprüft"}
+```
+
+`pack_quantity` ist ausdrücklich 1–1.000.000.000; sie wird weder aus Barcode noch Artikelname angenommen. Die Zuordnung gehört zum gemeinsamen Artikelkatalog dieser einzigen Betreiberinstallation. Ein aktiver Code gehört eindeutig zu einem Artikel und einer Packungsumrechnung. Fehlerhafte Bindung zuerst widerrufen und dann mit neuer ID korrekt zuordnen. Ursprüngliche Bindung und Ereignissnapshots bleiben erhalten; reguläres Update/Delete ist ausgeschlossen, nur einmaliger aktiver→widerrufener Übergang erlaubt. Zuordnung/Widerruf, Akteur-/Zeit-Ereignis, eigene Katalog-Outbox und exakte Idempotenzantwort entstehen atomar. Alle schreibenden Module teilen den Benutzer-/Schlüsselraum. Migration 6 ergänzt Tabellen und Indizes, bestehende Mengen und Packlisten bleiben unverändert.
+
+EAN/PZN allein bestimmt keine Charge. Vor Übernahme Artikel, Charge, Verfall und Packungsumrechnung am tatsächlichen Material bestätigen, Buchungsaktion und Quell-/Zielort ausdrücklich wählen. Packungsanzahl wird anhand der registrierten Umrechnung in Basiseinheiten vorbereitet, mit Überlauf-/Mengengrenze. Das Buchungsformular muss danach separat bestätigt werden; seine bisherigen Versions-, Bereichs- und Sperrprüfungen bleiben maßgeblich. Bei einer unveränderten Scanner-Vorauswahl werden `identifier_id` und `pack_count` mitgesendet. Der Server prüft in der Buchungstransaktion die noch aktive Kennung, deren Artikel und `quantity = pack_count × pack_quantity`; widerrufene/fremde Kennungen liefern 409, falsche/zu große Umrechnungen 400. Der verwendete Verpackungsnachweis wird unveränderlich mit der Bewegung gespeichert und im bereichsbezogenen Journal mit Kennung, Packungsanzahl und ursprünglichem Faktor angezeigt. Werden Artikel/Quelle/Aktion oder Basismenge im Buchungsformular bewusst geändert, nennt die Oberfläche den Wechsel zur manuellen Basismenge. Bereits bestätigte Buchungen lassen sich trotz späterem Kennungswiderruf mit ihrem ursprünglichen Schlüssel wiederholen. Interne Artikel-/Chargen-QRs enthalten keine Packungsgröße; die Basismenge ist dann manuell anzugeben. Ein unbekannter Code oder eine unbekannte Charge erzeugt keine automatische Anlage.
+
+Interne QR-Etiketten enthalten nur `drk:v1:location:UUID`, `drk:v1:product:UUID` beziehungsweise `drk:v1:batch:UUID`; Namen, Kennwörter und Rechte sind nicht kodiert. Lagerortauflösung und Etikettenzugriff prüfen den Standortbereich; gemeinsame Artikel-/Chargenstammdaten benötigen mindestens eine der bestehenden Leserollen. QR-Bilder werden lokal serverseitig mit der eingecheckten, versionierten Go-Bibliothek erzeugt, ohne externen QR-Dienst. In **Interne QR-Etiketten** Objekt wählen, anzeigen und drucken oder Kennung kopieren. Ein Lagerortscan kann dessen Materialbewertung öffnen und verändert keinen Bestand.
+
 ## Docker Compose (Linux-Entwicklung)
 
 Zuerst das Entwicklungszertifikat wie oben unter `var/tls/` erstellen. Danach:
@@ -238,4 +274,4 @@ In dieser Cloud bei einem schreibgeschützten Standard-Docker-Verzeichnis `DOCKE
 
 ## Nächste Umsetzung
 
-Als Nächstes Scanner und Produktkennungen umsetzen; vollständige Geräte-/Zubehörbewertung und Packlistenalternativen ergänzen. Vor Pilotfreigabe die [Blueprint-Abnahmekriterien](docs/blueprint-v2.md) erfüllen.
+Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehörbewertung und Packlistenalternativen bleiben offen. Vor Pilotfreigabe die [Blueprint-Abnahmekriterien](docs/blueprint-v2.md) erfüllen.

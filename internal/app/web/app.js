@@ -8,7 +8,7 @@ let csrf = '', user = null, locations = [], balances = [], catalog = [], movemen
 const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Entnahme',inventory:'Inventur',reversal:'Gegenbuchung'};
 const stateNames = {available:'Verfügbar',quarantined:'Quarantäne',damaged:'Beschädigt'};
 function signedOut(message) {
- csrf = ''; user = null; countDraft = null; checkDraft = null; packDraft = null; list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
+ csrf = ''; user = null; countDraft = null; checkDraft = null; packDraft = null; scannerReset(); list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
  login.hidden = false; inventory.hidden = true; status.textContent = message;
 }
 function can(location, roles) { return user.rights.some(right => right.site_id === location.site_id && roles.includes(right.role)); }
@@ -65,7 +65,7 @@ async function loadHistory() {
   movements = await response.json();
   for (const move of movements) {
    const row = document.createElement('tr');
-   const amount = move.kind === 'inventory' ? `${move.basis_quantity} → ${move.counted_quantity} ${move.unit}` : `${move.quantity} ${move.unit}`;
+   const amount = move.pack_count ? `${move.quantity} ${move.unit} · ${move.pack_count} Packungen × ${move.pack_quantity} ${move.unit} · ${move.identifier_kind.toUpperCase()} ${move.identifier_value}` : move.kind === 'inventory' ? `${move.basis_quantity} → ${move.counted_quantity} ${move.unit}` : `${move.quantity} ${move.unit}`;
    for (const text of [new Date(move.created_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin'}),`${kindNames[move.kind]}${move.reversed_by ? ' · Gegengebucht' : ''}`,`${move.product} · ${move.lot}`,[move.from_location,move.to_location].filter(Boolean).join(' → '),amount,move.note]) {
     const cell = document.createElement('td');cell.textContent = text;row.append(cell);
    }
@@ -116,9 +116,9 @@ async function load() {
    const detail = document.createElement('p'); detail.textContent = `${location.site} · ${location.operator}`;
    item.append(name,detail); list.append(item);
   }
-  status.textContent = (pending || packPending) ? 'Ein Vorgang ist noch nicht bestätigt. Mit demselben Konto erneut senden.' : `${locations.length} Lagerorte geladen.`;
+  status.textContent = (pending || packPending || identifierPending) ? 'Ein Vorgang ist noch nicht bestätigt. Mit demselben Konto erneut senden.' : `${locations.length} Lagerorte geladen.`;
   await loadStock();
-  if (user) await loadPacklists();
+  if (user) { await loadPacklists(); if (user) await loadScannerData(); }
  } catch { status.textContent = 'Daten konnten nicht geladen werden. Verbindung prüfen und erneut laden.'; if (!pending) booking.hidden = true; }
 }
 async function restore() {
@@ -147,7 +147,7 @@ login.addEventListener('submit',async event => {
 document.querySelector('#logout').addEventListener('click',async () => {
  try {
   const response = await fetch('/api/v1/auth/logout',{method:'POST',headers:{'X-CSRF-Token':csrf}});
-  if (response.ok || response.status === 401) signedOut((pending || packPending) ? 'Abgemeldet. Eine unbestätigte Buchung benötigt erneute Anmeldung mit demselben Konto.' : 'Abgemeldet.');
+  if (response.ok || response.status === 401) signedOut((pending || packPending || identifierPending) ? 'Abgemeldet. Eine unbestätigte Buchung benötigt erneute Anmeldung mit demselben Konto.' : 'Abgemeldet.');
   else status.textContent = 'Abmeldung fehlgeschlagen. Bitte erneut versuchen.';
  } catch { status.textContent = 'Abmeldung konnte nicht bestätigt werden. Verbindung prüfen.'; }
 });
@@ -191,6 +191,10 @@ booking.addEventListener('submit',async event => {
     if (!data.to_location_id || data.to_location_id === source.location_id) { status.textContent = 'Einen anderen Zielort auswählen.'; return; }
    }
   }
+  if (scanBookingBasis && scanBookingBasis.owner === user.id && ['receipts','transfers','consumptions'].includes(action)) {
+   if (data.batch_id !== scanBookingBasis.batch || data.quantity !== scanBookingBasis.quantity) {status.textContent = 'Scanner-Vorauswahl verändert. Erneut scannen oder die Basismenge bewusst manuell eingeben.';return;}
+   data.identifier_id = scanBookingBasis.identifier_id;data.pack_count = scanBookingBasis.pack_count;
+  }
   pending = {owner:user.id,path,data,key:crypto.randomUUID(),uncertain:false};
  }
  lockBooking(true); const button = booking.querySelector('button[type=submit]'); button.disabled = true;
@@ -199,7 +203,7 @@ booking.addEventListener('submit',async event => {
   const result = await response.json();
   if (response.status === 401) { pending.uncertain = true; signedOut('Bitte mit demselben Konto erneut anmelden und die offene Buchung erneut senden.'); return; }
   if (response.status >= 500 || !response.ok && pending.uncertain) throw new Error('uncertain');
-  pending = null; countDraft = null; lockBooking(false); historyOffset = 0; await loadStock(); if (user) await loadPacklists();
+  pending = null; countDraft = null; scanBookingBasis = null; lockBooking(false); historyOffset = 0; await loadStock(); if (user) { await loadPacklists(); if (user) await loadScannerData(); }
   status.textContent = response.ok ? `Buchung bestätigt: ${result.movement_id}` : result.message || 'Buchung abgelehnt.';
  } catch { if (pending) pending.uncertain = true; status.textContent = 'Buchung nicht bestätigt. Erneut senden verwendet denselben Schlüssel. Diese Seite bis zur Klärung nicht neu laden.'; }
  finally { if (user) lockBooking(Boolean(pending)); }
@@ -218,7 +222,8 @@ document.querySelector('#start-count').addEventListener('click',async () => {
 document.querySelector('#reload').addEventListener('click',load);
  document.querySelector('#history-older').addEventListener('click',async () => {historyOffset += 50;await loadHistory();bookingChoices();});
  document.querySelector('#history-newer').addEventListener('click',async () => {historyOffset = Math.max(0,historyOffset-50);await loadHistory();bookingChoices();});
-window.addEventListener('beforeunload',event => {if (pending || packPending) {event.preventDefault();event.returnValue = '';}});
+window.addEventListener('pagehide',stopCamera);
+window.addEventListener('beforeunload',event => {if (pending || packPending || identifierPending) {event.preventDefault();event.returnValue = '';}});
 
 
 let packVersions = [], packDraft = null, checkDraft = null, packPending = null, material = null;
@@ -329,4 +334,148 @@ async function sendPackMutation(kind) {
 }
 document.querySelector('#pack-editor').addEventListener('submit',event => {event.preventDefault();sendPackMutation('publish');});
 document.querySelector('#material-check').addEventListener('submit',event => {event.preventDefault();sendPackMutation('check');});
+
+
+let scanBookingBasis = null, scannerResult = null, identifierPending = null, identifiers = [], scannerBusy = false, cameraStream = null, cameraGeneration = 0, cameraTimer = null;
+const scanNames = {invalid:'Code ungültig',unknown:'Unbekanntes Format',ambiguous:'Format mehrdeutig – ausdrücklich auswählen',unregistered_identifier:'Kennung noch nicht zugeordnet',product_match:'Artikel erkannt – Charge ausdrücklich wählen',batch_match:'Artikel und Charge erkannt',unregistered_batch:'Artikel erkannt – Charge noch nicht angelegt',batch_mismatch:'Verfall widerspricht dem Chargendatum',requires_review:'Fachliche Klärung erforderlich',location_match:'Lagerort erkannt'};
+function stopCamera() {
+ cameraGeneration++;clearTimeout(cameraTimer);cameraTimer = null;
+ cameraStream?.getTracks().forEach(track => track.stop());cameraStream = null;
+ document.querySelector('#camera-video').srcObject = null;document.querySelector('#camera-video').hidden = true;
+ document.querySelector('#camera-stop').hidden = true;document.querySelector('#camera-start').disabled = Boolean(identifierPending);
+}
+function scannerReset() {stopCamera();scanBookingBasis = null;scannerResult = null;document.querySelector('#scan-details').replaceChildren();document.querySelector('#scan-handoff').hidden = true;document.querySelector('#label-preview').hidden = true;document.querySelector('#label-image').removeAttribute('src');document.querySelector('#label-print').disabled = true;document.querySelector('#label-copy').disabled = true;}
+function scannerControls() {
+ if (!user) return;
+ const manager = locations.some(location => can(location,['material_manager']));
+ const canMap = manager && scannerResult?.status === 'unregistered_identifier' && scannerResult.parsed.value;
+ document.querySelector('#identifier-form').hidden = identifierPending?.kind !== 'add' && !canMap;
+ document.querySelector('#identifier-revoke').hidden = identifierPending?.kind !== 'revoke' && !manager;
+ for (const id of ['identifier-form','identifier-revoke','scan-form']) for (const element of document.querySelector(`#${id}`).elements) element.disabled = Boolean(identifierPending);
+ document.querySelector('#camera-start').disabled = Boolean(identifierPending || scannerBusy);
+ const supported = 'BarcodeDetector' in window && navigator.mediaDevices?.getUserMedia;
+ if (!supported) {document.querySelector('#camera-start').disabled = true;document.querySelector('#camera-status').textContent = 'Kamera-Erkennung in diesem Browser nicht verfügbar. Handscanner oder Texteingabe verwenden.';}
+ if (identifierPending) {const form = document.querySelector(identifierPending.kind === 'add' ? '#identifier-form' : '#identifier-revoke');const button = form.querySelector('button[type=submit]');button.disabled = identifierPending.owner !== user.id;button.textContent = 'Vorgang erneut senden';}
+ else {document.querySelector('#identifier-form button').textContent = 'Kennung zuordnen';document.querySelector('#identifier-revoke button').textContent = 'Zuordnung widerrufen';}
+ document.querySelector('#scan-form button[type=submit]').disabled = Boolean(identifierPending || scannerBusy);
+}
+function handoffChoices() {
+ if (!user || !scannerResult) return;
+ const purpose = document.querySelector('#scan-purpose').value;
+ const selectedBatch = document.querySelector('#scan-batch').value;
+ const sources = balances.filter(balance => balance.batch_id === selectedBatch && balance.quantity > 0 && (purpose !== 'consumptions' || balance.usable_quantity > 0) && locations.some(location => location.id === balance.location_id && can(location,purpose === 'consumptions' ? ['helper','material_manager'] : ['material_manager'])));
+ options(document.querySelector('#scan-source'),[{id:'',label:'Quellbestand ausdrücklich auswählen'},...sources.map(balance => ({id:`${balance.batch_id}|${balance.location_id}|${balance.state}`,label:`${balance.location} · ${balance.lot} · ${balance.quantity} ${balance.unit} · ${stateNames[balance.state]}`}))]);
+ options(document.querySelector('#scan-target'),[{id:'',label:'Zielort ausdrücklich auswählen'},...locations.filter(location => can(location,['material_manager'])).map(location => ({id:location.id,label:location.name}))]);
+ document.querySelector('#scan-source-field').hidden = !['transfers','consumptions'].includes(purpose);document.querySelector('#scan-source').required = ['transfers','consumptions'].includes(purpose);
+ document.querySelector('#scan-target-field').hidden = !['receipts','transfers'].includes(purpose);document.querySelector('#scan-target').required = ['receipts','transfers'].includes(purpose);
+}
+function renderScan(result) {
+ scannerResult = result;const details = document.querySelector('#scan-details');details.replaceChildren();
+ document.querySelector('#scan-status').textContent = `${scanNames[result.status] || 'Auflösung nicht verfügbar'} · Keine Buchung ausgeführt.`;
+ for (const text of [result.product ? `${result.product} · ${result.unit}${result.pack_quantity ? ` · ${result.pack_quantity} Basiseinheiten je Packung` : ''}` : '',result.location ? `${result.location.name} · ${result.location.site}` : '',result.parsed.lot ? `Gescannte Charge: ${result.parsed.lot}` : '',result.parsed.expiry_raw ? `GS1-Verfall: ${result.parsed.expiry_raw} (YYMMDD; ${result.parsed.expiry_precision === 'month' ? 'Monatsangabe' : 'Tagesangabe'})` : '',result.parsed.serial ? `Seriennummer: ${result.parsed.serial}` : '',result.batch ? `Hinterlegte Charge: ${result.batch.lot} · Verfall ${result.batch.expires_on || 'ungeklärt'}${result.batch.blocked ? ' · gesperrt' : ''}` : '',...result.warnings].filter(Boolean)) {const li = document.createElement('li');li.textContent = text;details.append(li);}
+ const helper = locations.some(location => can(location,['helper','material_manager']));const manager = locations.some(location => can(location,['material_manager']));
+ const handoff = document.querySelector('#scan-handoff');handoff.hidden = !helper || !['batch_match','product_match'].includes(result.status);
+ document.querySelector('#scan-open-location').hidden = result.status !== 'location_match';
+ document.querySelector('#scan-confirm').checked = false;
+ options(document.querySelector('#scan-batch'),[{id:'',label:'Charge ausdrücklich auswählen'},...catalog.filter(batch => batch.product_id === result.product_id).map(batch => ({id:batch.id,label:`${batch.lot} · Verfall ${batch.expires_on || 'ungeklärt'}${batch.blocked ? ' · gesperrt' : ''}`}))]);
+ if (result.status === 'batch_match' && result.batch) document.querySelector('#scan-batch').value = result.batch.id;
+ options(document.querySelector('#scan-purpose'),[{id:'',label:'Buchungsaktion ausdrücklich auswählen'},...(manager ? [{id:'receipts',label:'Wareneingang'},{id:'transfers',label:'Umlagerung'}] : []),...(helper ? [{id:'consumptions',label:'Entnahme'}] : [])]);
+ document.querySelector('#scan-packs-field').hidden = !result.pack_quantity;document.querySelector('#scan-packs').value = '1';document.querySelector('#scan-packs').required = Boolean(result.pack_quantity);
+ options(document.querySelector('#identifier-product'),[{id:'',label:'Artikel ausdrücklich auswählen'},...productChoices()]);document.querySelector('#identifier-quantity').value = '';document.querySelector('#identifier-note').value = '';
+ handoffChoices();scannerControls();
+}
+async function resolveScan() {
+ if (!user || scannerBusy || identifierPending) return;
+ const owner = user.id, text = document.querySelector('#scan-text').value, format = document.querySelector('#scan-format').value;scannerBusy = true;scannerResult = null;document.querySelector('#scan-handoff').hidden = true;document.querySelector('#identifier-form').hidden = true;scannerControls();
+ try {
+  const response = await fetch('/api/v1/scanner/resolve',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({text,format})});const result = await response.json();
+  if (response.status === 401) {signedOut('Bitte erneut anmelden.');return;}if (!user || user.id !== owner) return;
+  if (document.querySelector('#scan-text').value !== text || document.querySelector('#scan-format').value !== format) {document.querySelector('#scan-status').textContent = 'Eingabe geändert. Code erneut auflösen.';return;}
+  if (!response.ok) {document.querySelector('#scan-status').textContent = result.message || 'Auflösung nicht verfügbar.';return;}
+  renderScan(result);
+ } catch {document.querySelector('#scan-status').textContent = 'Scannerauflösung nicht verfügbar. Verbindung prüfen; keine Buchung ausgeführt.';}
+ finally {scannerBusy = false;scannerControls();}
+}
+async function loadScannerData() {
+ if (!user) return;
+ try {
+  const response = await fetch('/api/v1/product-identifiers',{cache:'no-store'});if (response.status === 401) {signedOut('Bitte erneut anmelden.');return;}
+  if (!response.ok) throw new Error('unavailable');identifiers = await response.json();
+  const list = document.querySelector('#identifier-list');list.replaceChildren();
+  for (const item of identifiers) {const li = document.createElement('li');li.textContent = `${item.kind.toUpperCase()} ${item.value} · ${item.product} · ${item.pack_quantity} ${item.unit} je Packung · ${item.active ? 'aktiv' : 'widerrufen'}`;list.append(li);}
+  document.querySelector('#identifier-status').textContent = `${identifiers.length} Zuordnungen${response.headers.get('X-Has-More') === 'true' ? ' · Anzeige auf 500 begrenzt' : ''}.`;
+  if (!identifierPending) options(document.querySelector('#identifier-revoke-choice'),[{id:'',label:'Zuordnung ausdrücklich auswählen'},...identifiers.filter(item => item.active).map(item => ({id:item.id,label:`${item.kind.toUpperCase()} ${item.value} · ${item.product} · ${item.pack_quantity} ${item.unit}`}))]);
+  labelChoices();scannerControls();
+ } catch {document.querySelector('#identifier-status').textContent = 'Produktkennungen nicht verfügbar.';scannerControls();}
+}
+async function sendIdentifier(kind) {
+ if (!user || identifierPending && (identifierPending.owner !== user.id || identifierPending.kind !== kind)) return;
+ if (!identifierPending) {
+  let data,path;
+  if (kind === 'add') {
+   if (scannerResult?.status !== 'unregistered_identifier' || !scannerResult.parsed.value) return;
+   data = {product_id:document.querySelector('#identifier-product').value,kind:scannerResult.parsed.kind === 'gs1' ? 'gtin' : scannerResult.parsed.kind,value:scannerResult.parsed.value,pack_quantity:document.querySelector('#identifier-quantity').valueAsNumber,note:document.querySelector('#identifier-note').value};path = '/api/v1/product-identifiers';
+  } else {const id = document.querySelector('#identifier-revoke-choice').value;if (!id) return;path = `/api/v1/product-identifiers/${id}/revoke`;data = {note:document.querySelector('#identifier-revoke-note').value};}
+  identifierPending = {owner:user.id,kind,path,data,key:crypto.randomUUID(),uncertain:false};stopCamera();
+ }
+ scannerControls();document.querySelector(`#${kind === 'add' ? 'identifier-form' : 'identifier-revoke'} button`).disabled = true;
+ try {
+  const response = await fetch(identifierPending.path,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':identifierPending.key},body:JSON.stringify(identifierPending.data)});const result = await response.json();
+  if (response.status === 401) {identifierPending.uncertain = true;signedOut('Mit demselben Konto anmelden und offenen Kennungsvorgang erneut senden.');return;}
+  if (response.status >= 500 || !response.ok && identifierPending.uncertain) throw new Error('uncertain');
+  identifierPending = null;await loadScannerData();if (user && document.querySelector('#scan-text').value) await resolveScan();
+  status.textContent = response.ok ? 'Kennungsvorgang bestätigt. Keine Bestandsbuchung ausgeführt.' : result.message || 'Kennungsvorgang abgelehnt.';
+ } catch {if (identifierPending) identifierPending.uncertain = true;status.textContent = 'Kennungsvorgang nicht bestätigt. Erneut senden verwendet denselben Inhalt und Schlüssel. Seite bis zur Klärung nicht neu laden.';}
+ finally {scannerControls();}
+}
+document.querySelector('#scan-form').addEventListener('submit',event => {event.preventDefault();resolveScan();});
+document.querySelector('#scan-text').addEventListener('keydown',event => {if (event.key === 'Enter' && !event.shiftKey) {event.preventDefault();document.querySelector('#scan-form').requestSubmit();}});
+for (const id of ['scan-text','scan-format']) document.querySelector(`#${id}`).addEventListener('input',() => {scannerResult = null;document.querySelector('#scan-handoff').hidden = true;document.querySelector('#identifier-form').hidden = true;document.querySelector('#scan-open-location').hidden = true;document.querySelector('#scan-status').textContent = 'Eingabe geändert. Code erneut auflösen.';});
+document.querySelector('#scan-separator').addEventListener('click',() => {const input = document.querySelector('#scan-text');input.setRangeText('\x1d',input.selectionStart,input.selectionEnd,'end');input.dispatchEvent(new Event('input'));input.focus();});
+for (const id of ['scan-purpose','scan-batch']) document.querySelector(`#${id}`).addEventListener('change',() => {document.querySelector('#scan-confirm').checked = false;handoffChoices();});
+document.querySelector('#scan-handoff').addEventListener('submit',event => {
+ event.preventDefault();if (!user || !scannerResult || !['batch_match','product_match'].includes(scannerResult.status) || pending || countDraft || identifierPending || !document.querySelector('#scan-confirm').checked) {status.textContent = 'Scan prüfen und offene Buchung/Zählung zuerst abschließen.';return;}
+ const batch = catalog.find(batch => batch.id === document.querySelector('#scan-batch').value && batch.product_id === scannerResult.product_id), action = document.querySelector('#scan-purpose').value;
+ if (!batch || !['receipts','transfers','consumptions'].includes(action)) return;
+ let quantity = null;
+ if (scannerResult.pack_quantity) {const packs = document.querySelector('#scan-packs').valueAsNumber;quantity = packs * scannerResult.pack_quantity;if (!Number.isSafeInteger(packs) || packs < 1 || !Number.isSafeInteger(quantity) || quantity > 1000000000) {status.textContent = 'Packungsanzahl beziehungsweise Basismenge außerhalb des Wertebereichs.';return;}}
+ document.querySelector('#action').value = action;bookingChoices();
+ if (document.querySelector('#action').value !== action) {status.textContent = 'Buchungsaktion nicht erlaubt.';return;}
+ if (action === 'receipts') {document.querySelector('#batch').value = batch.id;document.querySelector('#target').value = document.querySelector('#scan-target').value;}
+ else {document.querySelector('#source').value = document.querySelector('#scan-source').value;if (!document.querySelector('#source').value) {status.textContent = 'Quellbestand neu laden und ausdrücklich auswählen.';return;}if (action === 'transfers') document.querySelector('#target').value = document.querySelector('#scan-target').value;}
+ scanBookingBasis = scannerResult.identifier_id && quantity !== null ? {owner:user.id,batch:batch.id,identifier_id:scannerResult.identifier_id,pack_count:document.querySelector('#scan-packs').valueAsNumber,quantity} : null;
+ document.querySelector('#quantity').value = quantity === null ? '' : String(quantity);lockBooking(false);booking.scrollIntoView({behavior:'smooth'});status.textContent = 'Scan in Buchungsformular übernommen. Menge, Orte und Zustand nochmals prüfen und dort ausdrücklich buchen.';
+});
+for (const id of ['action','batch','source','quantity']) document.querySelector(`#${id}`).addEventListener('input',() => {if (scanBookingBasis && !pending) {scanBookingBasis = null;status.textContent = 'Scanner-Vorauswahl geändert. Menge wird nun als manuelle Basismenge gebucht.';}});
+document.querySelector('#scan-open-location').addEventListener('click',async () => {const id = scannerResult?.location?.id;if (!id) return;const pack = packVersions.find(pack => pack.location_id === id);if (!pack) {status.textContent = 'Für diesen Lagerort ist noch keine Sollpackliste hinterlegt.';return;}if (packPending) {status.textContent = 'Offenen Packlistenvorgang zuerst abschließen.';return;}checkDraft = null;document.querySelector('#pack-choice').value = pack.id;await loadMaterial();document.querySelector('#packlists').scrollIntoView({behavior:'smooth'});});
+document.querySelector('#identifier-form').addEventListener('submit',event => {event.preventDefault();sendIdentifier('add');});
+document.querySelector('#identifier-revoke').addEventListener('submit',event => {event.preventDefault();sendIdentifier('revoke');});
+function labelChoices() {
+ const kind = document.querySelector('#label-kind').value;
+ const items = kind === 'location' ? locations.map(location => ({id:location.id,label:location.name})) : kind === 'product' ? productChoices() : catalog.map(batch => ({id:batch.id,label:`${batch.product} · ${batch.lot}`}));
+ options(document.querySelector('#label-object'),items);
+}
+document.querySelector('#label-kind').addEventListener('change',labelChoices);
+document.querySelector('#label-show').addEventListener('click',() => {
+ const kind = document.querySelector('#label-kind').value,id = document.querySelector('#label-object').value;if (!id) return;
+ const code = `drk:v1:${kind}:${id}`,image = document.querySelector('#label-image');document.querySelector('#label-print').disabled = true;document.querySelector('#label-copy').disabled = true;
+ document.querySelector('#label-preview').hidden = false;document.querySelector('#label-caption').textContent = document.querySelector('#label-object').selectedOptions[0].textContent;document.querySelector('#label-code').textContent = code;
+ image.onload = () => {document.querySelector('#label-print').disabled = false;document.querySelector('#label-copy').disabled = false;document.querySelector('#label-status').textContent = 'QR-Code enthält nur Objektart, Schema-Version und opake ID. Er erteilt keine Rechte.';};
+ image.onerror = () => {document.querySelector('#label-status').textContent = 'Etikett nicht verfügbar. Anmeldung, Objektberechtigung und Verbindung prüfen.';};image.src = `/api/v1/labels/${kind}/${encodeURIComponent(id)}`;
+});
+document.querySelector('#label-print').addEventListener('click',() => window.print());
+document.querySelector('#label-copy').addEventListener('click',async () => {try {await navigator.clipboard.writeText(document.querySelector('#label-code').textContent);document.querySelector('#label-status').textContent = 'Interne Kennung kopiert.';} catch {document.querySelector('#label-status').textContent = 'Kopieren nicht verfügbar. Angezeigte Kennung manuell kopieren.';}});
+document.querySelector('#camera-stop').addEventListener('click',() => {stopCamera();document.querySelector('#camera-status').textContent = 'Kamera beendet.';});
+document.querySelector('#camera-start').addEventListener('click',async () => {
+ if (!user || identifierPending || scannerBusy) return;stopCamera();const generation = cameraGeneration;
+ try {
+  const supported = await BarcodeDetector.getSupportedFormats();const formats = ['qr_code','ean_13','ean_8','upc_a','code_128','data_matrix','code_39'].filter(format => supported.includes(format));if (!formats.length) throw new Error('formats');
+  const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});if (!user || generation !== cameraGeneration) {stream.getTracks().forEach(track => track.stop());return;}cameraStream = stream;
+  const video = document.querySelector('#camera-video');video.srcObject = stream;video.hidden = false;await video.play();document.querySelector('#camera-stop').hidden = false;document.querySelector('#camera-start').disabled = true;document.querySelector('#camera-status').textContent = 'Kamera aktiv. Code vollständig in den Bildausschnitt halten.';
+  const detector = new BarcodeDetector({formats});
+  async function detect() {if (generation !== cameraGeneration) return;try {const codes = await detector.detect(video);if (generation !== cameraGeneration) return;if (codes.length === 1) {const found = codes[0];stopCamera();document.querySelector('#scan-text').value = found.rawValue;document.querySelector('#scan-format').value = ['ean_13','ean_8','upc_a'].includes(found.format) ? 'gtin' : 'auto';document.querySelector('#camera-status').textContent = 'Code erkannt. Scanergebnis prüfen.';await resolveScan();return;}if (codes.length > 1) document.querySelector('#camera-status').textContent = 'Mehrere Codes erkannt. Genau einen Code in den Bildausschnitt halten.';cameraTimer = setTimeout(detect,200);} catch {stopCamera();document.querySelector('#camera-status').textContent = 'Kamera-Erkennung fehlgeschlagen. Handscanner oder Texteingabe verwenden.';}}
+  await detect();
+ } catch {stopCamera();document.querySelector('#camera-status').textContent = 'Kamera nicht verfügbar oder Zugriff nicht erlaubt. Handscanner oder Texteingabe verwenden.';}
+});
+document.addEventListener('visibilitychange',() => {if (document.hidden) stopCamera();});
 restore();

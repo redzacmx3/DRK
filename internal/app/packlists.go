@@ -234,12 +234,8 @@ func calculateMaterial(ctx context.Context, tx *sql.Tx, p packVersion, now time.
 	return result, snapshot, nil
 }
 func packReplay(ctx context.Context, tx *sql.Tx, user, key, hash string) ([]byte, error) {
-	var stock bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM idempotency_keys WHERE user_id=? AND key=?)`, user, key).Scan(&stock); err != nil {
+	if err := rejectOtherKey(ctx, tx, user, key, "packlist_requests"); err != nil {
 		return nil, err
-	}
-	if stock {
-		return nil, conflict("idempotency_conflict", "Dieser Schlüssel gehört zu einer Materialbuchung.")
 	}
 	var old, response string
 	err := tx.QueryRowContext(ctx, `SELECT request_hash,response_json FROM packlist_requests WHERE user_id=? AND key=?`, user, key).Scan(&old, &response)
@@ -255,24 +251,6 @@ func packReplay(ctx context.Context, tx *sql.Tx, user, key, hash string) ([]byte
 	return []byte(response), nil
 }
 
-// Legacy migration tests still book stock on schema 3 before upgrading.
-func rejectPackKey(ctx context.Context, tx *sql.Tx, user, key string) error {
-	var table bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='packlist_requests')`).Scan(&table); err != nil {
-		return err
-	}
-	if !table {
-		return nil
-	}
-	var exists bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM packlist_requests WHERE user_id=? AND key=?)`, user, key).Scan(&exists); err != nil {
-		return err
-	}
-	if exists {
-		return conflict("idempotency_conflict", "Dieser Schlüssel gehört zu einem Packlistenvorgang.")
-	}
-	return nil
-}
 func savePackEvent(ctx context.Context, tx *sql.Tx, user, key, hash, action, pack, check string, value any, now time.Time) ([]byte, error) {
 	id := newID()
 	encoded, err := json.Marshal(value)

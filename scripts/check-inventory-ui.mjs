@@ -53,6 +53,7 @@ try {
  window.testBalances = [{batch_id:'batch',location_id:'warehouse',state:'available',quantity:10,usable_quantity:10,version:1,product:'Demo',unit:'Stück',lot:'DEMO',location:'Lager',expires_on:'2030-01-01',blocked:false}];
  window.posted = [];
  window.pack = {id:'pack',location_id:'warehouse',version:1,title:'Material',check_valid_hours:24,created_at:new Date().toISOString(),note:'Synthetic',items:[{product_id:'product',quantity:5,min_remaining_days:30}]};
+ window.testIdentifiers = [];window.identifierPosted = [];window.identifierReplies = new Map();window.loseIdentifierReply = false;window.nonInventoryStockPosts = [];
  window.materialBasis = 'a'.repeat(64);window.packPosted = [];window.packReplies = new Map();window.losePackReply = false;
 
  window.fetch = async (input,options={}) => {
@@ -63,6 +64,23 @@ try {
   else if (path === '/api/v1/stock/catalog') data = [{id:'batch',product_id:'product',product:'Demo',unit:'Stück',lot:'DEMO'}];
   else if (path === '/api/v1/stock/balances') data = window.testBalances;
   else if (path.startsWith('/api/v1/stock/movements?')) data = [];
+  else if (path === '/api/v1/product-identifiers' && !options.method) data = window.testIdentifiers;
+  else if (path === '/api/v1/product-identifiers' && options.method === 'POST') {
+   const request = JSON.parse(options.body),key = options.headers['Idempotency-Key'];window.identifierPosted.push({request,key});
+   if (window.identifierReplies.has(key)) return new Response(JSON.stringify(window.identifierReplies.get(key)),{status:201,headers:{'Content-Type':'application/json'}});
+   data = {...request,id:'identifier',product:'Demo',unit:'Stück',active:true,created_at:new Date().toISOString()};window.testIdentifiers.push(data);window.identifierReplies.set(key,data);
+   if (window.loseIdentifierReply) {window.loseIdentifierReply=false;throw new Error('Simulated lost identifier response');}
+  }
+  else if (path === '/api/v1/scanner/resolve') {
+   const request = JSON.parse(options.body);
+   data = {status:'unknown',parsed:{kind:'unknown',warnings:[]},warnings:['Keine Buchung.'],data_as_of:new Date().toISOString()};
+   if (request.text === '4006381333931') {
+    data.parsed = {kind:'gtin',value:'04006381333931',warnings:[]};data.status = window.testIdentifiers.length ? 'product_match' : 'unregistered_identifier';
+    if (window.testIdentifiers.length) Object.assign(data,{product_id:'product',product:'Demo',unit:'Stück',identifier_id:'identifier',pack_quantity:window.testIdentifiers[0].pack_quantity});
+   } else if (request.text === 'conflicting-GS1') Object.assign(data,{status:'batch_mismatch',parsed:{kind:'gs1',value:'04006381333931',lot:'DEMO',expiry_raw:'301230',expiry_precision:'day'},product_id:'product',product:'Demo',unit:'Stück',batch:{id:'batch',lot:'DEMO',expires_on:'2030-01-01',blocked:false},warnings:['Verfall widerspricht Chargendatum.']});
+   else if (request.text === '00001175') Object.assign(data,{status:'ambiguous',parsed:{kind:'ambiguous'},warnings:['Format ausdrücklich wählen.']});
+  }
+  else if (path.startsWith('/api/v1/stock/') && options.method === 'POST' && path !== '/api/v1/stock/inventories') {window.nonInventoryStockPosts.push({path,body:options.body});data = {movement_id:'not-expected'};}
   else if (path.startsWith('/api/v1/packlists?')) data = [window.pack];
   else if (path === '/api/v1/packlists/pack/readiness') data = {scope:'material_only',overall_readiness:'not_assessed',status:'needs_check',data_as_of:new Date().toISOString(),packlist:window.pack,current_version:true,basis_hash:window.materialBasis,reasons:['Physischer Prüfnachweis fehlt.'],items:[{product:'Demo',unit:'Stück',quantity:5,physical_quantity:10,usable_quantity:10,shortfall:0,min_remaining_days:30,unknown_quantity:0}],last_check:null};
   else if (path === '/api/v1/packlists/pack/checks' && !options.method) data = [];
@@ -136,7 +154,39 @@ try {
  assert.equal(await evaluate('window.packPosted[3].request.expected_version'),1);
  await until("document.querySelector('#status').textContent.includes('Datenstand geändert')");
  assert.equal(await evaluate("document.querySelector('#pack-editor button[type=submit]').disabled"),true);
- console.log('Browser UI passed: frozen inventory/count and packlist/check bases, mandatory restart after conflict, zero count and exact retry after lost check response (simulated API).');
+ await evaluate("document.querySelector('#scan-text').value='4006381333931';document.querySelector('#scan-form').requestSubmit()");
+ await until("document.querySelector('#scan-status').textContent.includes('noch nicht zugeordnet')");
+ assert.equal(await evaluate("document.querySelector('#identifier-quantity').value"),'');
+ await evaluate("window.loseIdentifierReply=true;document.querySelector('#identifier-product').value='product';document.querySelector('#identifier-quantity').value='10';document.querySelector('#identifier-note').value='Packung enthält zehn Stück';document.querySelector('#identifier-form').requestSubmit()");
+ await until("document.querySelector('#status').textContent.includes('Kennungsvorgang nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#identifier-product').disabled"),true);
+ await evaluate("document.querySelector('#identifier-form').requestSubmit()");
+ await until('window.identifierPosted.length === 2');
+ assert.deepEqual(await evaluate('window.identifierPosted[0]'),await evaluate('window.identifierPosted[1]'));
+ await until("document.querySelector('#scan-status').textContent.includes('Artikel erkannt')");
+ assert.equal(await evaluate("document.querySelector('#scan-batch').value"),'');
+ assert.equal(await evaluate("document.querySelector('#scan-confirm').checked"),false);
+ await evaluate("document.querySelector('#scan-batch').value='batch';document.querySelector('#scan-batch').dispatchEvent(new Event('change'));document.querySelector('#scan-purpose').value='receipts';document.querySelector('#scan-purpose').dispatchEvent(new Event('change'));document.querySelector('#scan-target').value='warehouse';document.querySelector('#scan-packs').value='3';document.querySelector('#scan-confirm').checked=true;document.querySelector('#scan-handoff').requestSubmit()");
+ await until("document.querySelector('#status').textContent.includes('Scan in Buchungsformular übernommen')");
+ assert.equal(await evaluate("document.querySelector('#quantity').value"),'30');
+ assert.equal(await evaluate('window.nonInventoryStockPosts.length'),0);
+ assert.equal(await evaluate('window.posted.length'),2);
+ await evaluate("document.querySelector('#booking').requestSubmit()");
+ await until('window.nonInventoryStockPosts.length === 1');
+ assert.deepEqual(await evaluate('({quantity:JSON.parse(window.nonInventoryStockPosts[0].body).quantity,identifier:JSON.parse(window.nonInventoryStockPosts[0].body).identifier_id,packs:JSON.parse(window.nonInventoryStockPosts[0].body).pack_count})'),{quantity:30,identifier:'identifier',packs:3});
+ await until("document.querySelector('#status').textContent.includes('Buchung bestätigt')");
+ await evaluate("document.querySelector('#scan-text').value='conflicting-GS1';document.querySelector('#scan-form').requestSubmit()");
+ await until("document.querySelector('#scan-status').textContent.includes('Verfall widerspricht')");
+ assert.equal(await evaluate("document.querySelector('#scan-handoff').hidden"),true);
+ await evaluate("document.querySelector('#scan-text').value='00001175';document.querySelector('#scan-form').requestSubmit()");
+ await until("document.querySelector('#scan-status').textContent.includes('mehrdeutig')");
+ assert.equal(await evaluate("document.querySelector('#scan-handoff').hidden"),true);
+ const beforeURL = await evaluate('location.href');
+ await evaluate("document.querySelector('#scan-text').value='https://example.invalid/unsafe';document.querySelector('#scan-form').requestSubmit()");
+ await until("document.querySelector('#scan-status').textContent.includes('Unbekanntes Format')");
+ assert.equal(await evaluate('location.href'),beforeURL);
+ assert.equal(await evaluate('window.nonInventoryStockPosts.length'),1);
+ console.log('Browser UI passed: frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');

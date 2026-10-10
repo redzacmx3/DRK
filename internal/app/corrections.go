@@ -71,7 +71,7 @@ func activeStockSession(ctx context.Context, tx *sql.Tx, user, tokenHash string,
 	return nil
 }
 func replayCorrection(ctx context.Context, tx *sql.Tx, user, key, hash string) ([]byte, error) {
-	if err := rejectPackKey(ctx, tx, user, key); err != nil {
+	if err := rejectOtherKey(ctx, tx, user, key, "idempotency_keys"); err != nil {
 		return nil, err
 	}
 	var oldHash, response string
@@ -393,27 +393,32 @@ func correctionRoutes(mux *http.ServeMux, a *authService) {
 			}
 		}
 		type movement struct {
-			ID           string  `json:"id"`
-			Kind         string  `json:"kind"`
-			Batch        string  `json:"batch_id"`
-			Product      string  `json:"product"`
-			Lot          string  `json:"lot"`
-			Unit         string  `json:"unit"`
-			From         *string `json:"from_location_id"`
-			To           *string `json:"to_location_id"`
-			FromName     *string `json:"from_location"`
-			ToName       *string `json:"to_location"`
-			Quantity     int64   `json:"quantity"`
-			State        string  `json:"state"`
-			Created      string  `json:"created_at"`
-			Note         string  `json:"note"`
-			Reverses     *string `json:"reversed_movement_id"`
-			ReversedBy   *string `json:"reversed_by"`
-			Counted      *int64  `json:"counted_quantity"`
-			Basis        *int64  `json:"basis_quantity"`
-			BasisVersion *int64  `json:"basis_version"`
+			IdentifierID    *string `json:"identifier_id,omitempty"`
+			IdentifierKind  *string `json:"identifier_kind,omitempty"`
+			IdentifierValue *string `json:"identifier_value,omitempty"`
+			PackCount       *int64  `json:"pack_count,omitempty"`
+			PackQuantity    *int64  `json:"pack_quantity,omitempty"`
+			ID              string  `json:"id"`
+			Kind            string  `json:"kind"`
+			Batch           string  `json:"batch_id"`
+			Product         string  `json:"product"`
+			Lot             string  `json:"lot"`
+			Unit            string  `json:"unit"`
+			From            *string `json:"from_location_id"`
+			To              *string `json:"to_location_id"`
+			FromName        *string `json:"from_location"`
+			ToName          *string `json:"to_location"`
+			Quantity        int64   `json:"quantity"`
+			State           string  `json:"state"`
+			Created         string  `json:"created_at"`
+			Note            string  `json:"note"`
+			Reverses        *string `json:"reversed_movement_id"`
+			ReversedBy      *string `json:"reversed_by"`
+			Counted         *int64  `json:"counted_quantity"`
+			Basis           *int64  `json:"basis_quantity"`
+			BasisVersion    *int64  `json:"basis_version"`
 		}
-		rows, err := a.db.QueryContext(r.Context(), `SELECT m.id,m.kind,m.batch_id,p.name,b.lot,p.base_unit,m.from_location_id,m.to_location_id,src.name,dst.name,m.quantity,m.state,m.created_at,m.note,m.reversed_movement_id,(SELECT r.id FROM stock_movements r WHERE r.reversed_movement_id=m.id),m.counted_quantity,m.basis_quantity,m.basis_version FROM stock_movements m JOIN batches b ON b.id=m.batch_id JOIN product_types p ON p.id=b.product_id LEFT JOIN locations src ON src.id=m.from_location_id LEFT JOIN locations dst ON dst.id=m.to_location_id WHERE (m.from_location_id IS NULL OR EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=src.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager'))) AND (m.to_location_id IS NULL OR EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=dst.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager'))) ORDER BY m.created_at DESC,m.id DESC LIMIT ? OFFSET ?`, user.ID, user.ID, limit+1, offset)
+		rows, err := a.db.QueryContext(r.Context(), `SELECT m.id,m.kind,m.batch_id,p.name,b.lot,p.base_unit,m.from_location_id,m.to_location_id,src.name,dst.name,m.quantity,m.state,m.created_at,m.note,m.reversed_movement_id,(SELECT r.id FROM stock_movements r WHERE r.reversed_movement_id=m.id),m.counted_quantity,m.basis_quantity,m.basis_version,pack.identifier_id,ident.kind,ident.value,pack.pack_count,pack.pack_quantity FROM stock_movements m JOIN batches b ON b.id=m.batch_id JOIN product_types p ON p.id=b.product_id LEFT JOIN locations src ON src.id=m.from_location_id LEFT JOIN locations dst ON dst.id=m.to_location_id LEFT JOIN movement_packaging pack ON pack.movement_id=m.id LEFT JOIN product_identifiers ident ON ident.id=pack.identifier_id WHERE (m.from_location_id IS NULL OR EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=src.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager'))) AND (m.to_location_id IS NULL OR EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=dst.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager'))) ORDER BY m.created_at DESC,m.id DESC LIMIT ? OFFSET ?`, user.ID, user.ID, limit+1, offset)
 		if err != nil {
 			sendStockError(w, err)
 			return
@@ -422,7 +427,7 @@ func correctionRoutes(mux *http.ServeMux, a *authService) {
 		items := []movement{}
 		for rows.Next() {
 			var m movement
-			if err = rows.Scan(&m.ID, &m.Kind, &m.Batch, &m.Product, &m.Lot, &m.Unit, &m.From, &m.To, &m.FromName, &m.ToName, &m.Quantity, &m.State, &m.Created, &m.Note, &m.Reverses, &m.ReversedBy, &m.Counted, &m.Basis, &m.BasisVersion); err != nil {
+			if err = rows.Scan(&m.ID, &m.Kind, &m.Batch, &m.Product, &m.Lot, &m.Unit, &m.From, &m.To, &m.FromName, &m.ToName, &m.Quantity, &m.State, &m.Created, &m.Note, &m.Reverses, &m.ReversedBy, &m.Counted, &m.Basis, &m.BasisVersion, &m.IdentifierID, &m.IdentifierKind, &m.IdentifierValue, &m.PackCount, &m.PackQuantity); err != nil {
 				sendStockError(w, err)
 				return
 			}

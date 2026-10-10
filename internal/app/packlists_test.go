@@ -21,7 +21,9 @@ func packHTTP(f stockFixture, method, path, key string, input any) *httptest.Res
 		json.NewEncoder(&b).Encode(input)
 	}
 	r := httptest.NewRequest(method, testOrigin+"/api/v1/"+path, &b)
-	r.AddCookie(f.cookie)
+	if f.cookie != nil {
+		r.AddCookie(f.cookie)
+	}
 	r.Header.Set("Origin", testOrigin)
 	r.Header.Set("X-CSRF-Token", f.csrf)
 	r.Header.Set("Content-Type", "application/json")

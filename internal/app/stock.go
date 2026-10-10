@@ -52,6 +52,8 @@ func CreateBatch(db *sql.DB, product, lot, expiry string) (string, error) {
 }
 
 type stockRequest struct {
+	IdentifierID    string `json:"identifier_id,omitempty"`
+	PackCount       int64  `json:"pack_count,omitempty"`
 	BatchID         string `json:"batch_id"`
 	From            string `json:"from_location_id,omitempty"`
 	To              string `json:"to_location_id,omitempty"`
@@ -67,10 +69,13 @@ type balanceResult struct {
 	Version    int64  `json:"version"`
 }
 type movementResult struct {
-	ID       string          `json:"movement_id"`
-	Kind     string          `json:"kind"`
-	Quantity int64           `json:"quantity"`
-	Balances []balanceResult `json:"balances"`
+	IdentifierID string          `json:"identifier_id,omitempty"`
+	PackCount    int64           `json:"pack_count,omitempty"`
+	PackQuantity int64           `json:"pack_quantity,omitempty"`
+	ID           string          `json:"movement_id"`
+	Kind         string          `json:"kind"`
+	Quantity     int64           `json:"quantity"`
+	Balances     []balanceResult `json:"balances"`
 }
 type stockError struct {
 	Status        int
@@ -117,7 +122,7 @@ func bookStock(ctx context.Context, db *sql.DB, user, tokenHash, key, kind strin
 	if input.State == "" {
 		input.State = "available"
 	}
-	if input.Quantity <= 0 || input.Quantity > 1_000_000_000 || len(input.BatchID) > 100 || input.BatchID == "" || len(input.From) > 100 || len(input.To) > 100 || len(input.Note) > 500 ||
+	if len(input.IdentifierID) > 100 || (input.IdentifierID == "" && input.PackCount != 0) || (input.IdentifierID != "" && (input.PackCount < 1 || input.PackCount > 1_000_000_000)) || input.Quantity <= 0 || input.Quantity > 1_000_000_000 || len(input.BatchID) > 100 || input.BatchID == "" || len(input.From) > 100 || len(input.To) > 100 || len(input.Note) > 500 ||
 		(input.State != "available" && input.State != "quarantined" && input.State != "damaged") ||
 		(kind == "receipt" && (input.To == "" || input.From != "" || input.ExpectedVersion != 0)) ||
 		(kind == "transfer" && (input.From == "" || input.To == "" || input.From == input.To || input.ExpectedVersion <= 0)) ||
@@ -142,7 +147,7 @@ func bookStock(ctx context.Context, db *sql.DB, user, tokenHash, key, kind strin
 			}
 		}
 	}
-	if err = rejectPackKey(ctx, tx, user, key); err != nil {
+	if err = rejectOtherKey(ctx, tx, user, key, "idempotency_keys"); err != nil {
 		return nil, err
 	}
 	var existingHash, response string
@@ -164,6 +169,19 @@ func bookStock(ctx context.Context, db *sql.DB, user, tokenHash, key, kind strin
 	}
 	if err != nil {
 		return nil, err
+	}
+	var packQuantity int64
+	if input.IdentifierID != "" {
+		err = tx.QueryRowContext(ctx, `SELECT i.pack_quantity FROM product_identifiers i JOIN batches b ON b.product_id=i.product_id WHERE i.id=? AND i.active=1 AND b.id=?`, input.IdentifierID, input.BatchID).Scan(&packQuantity)
+		if err == sql.ErrNoRows {
+			return nil, conflict("identifier_changed", "Verpackungskennung widerrufen oder Artikel/Charge passt nicht; erneut scannen.")
+		}
+		if err != nil {
+			return nil, err
+		}
+		if input.PackCount > 1_000_000_000/packQuantity || input.PackCount*packQuantity != input.Quantity {
+			return nil, &stockError{400, "pack_quantity_mismatch", "Basismenge stimmt nicht mit der hinterlegten Packungsumrechnung überein."}
+		}
 	}
 	usable := blocked == 0 && expiry.Valid && validDay(expiry.String) && expiry.String >= localDay(now)
 	if kind == "consumption" && !usable {
@@ -210,7 +228,12 @@ func bookStock(ctx context.Context, db *sql.DB, user, tokenHash, key, kind strin
 	if _, err = tx.ExecContext(ctx, `INSERT INTO stock_movements(id,kind,user_id,batch_id,from_location_id,to_location_id,quantity,state,created_at,note) VALUES(?,?,?,?,?,?,?,?,?,?)`, id, kind, user, input.BatchID, nullable(input.From), nullable(input.To), input.Quantity, state, stamp, input.Note); err != nil {
 		return nil, err
 	}
-	result := movementResult{ID: id, Kind: kind, Quantity: input.Quantity, Balances: []balanceResult{}}
+	if input.IdentifierID != "" {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO movement_packaging VALUES(?,?,?,?)`, id, input.IdentifierID, input.PackCount, packQuantity); err != nil {
+			return nil, err
+		}
+	}
+	result := movementResult{ID: id, Kind: kind, Quantity: input.Quantity, IdentifierID: input.IdentifierID, PackCount: input.PackCount, PackQuantity: packQuantity, Balances: []balanceResult{}}
 	for _, line := range []struct {
 		Location, State string
 		Delta           int64
