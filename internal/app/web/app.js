@@ -10,6 +10,7 @@ const stateNames = {available:'Verfügbar',quarantined:'Quarantäne',damaged:'Be
 function signedOut(message) {
  deviceDraft = null; deviceRecords = []; document.querySelector('#document-file').value=''; document.querySelector('#document-list').replaceChildren(); document.querySelector('#document-status').textContent=''; document.querySelector('#document-upload-form').hidden=true; document.querySelector('#device-basis').textContent = ''; document.querySelector('#device-control-form').hidden = true; document.querySelector('#devices-list').replaceChildren(); document.querySelector('#devices-status').textContent = '';
  csrf = ''; user = null; countDraft = null; checkDraft = null; packDraft = null; scannerReset(); list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
+ document.querySelector('#assessment-status').textContent='';document.querySelector('#assessment-reasons').replaceChildren();document.querySelector('#pack-devices').replaceChildren();
  login.hidden = false; inventory.hidden = true; status.textContent = message;
 }
 function can(location, roles) { return user.rights.some(right => right.site_id === location.site_id && roles.includes(right.role)); }
@@ -251,7 +252,7 @@ function packControls() {
  check.disabled = packPending ? packPending.owner !== user?.id || packPending.kind !== 'check' : !checkDraft;
  publish.textContent = packPending?.kind === 'publish' ? 'Sollversion erneut senden' : 'Neue Sollversion speichern';
  check.textContent = packPending?.kind === 'check' ? 'Prüfnachweis erneut senden' : 'Prüfnachweis speichern';
- for (const id of ['pack-title','pack-hours','pack-note','pack-add-item']) document.querySelector(`#${id}`).disabled = Boolean(packPending) || !packDraft;
+ for (const id of ['pack-title','pack-hours','pack-note','pack-add-item','pack-add-device']) document.querySelector(`#${id}`).disabled = Boolean(packPending) || !packDraft;
  document.querySelector('#pack-edit-basis').textContent = packDraft ? `Bearbeitung auf Basis von Sollversion ${packDraft.version}.` : 'Lagerort wählen und Bearbeitung beginnen.';
  document.querySelector('#check-basis').textContent = checkDraft ? 'Prüfung gestartet. Der Datenstand bleibt bis zur Bestätigung fest; Änderungen erfordern eine erneute Prüfung.' : 'Vor dem Prüfen ausdrücklich beginnen.';
 }
@@ -264,13 +265,17 @@ function addPackItem(item = {}) {
 }
 async function loadMaterial() {
  material = null; document.querySelector('#readiness-status').textContent = 'Materialbewertung wird geladen …'; const id = document.querySelector('#pack-choice').value;
- document.querySelector('#pack-rows').replaceChildren();document.querySelector('#readiness-reasons').replaceChildren();document.querySelector('#proof-history').replaceChildren();document.querySelector('#last-proof').textContent = '';
+ document.querySelector('#assessment-status').textContent='';document.querySelector('#assessment-reasons').replaceChildren();document.querySelector('#pack-rows').replaceChildren();document.querySelector('#readiness-reasons').replaceChildren();document.querySelector('#proof-history').replaceChildren();document.querySelector('#last-proof').textContent = '';
  if (!id) {document.querySelector('#readiness-status').textContent = 'Noch keine Sollpackliste vorhanden.';packControls();return false;}
  try {
-  const [response,proofResponse] = await Promise.all([fetch(`/api/v1/packlists/${id}/readiness`,{cache:'no-store'}),fetch(`/api/v1/packlists/${id}/checks`,{cache:'no-store'})]);
+  const [response,proofResponse,assessmentResponse] = await Promise.all([fetch(`/api/v1/packlists/${id}/readiness`,{cache:'no-store'}),fetch(`/api/v1/packlists/${id}/checks`,{cache:'no-store'}),fetch(`/api/v1/packlists/${id}/assessment`,{cache:'no-store'})]);
   if (response.status === 401 || proofResponse.status === 401) {signedOut('Bitte erneut anmelden.');return false;}
   if (!response.ok || !proofResponse.ok) throw new Error('unavailable');
-  const result = await response.json();if (document.querySelector('#pack-choice').value !== id) return false;material = result;
+  if(!assessmentResponse.ok)throw new Error('assessment');const assessment=await assessmentResponse.json();
+ const result = await response.json();if (document.querySelector('#pack-choice').value !== id) return false;material = result;
+ const assessmentNames={blocked:'Sollanforderungen nicht erfüllt',unknown:'Geräte-/Zubehörbewertung ungeklärt',needs_device_check:'Physische Geräte-/Funktionsprüfung fehlt',obsolete:'Sollversion veraltet'};
+ document.querySelector('#assessment-status').textContent=`${assessmentNames[assessment.status] || 'Bewertung ungeklärt'} · Vollständige Einsatzfreigabe nicht bewertet`;
+ for(const reason of assessment.reasons){const li=document.createElement('li');li.textContent=reason;document.querySelector('#assessment-reasons').append(li);}
   document.querySelector('#readiness-status').textContent = `${materialNames[result.status]} · Datenstand ${new Date(result.data_as_of).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})}`;
   for (const reason of result.reasons) {const li = document.createElement('li');li.textContent = reason;document.querySelector('#readiness-reasons').append(li);}
   for (const item of result.items) {const row = document.createElement('tr');for (const text of [item.product,`${item.quantity} ${item.unit}`,item.physical_quantity,item.usable_quantity,item.shortfall,`${item.min_remaining_days} Tage${item.unknown_quantity ? ` · ${item.unknown_quantity} ungeklärt` : ''}`]) {const td = document.createElement('td');td.textContent = text;row.append(td);}document.querySelector('#pack-rows').append(row);}
@@ -299,6 +304,7 @@ document.querySelector('#pack-edit-start').addEventListener('click',async () => 
  const existing = packVersions.find(pack => pack.location_id === location);
  packDraft = {owner:user.id,location,version:existing?.version || 0};
  document.querySelector('#pack-title').value = existing?.title || 'Material-Sollpackliste';document.querySelector('#pack-hours').value = existing?.check_valid_hours || 24;document.querySelector('#pack-note').value = '';
+ await loadDevices();if(!user || packPending)return;document.querySelector('#pack-devices').replaceChildren();for(const device of existing?.devices || [])addPackDevice(device);
  document.querySelector('#pack-items').replaceChildren();for (const item of existing?.items || [{}]) addPackItem(item);packControls();
 });
 document.querySelector('#pack-add-item').addEventListener('click',() => {if (packDraft && document.querySelectorAll('#pack-items fieldset').length < 100) addPackItem();});
@@ -314,7 +320,7 @@ async function sendPackMutation(kind) {
    if (!packDraft || packDraft.owner !== user.id) return;
    const items = [...document.querySelectorAll('#pack-items fieldset')].map(row => ({product_id:row.querySelector('.pack-product').value,quantity:row.querySelector('.pack-quantity').valueAsNumber,min_remaining_days:row.querySelector('.pack-days').valueAsNumber}));
    if (!items.length || new Set(items.map(item => item.product_id)).size !== items.length) {status.textContent = 'Mindestens eine eindeutige Sollposition angeben.';return;}
-   data = {location_id:packDraft.location,expected_version:packDraft.version,title:document.querySelector('#pack-title').value,check_valid_hours:document.querySelector('#pack-hours').valueAsNumber,note:document.querySelector('#pack-note').value,items};path = '/api/v1/packlists';
+   data = {location_id:packDraft.location,expected_version:packDraft.version,title:document.querySelector('#pack-title').value,check_valid_hours:document.querySelector('#pack-hours').valueAsNumber,note:document.querySelector('#pack-note').value,items,devices:[...document.querySelectorAll('#pack-devices > fieldset')].map(row=>({device_id:row.querySelector('.pack-device-id').value,accessories:[...row.querySelectorAll('.pack-accessory')].map(accessory=>({product_id:accessory.querySelector('.accessory-product').value,quantity:accessory.querySelector('.accessory-quantity').valueAsNumber}))}))};path = '/api/v1/packlists';
   } else {
    if (!checkDraft || checkDraft.owner !== user.id || checkDraft.id !== document.querySelector('#pack-choice').value) return;
    if (!['passed','failed'].includes(document.querySelector('#check-result').value)) {status.textContent = 'Prüfergebnis ausdrücklich auswählen.';return;}
@@ -604,3 +610,19 @@ document.querySelector('#document-upload-form').addEventListener('submit',async 
  documentPending=null;document.querySelector('#document-status').textContent=response.ok?'Anhang gespeichert und in Quarantäne.':result.message;if(!response.ok)deviceDraft=null;else document.querySelector('#document-file').value='';lockDeviceForm();if(response.ok)await loadDeviceDocuments(saved.id,saved.owner);
  }catch{if(user?.id===saved.owner)document.querySelector('#document-status').textContent='Upload nicht bestätigt. Identisch erneut senden.';}
 });
+
+function addPackDevice(requirement={}){
+ if(!packDraft)return;
+ const row=document.createElement('fieldset');const choice=document.createElement('select');choice.className='pack-device-id';choice.required=true;
+ options(choice,[{id:'',label:'Gerät ausdrücklich wählen'},...deviceRecords.filter(device=>device.location_id===packDraft.location).map(device=>({id:device.id,label:device.inventory_number+' · '+device.name}))]);if(requirement.device_id)choice.value=requirement.device_id;
+ const label=document.createElement('label');label.textContent='Verpflichtendes Gerät am Sollort';label.append(choice);row.append(label);
+ function addAccessory(item={}){const accessory=document.createElement('div');accessory.className='pack-accessory';const product=document.createElement('select');product.className='accessory-product';product.required=true;options(product,productChoices());if(item.product_id)product.value=item.product_id;
+ const quantity=document.createElement('input');quantity.type='number';quantity.className='accessory-quantity';quantity.min='1';quantity.max='1000000000';quantity.step='1';quantity.required=true;quantity.value=item.quantity || 1;
+ for(const [text,control]of [['Zubehörartikel',product],['Zubehörmenge in Basiseinheiten',quantity]]){const label=document.createElement('label');label.textContent=text;label.append(control);accessory.append(label);}
+ const remove=document.createElement('button');remove.type='button';remove.textContent='Zubehör entfernen';remove.addEventListener('click',()=>accessory.remove());accessory.append(remove);row.insertBefore(accessory,add);
+ }
+ const add=document.createElement('button');add.type='button';add.textContent='Zubehör hinzufügen';add.addEventListener('click',()=>{if(row.querySelectorAll('.pack-accessory').length<25)addAccessory();});row.append(add);
+ const remove=document.createElement('button');remove.type='button';remove.textContent='Geräteanforderung entfernen';remove.addEventListener('click',()=>row.remove());row.append(remove);
+ document.querySelector('#pack-devices').append(row);for(const accessory of requirement.accessories || [])addAccessory(accessory);
+}
+document.querySelector('#pack-add-device').addEventListener('click',()=>{if(packDraft && !packPending && document.querySelectorAll('#pack-devices > fieldset').length<25)addPackDevice();});

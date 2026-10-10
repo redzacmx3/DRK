@@ -17,22 +17,24 @@ type packItem struct {
 	MinDays   int    `json:"min_remaining_days"`
 }
 type publishPackRequest struct {
-	Location        string     `json:"location_id"`
-	ExpectedVersion int        `json:"expected_version"`
-	Title           string     `json:"title"`
-	ValidHours      int        `json:"check_valid_hours"`
-	Note            string     `json:"note"`
-	Items           []packItem `json:"items"`
+	Devices         []packDevice `json:"devices,omitempty"`
+	Location        string       `json:"location_id"`
+	ExpectedVersion int          `json:"expected_version"`
+	Title           string       `json:"title"`
+	ValidHours      int          `json:"check_valid_hours"`
+	Note            string       `json:"note"`
+	Items           []packItem   `json:"items"`
 }
 type packVersion struct {
-	ID         string     `json:"id"`
-	Location   string     `json:"location_id"`
-	Version    int        `json:"version"`
-	Title      string     `json:"title"`
-	ValidHours int        `json:"check_valid_hours"`
-	Created    string     `json:"created_at"`
-	Note       string     `json:"note"`
-	Items      []packItem `json:"items"`
+	Devices    []packDevice `json:"devices,omitempty"`
+	ID         string       `json:"id"`
+	Location   string       `json:"location_id"`
+	Version    int          `json:"version"`
+	Title      string       `json:"title"`
+	ValidHours int          `json:"check_valid_hours"`
+	Created    string       `json:"created_at"`
+	Note       string       `json:"note"`
+	Items      []packItem   `json:"items"`
 }
 type materialItem struct {
 	packItem
@@ -130,7 +132,12 @@ func loadPack(ctx context.Context, tx *sql.Tx, user, id, write string) (packVers
 		}
 		p.Items = append(p.Items, item)
 	}
-	return p, rows.Err()
+	if err = rows.Err(); err != nil {
+		return p, err
+	}
+	rows.Close()
+	p.Devices, err = loadPackDevices(ctx, tx, p.ID)
+	return p, err
 }
 
 // The day and every relevant balance version are part of the physical check basis.
@@ -281,6 +288,9 @@ func publishPack(ctx context.Context, db *sql.DB, user, token, key string, input
 			return nil, &stockError{400, "invalid_request", "Sollpositionen müssen eindeutig sein; Menge und Restlaufzeit prüfen."}
 		}
 	}
+	if err := validatePackDevices(&input); err != nil {
+		return nil, err
+	}
 	canonical, _ := json.Marshal(input)
 	hash := digest("publish_pack:" + string(canonical))
 	tx, err := db.BeginTx(ctx, nil)
@@ -304,7 +314,7 @@ func publishPack(ctx context.Context, db *sql.DB, user, token, key string, input
 	if latest != input.ExpectedVersion {
 		return nil, conflict("version_conflict", "Die Sollpackliste wurde inzwischen geändert; erneut laden.")
 	}
-	p := packVersion{ID: newID(), Location: input.Location, Version: latest + 1, Title: input.Title, ValidHours: input.ValidHours, Created: now.UTC().Format(time.RFC3339Nano), Note: input.Note, Items: input.Items}
+	p := packVersion{ID: newID(), Location: input.Location, Version: latest + 1, Title: input.Title, ValidHours: input.ValidHours, Created: now.UTC().Format(time.RFC3339Nano), Note: input.Note, Items: input.Items, Devices: input.Devices}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO packlist_versions VALUES(?,?,?,?,?,?,?,?)`, p.ID, p.Location, p.Version, p.Title, p.ValidHours, user, p.Created, p.Note); err != nil {
 		return nil, err
 	}
@@ -319,6 +329,9 @@ func publishPack(ctx context.Context, db *sql.DB, user, token, key string, input
 		if _, err = tx.ExecContext(ctx, `INSERT INTO packlist_items VALUES(?,?,?,?)`, p.ID, item.ProductID, item.Quantity, item.MinDays); err != nil {
 			return nil, err
 		}
+	}
+	if err = savePackDevices(ctx, tx, p); err != nil {
+		return nil, err
 	}
 	return savePackEvent(ctx, tx, user, key, hash, "packlist_published", p.ID, "", p, now)
 }
@@ -363,6 +376,7 @@ func recordMaterialCheck(ctx context.Context, db *sql.DB, user, token, key, id s
 	return savePackEvent(ctx, tx, user, key, hash, "material_checked", p.ID, check, result, now)
 }
 func packlistRoutes(mux *http.ServeMux, a *authService) {
+	packAssessmentRoutes(mux, a)
 	mux.HandleFunc("POST /api/v1/packlists", func(w http.ResponseWriter, r *http.Request) {
 		user, ok := writeAuthorized(a, w, r)
 		if !ok {

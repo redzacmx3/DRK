@@ -98,6 +98,7 @@ try {
    if(window.loseDeviceReply){window.loseDeviceReply=false;throw new Error('Lost device response');}
   }
   else if (path.startsWith('/api/v1/packlists?')) data = [window.pack];
+  else if (path === '/api/v1/packlists/pack/assessment') data={status:'blocked',overall_readiness:'not_assessed',reasons:['SYNTH-1: Aktive Sperre: recall'],devices:[]};
   else if (path === '/api/v1/packlists/pack/readiness') data = {scope:'material_only',overall_readiness:'not_assessed',status:'needs_check',data_as_of:new Date().toISOString(),packlist:window.pack,current_version:true,basis_hash:window.materialBasis,reasons:['Physischer Prüfnachweis fehlt.'],items:[{product:'Demo',unit:'Stück',quantity:5,physical_quantity:10,usable_quantity:10,shortfall:0,min_remaining_days:30,unknown_quantity:0}],last_check:null};
   else if (path === '/api/v1/packlists/pack/checks' && !options.method) data = [];
   else if (path === '/api/v1/packlists' || path === '/api/v1/packlists/pack/checks') {
@@ -163,11 +164,14 @@ try {
  await until("document.querySelector('#status').textContent.includes('Packlistenvorgang bestätigt')");
  await evaluate("document.querySelector('#pack-edit-start').click()");
  await until("!document.querySelector('#pack-title').disabled");
+ await evaluate("document.querySelector('#pack-add-device').click();document.querySelector('.pack-device-id').value='device';[...document.querySelector('#pack-devices fieldset').querySelectorAll('button')].find(button=>button.textContent==='Zubehör hinzufügen').click();document.querySelector('.accessory-product').value='product';document.querySelector('.accessory-quantity').value='2'");
  await evaluate("window.pack.version=2;document.querySelector('#pack-refresh').click()");
  await until("document.querySelector('#pack-choice').textContent.includes('Sollversion 2')");
  await evaluate("document.querySelector('#pack-note').value='Sollmenge geändert';document.querySelector('#pack-editor').requestSubmit()");
  await until('window.packPosted.length === 4');
  assert.equal(await evaluate('window.packPosted[3].request.expected_version'),1);
+ assert.deepEqual(await evaluate('window.packPosted[3].request.devices'),[{device_id:'device',accessories:[{product_id:'product',quantity:2}]}]);
+ assert.equal(await evaluate("document.querySelector('#assessment-reasons').textContent.includes('recall')"),true);
  await until("document.querySelector('#status').textContent.includes('Datenstand geändert')");
  assert.equal(await evaluate("document.querySelector('#pack-editor button[type=submit]').disabled"),true);
  await evaluate("document.querySelector('#scan-text').value='4006381333931';document.querySelector('#scan-form').requestSubmit()");
@@ -263,7 +267,7 @@ try {
  await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
  await evaluate("signedOut('Test logout')");
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');

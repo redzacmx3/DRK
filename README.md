@@ -175,7 +175,7 @@ Dieser Check prüft die Oberfläche mit simulierter API: ausdrücklichen Zähl-/
 
 ## Material-Sollpacklisten und physische Prüfung
 
-Materialwarte veröffentlichen pro Lagerort unveränderliche Sollversionen; Helfer und Materialwarte dokumentieren physische Prüfungen, Viewer lesen. Eine neue Version ersetzt die bisherige Sollversion, erhält aber frühere Inhalte und Nachweise. Geräte, verpflichtendes Geräte-Zubehör, genehmigte Artikelalternativen und vollständige Einsatzfreigabe folgen separat; die aktuelle Bewertung ist ausdrücklich `material_only`, `overall_readiness` bleibt `not_assessed`.
+Materialwarte veröffentlichen pro Lagerort unveränderliche Sollversionen; Helfer und Materialwarte dokumentieren physische Prüfungen, Viewer lesen. Eine neue Version ersetzt die bisherige Sollversion, erhält aber frühere Inhalte und Nachweise. Konkrete Geräte und Zubehörmengen können inzwischen als digitale Sollanforderungen erfasst werden. Physische Geräte-/Funktionsprüfungen, genehmigte Artikelalternativen und vollständige Einsatzfreigabe folgen separat; die aktuelle Bewertung ist ausdrücklich `material_only`, `overall_readiness` bleibt `not_assessed`.
 
 In der Oberfläche Lagerort wählen, **Sollversion bearbeiten**, Sollpositionen mit Menge in Basiseinheiten und Mindestrestlaufzeit in Tagen hinzufügen und mit Begründung speichern. Die Basisversion bleibt während der Bearbeitung fest. Je Lagerort gilt genau die höchste veröffentlichte Version. Mengen: 1–1.000.000.000, Restlaufzeit: 0–3650 Tage, 1–100 eindeutige Artikelpositionen, Prüfgültigkeit: ausdrücklich 1–168 Stunden (Oberflächenvorschlag 24). Aktuell wählt die Oberfläche Artikel aus dem Chargenkatalog; Artikel-/Chargenanlage erfolgt weiterhin per CLI.
 
@@ -282,7 +282,7 @@ Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehö
 
 Die Zustände sind `UNKNOWN`, `NOT_APPLICABLE`, `CURRENT`, `DUE_SOON` und `OVERDUE`. Eine Frist gilt bis einschließlich des fachlichen Tages in `Europe/Berlin`; die Vorwarnschwelle ist ein expliziter Parameter. Fehlendes Basisdatum bleibt ungeklärt. Die Funktion beurteilt keine Gerätesperren und erteilt keine Einsatzfreigabe.
 
-Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 10.
+Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 11.
 
 
 ### Registrierte Geräteakten
@@ -333,3 +333,14 @@ Alle Uploads bleiben unveränderlich `quarantined`: ein Scanner, eine Dokumentfr
 Für diesen begrenzten Entwicklungsstand liegen Datei-BLOB, Metadaten, Audit, Outbox und Wiederholantwort atomar in SQLite. Das ersetzt zunächst den im Blueprint konzeptionell getrennten Dateispeicher. Neue Uploads erhalten neue IDs; bestehende Nachweise werden nicht überschrieben. Der bestehende konsistente SQLite-Snapshot umfasst daher auch alle Anhänge. Ein synthetischer Restore-Test prüft Inhalt/Hash, Geräte-/Einweisungsbezug und Datenbankintegrität. Externer Objektspeicher, produktive Volumenplanung, Aufbewahrungs-/Korrekturverfahren, Scanneranbindung und vollständige Betriebs-Restore-Abnahme bleiben offen.
 
 Die Oberfläche hält Datei und Wiederholschlüssel bei einer unbestätigten Antwort im Arbeitsspeicher, sperrt parallel neue Gerätenachweise und wiederholt identisch. Nach erfolgreichem Upload muss der Anhang für die Einweisung ausdrücklich ausgewählt werden. Eine geladene Geräteversion wird nicht stillschweigend aktualisiert. Ein Seitenneustart verwirft ungesicherte Entwürfe.
+
+
+### Geräte und Zubehör in Sollversionen
+
+Schema 11 ergänzt unveränderliche Geräteanforderungen je Sollpackliste. `POST /api/v1/packlists` akzeptiert optional `devices`: bis zu 25 Einträge mit `device_id` und `accessories` (bis zu 25 Artikel pro Gerät, jeweils `product_id`, `quantity`). Geräte müssen am Sollort registriert sein; doppelte Geräte-/Zubehörpositionen werden abgewiesen. Zubehör muss zugleich als Material-Sollposition enthalten sein. Alle gerätebezogenen Mengen desselben Artikels werden addiert und dürfen dessen Material-Sollmenge nicht überschreiten. Ein gemeinsamer Bestand wird damit nicht mehrfach als eigenes Zubehör zugeteilt. Die Oberfläche bietet Geräteauswahl und Zubehörpositionen; Bearbeitungsbasis, Wiederholschutz und Rechte der Sollversion bleiben unverändert.
+
+`GET /api/v1/packlists/{id}/assessment` liefert eine aktuelle, bereichsbezogene digitale Bewertung mit `scope=material_and_devices`, separatem `material`, `devices` und konkreten Gründen. Fehlende Inbetriebnahme, unbekannte/überfällige Kontrollen, aktive Sperren, ungeprüfte Einweisungsanhänge und Zubehör-Sollabweichungen werden sichtbar. Zubehörbewertung verwendet konservativ den nutzbaren Bestand und die Restlaufzeit der zugehörigen Material-Sollposition; physische Befestigung/Zuordnung ist damit nicht bestätigt. Materialabweichungen und aktive technische Sperren verhindern eine positive Gesamtinterpretation.
+
+Der bestehende `/readiness`- und `/checks`-Ablauf bleibt ausdrücklich `material_only`. Eine Defektmeldung oder Geräteprüfung verändert den Material-Prüfhash nicht. Der neue Assessment-Endpunkt beurteilt den aktuellen Gerätestand zusätzlich, auch wenn Material bereits `ready` ist. Leere Geräteanforderungen bestätigen keine Ausnahme, sondern nennen fehlende Geräte-Sollkonfiguration. `overall_readiness` bleibt in jedem Fall `not_assessed`: die physische Anwesenheits-/Zubehör-/Funktionsprüfung und vollständige Einweisungs-/Nutzerbewertung fehlen noch. Eine ausdrücklich geschlossene Sperre allein ersetzt diese Prüfungen nicht.
+
+Bestehende Sollversionen und ihre Material-Prüfhashes bleiben bei der Migration unverändert; ohne Gerätepositionen wird kein neues Feld in ihre kanonische Datenbasis aufgenommen. Neue Geräteanforderungen werden mit der neuen Sollversion atomar samt Audit/Outbox und Wiederholantwort veröffentlicht.
