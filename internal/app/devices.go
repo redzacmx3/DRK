@@ -18,7 +18,20 @@ type deviceInput struct {
 	SerialOrLot     string `json:"serial_or_lot"`
 	Note            string `json:"note"`
 }
+type deviceBlock struct {
+	ID          string `json:"id"`
+	Reason      string `json:"reason"`
+	ControlType string `json:"control_type,omitempty"`
+	Version     int    `json:"version"`
+	Note        string `json:"note"`
+}
 type deviceRecord struct {
+	ActiveBlocks    []deviceBlock           `json:"active_blocks"`
+	EffectiveRules  map[string]DeadlineRule `json:"control_rules,omitempty"`
+	PassedDates     map[string]string       `json:"-"`
+	InspectionDates map[string]string       `json:"-"`
+	PassedVersions  map[string]int          `json:"-"`
+
 	deviceInput
 	Version        int                 `json:"version"`
 	CommissionedOn string              `json:"commissioned_on,omitempty"`
@@ -32,7 +45,7 @@ type deviceRecord struct {
 }
 
 func registeredDevice(input deviceInput, id, actor, created string) deviceRecord {
-	return deviceRecord{deviceInput: input, ID: id, CreatedBy: actor, CreatedAt: created, Lifecycle: "NOT_COMMISSIONED", Readiness: "not_assessed", Reasons: []string{"Inbetriebnahmenachweis fehlt", "Kontrollpflichten noch nicht bewertet"}, Controls: map[string]Deadline{"STK": {State: "UNKNOWN"}, "MTK": {State: "UNKNOWN"}, "electrical": {State: "UNKNOWN"}}}
+	return deviceRecord{ActiveBlocks: []deviceBlock{}, EffectiveRules: map[string]DeadlineRule{}, PassedDates: map[string]string{}, InspectionDates: map[string]string{}, PassedVersions: map[string]int{}, deviceInput: input, ID: id, CreatedBy: actor, CreatedAt: created, Lifecycle: "NOT_COMMISSIONED", Readiness: "not_assessed", Reasons: []string{"Inbetriebnahmenachweis fehlt", "Kontrollpflichten noch nicht bewertet"}, Controls: map[string]Deadline{"STK": {State: "UNKNOWN"}, "MTK": {State: "UNKNOWN"}, "electrical": {State: "UNKNOWN"}}}
 }
 func registerDevice(ctx context.Context, db *sql.DB, user, token, key string, input deviceInput, now time.Time) ([]byte, error) {
 	for _, v := range []string{input.LocationID, input.InventoryNumber, input.Name, input.Manufacturer, input.Model, input.SerialOrLot} {

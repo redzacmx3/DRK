@@ -16,6 +16,13 @@ type deviceControlInput struct {
 	Qualification   string         `json:"qualification"`
 	Assignment      string         `json:"assignment"`
 	Note            string         `json:"note"`
+	ControlType     string         `json:"control_type,omitempty"`
+	Result          string         `json:"result,omitempty"`
+	Examiner        string         `json:"examiner,omitempty"`
+	Method          string         `json:"method,omitempty"`
+	NextDueOn       string         `json:"next_due_on,omitempty"`
+	BlockReason     string         `json:"block_reason,omitempty"`
+	BlockID         string         `json:"block_id,omitempty"`
 	Rules           []DeadlineRule `json:"rules,omitempty"`
 }
 
@@ -34,16 +41,20 @@ func readDevice(ctx context.Context, tx *sql.Tx, user, id string, now time.Time)
 	return record, err
 }
 func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now time.Time) error {
-	rows, err := tx.QueryContext(ctx, `SELECT version,action,payload_json FROM device_control_events WHERE device_id=? ORDER BY version`, record.ID)
+	rows, err := tx.QueryContext(ctx, `SELECT id,version,action,payload_json FROM device_control_events WHERE device_id=? ORDER BY version`, record.ID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
-	var rules []DeadlineRule
+	record.ActiveBlocks = []deviceBlock{}
+	record.EffectiveRules = map[string]DeadlineRule{}
+	record.PassedVersions = map[string]int{}
+	record.InspectionDates = map[string]string{}
+	record.PassedDates = map[string]string{}
 	for rows.Next() {
 		var version int
-		var action, payload string
-		if err = rows.Scan(&version, &action, &payload); err != nil {
+		var eventID, action, payload string
+		if err = rows.Scan(&eventID, &version, &action, &payload); err != nil {
 			return err
 		}
 		var input deviceControlInput
@@ -54,9 +65,34 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 		if action == "commission" {
 			record.CommissionedOn = input.PerformedOn
 			record.Lifecycle = "IN_SERVICE"
-		} else {
-			rules = input.Rules
+		} else if action == "rules" {
+			record.EffectiveRules = map[string]DeadlineRule{}
+			for _, rule := range input.Rules {
+				record.EffectiveRules[rule.ControlType] = rule
+			}
+		} else if action == "inspection" {
+			record.InspectionDates[input.ControlType] = input.PerformedOn
+			if input.Result == "passed" {
+				for _, rule := range input.Rules {
+					record.EffectiveRules[rule.ControlType] = rule
+				}
+				record.PassedVersions[input.ControlType] = version
+				record.PassedDates[input.ControlType] = input.PerformedOn
+			} else {
+				record.ActiveBlocks = append(record.ActiveBlocks, deviceBlock{eventID, "inspection_failed", input.ControlType, version, input.Note})
+			}
+		} else if action == "defect" {
+			record.ActiveBlocks = append(record.ActiveBlocks, deviceBlock{eventID, input.BlockReason, "", version, input.Note})
+		} else if action == "release" {
+			remaining := []deviceBlock{}
+			for _, block := range record.ActiveBlocks {
+				if block.ID != input.BlockID {
+					remaining = append(remaining, block)
+				}
+			}
+			record.ActiveBlocks = remaining
 		}
+
 	}
 	if err = rows.Err(); err != nil {
 		return err
@@ -68,12 +104,15 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 	if record.CommissionedOn == "" {
 		record.Reasons = append(record.Reasons, "Inbetriebnahmenachweis fehlt")
 	}
-	for _, rule := range rules {
+	for _, rule := range record.EffectiveRules {
 		deadline, err := CalculateDeadline(rule, now, 30)
 		if err != nil {
 			return err
 		}
 		record.Controls[rule.ControlType] = deadline
+	}
+	for _, block := range record.ActiveBlocks {
+		record.Reasons = append(record.Reasons, "Aktive Sperre: "+block.Reason)
 	}
 	for _, kind := range []string{"STK", "MTK", "electrical"} {
 		state := record.Controls[kind].State
@@ -88,7 +127,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 }
 func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action string, input deviceControlInput, now time.Time) ([]byte, error) {
 	bad := func(message string) ([]byte, error) { return nil, &stockError{400, "invalid_device_control", message} }
-	if input.ExpectedVersion < 0 || !validReason(input.Evidence) || !validReason(input.Qualification) || !validReason(input.Assignment) || !validReason(input.Note) {
+	if input.ExpectedVersion < 0 || !validReason(input.Evidence) || (action != "defect" && (!validReason(input.Qualification) || !validReason(input.Assignment))) || !validReason(input.Note) {
 		return bad("Nachweis, Qualifikation, betrieblicher Auftrag und Begründung erforderlich.")
 	}
 	canonical, _ := json.Marshal(input)
@@ -102,7 +141,7 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		return nil, err
 	}
 	var allowed bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM devices d JOIN locations l ON l.id=d.location_id JOIN role_assignments a ON a.site_id=l.site_id WHERE d.id=? AND a.user_id=? AND a.role='device_manager')`, id, user).Scan(&allowed); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM devices d JOIN locations l ON l.id=d.location_id JOIN role_assignments a ON a.site_id=l.site_id WHERE d.id=? AND a.user_id=? AND (a.role='device_manager' OR (?='defect' AND a.role='helper')))`, id, user, action).Scan(&allowed); err != nil {
 		return nil, err
 	}
 	if !allowed {
@@ -130,6 +169,12 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		return nil, conflict("device_version_conflict", "Geräteakte wurde geändert; erneut prüfen.")
 	}
 	version := record.Version + 1
+	if action == "commission" || action == "rules" {
+		if input.ControlType != "" || input.Result != "" || input.Examiner != "" || input.Method != "" || input.NextDueOn != "" || input.BlockReason != "" || input.BlockID != "" {
+			return bad("Prüf- und Sperrfelder separat erfassen.")
+		}
+	}
+
 	if action == "commission" {
 		if record.CommissionedOn != "" {
 			return nil, conflict("already_commissioned", "Inbetriebnahme ist bereits dokumentiert.")
@@ -170,6 +215,12 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 			}
 			if rule.Applicability == "required" {
 				rule.BasisDate = record.CommissionedOn
+				if previous, ok := record.EffectiveRules[rule.ControlType]; ok && previous.BasisDate != "" {
+					rule.BasisDate = previous.BasisDate
+				}
+				if record.PassedVersions[rule.ControlType] > 0 {
+					rule.BasisDate = record.PassedDates[rule.ControlType]
+				}
 			}
 			if rule.ControlType == "MTK" && rule.Applicability == "required" && rule.Mode != "year_end" {
 				return bad("MTK verwendet Jahresende; kürzere Fristen separat nachweisen.")
@@ -178,9 +229,14 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 				return bad("Ungültige Kontrollregel: " + err.Error())
 			}
 		}
+	} else if action == "inspection" || action == "defect" || action == "release" {
+		if err = validateDeviceAction(ctx, tx, user, action, &input, record, now); err != nil {
+			return nil, err
+		}
 	} else {
 		return bad("Unbekannter Vorgang.")
 	}
+
 	calculated := map[string]Deadline{}
 	for _, rule := range input.Rules {
 		deadline, err := CalculateDeadline(rule, now, 30)
@@ -257,8 +313,12 @@ func deviceControlRoutes(mux *http.ServeMux, a *authService) {
 		json.NewEncoder(w).Encode(events)
 	})
 
-	for _, action := range []string{"commission", "rules"} {
-		mux.HandleFunc("POST /api/v1/devices/{id}/"+action, func(w http.ResponseWriter, r *http.Request) {
+	for _, action := range []string{"commission", "rules", "inspection", "defect", "release"} {
+		route := map[string]string{"inspection": "inspections", "defect": "defects", "release": "releases"}[action]
+		if route == "" {
+			route = action
+		}
+		mux.HandleFunc("POST /api/v1/devices/{id}/"+route, func(w http.ResponseWriter, r *http.Request) {
 			user, ok := writeAuthorized(a, w, r)
 			if !ok {
 				return

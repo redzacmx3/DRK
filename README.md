@@ -282,7 +282,7 @@ Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehö
 
 Die Zustände sind `UNKNOWN`, `NOT_APPLICABLE`, `CURRENT`, `DUE_SOON` und `OVERDUE`. Eine Frist gilt bis einschließlich des fachlichen Tages in `Europe/Berlin`; die Vorwarnschwelle ist ein expliziter Parameter. Fehlendes Basisdatum bleibt ungeklärt. Die Funktion beurteilt keine Gerätesperren und erteilt keine Einsatzfreigabe.
 
-Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 8.
+Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 9.
 
 
 ### Registrierte Geräteakten
@@ -291,15 +291,32 @@ Geräteverantwortliche (`device_manager`) können über `POST /api/v1/devices` G
 
 `GET /api/v1/devices` liefert bis zu 500 bereichsbezogene Geräte (`X-Has-More` bei weiteren Einträgen); `GET /api/v1/devices/{id}/book` liefert die aktuelle Geräteakte einschließlich berechneter Fristen. Viewer, Helfer, Materialwarte und Geräteverantwortliche lesen innerhalb ihrer Bereiche. Die Oberfläche zeigt eine Geräteübersicht und erfasst Inbetriebnahme-/Kontrollregeln; die erstmalige Geräteanlage erfolgt derzeit über die API. Registrierung, Actor, Snapshot, Outbox und Wiederholantwort werden in einer Transaktion gespeichert. Der Idempotenzschlüsselraum wird mit den anderen Modulen geteilt.
 
-Eine neue Registrierung ist keine Inbetriebnahme: `lifecycle=NOT_COMMISSIONED`, `readiness=not_assessed`, STK/MTK/elektrische Kontrolle jeweils `UNKNOWN`. Einweisungen, wiederkehrende Prüfungen, Sperren/Freigaben, Dokumentanhänge, Korrekturen und die vollständige Medizinproduktebuchführung sind noch offen. Die Rolle allein bestätigt keine Qualifikation. Geräte bleiben aus der bisherigen Material-Sollbewertung ausgeschlossen.
+Eine neue Registrierung ist keine Inbetriebnahme: `lifecycle=NOT_COMMISSIONED`, `readiness=not_assessed`, STK/MTK/elektrische Kontrolle jeweils `UNKNOWN`. Einweisungen, Dokumentanhänge, Korrekturen und die vollständige Medizinproduktebuchführung sind noch offen. Wiederkehrende Prüfungen und einzelne Sperren/Freigaben sind unten beschrieben. Die Rolle allein bestätigt keine Qualifikation. Geräte bleiben aus der bisherigen Material-Sollbewertung ausgeschlossen.
 
 
 ### Inbetriebnahme und versionierte Kontrollregeln
 
 Schema 8 ergänzt `POST /api/v1/devices/{id}/commission` und `POST /api/v1/devices/{id}/rules`. Beide benötigen `expected_version` aus der aktuellen Geräteakte sowie `evidence`, `qualification`, `assignment` und `note` als ausdrücklich eingetragene Referenzen. Die Geräteverantwortlichenrolle allein genügt nicht als Qualifikationsnachweis; eine unabhängige Dokumentprüfung ist noch nicht implementiert. `commission` benötigt außerdem `performed_on` (striktes Tagesdatum, nicht zukünftig); eine zweite Inbetriebnahme wird abgelehnt. Danach lautet der Lebenszyklus `IN_SERVICE`, während die vollständige Einsatzbereitschaft weiterhin `not_assessed` bleibt.
 
-`rules` benötigt genau drei Einträge in `rules` für `STK`, `MTK`, `electrical`. Jeder enthält `applicability` (`required`, `exempt`, `unknown`) und einen eigenen `evidence`-Verweis. Bei erforderlicher Kontrolle: `mode` und `interval_months` beziehungsweise `exact_date`. STK verwendet Monatsende mit höchstens 24 Monaten, MTK Jahresende mit ganzjährigem Intervall. Kürzere Termine sind als `earlier_date` mit `earlier_evidence` zulässig. Ausnahmen/ungeklärte Kontrollpflichten enthalten keine Frist. `basis_date` und `version` werden ausschließlich serverseitig aus Inbetriebnahme und Geräteversion gesetzt; spätere Prüfungen als neue Berechnungsbasis folgen separat.
+`rules` benötigt genau drei Einträge in `rules` für `STK`, `MTK`, `electrical`. Jeder enthält `applicability` (`required`, `exempt`, `unknown`) und einen eigenen `evidence`-Verweis. Bei erforderlicher Kontrolle: `mode` und `interval_months` beziehungsweise `exact_date`. STK verwendet Monatsende mit höchstens 24 Monaten, MTK Jahresende mit ganzjährigem Intervall. Kürzere Termine sind als `earlier_date` mit `earlier_evidence` zulässig. Ausnahmen/ungeklärte Kontrollpflichten enthalten keine Frist. `basis_date` und `version` werden ausschließlich serverseitig aus Inbetriebnahme und Geräteversion gesetzt; bestandene spätere Prüfungen bilden die neue Basis; eine Regelrevision erhält diese Basis.
 
 Der Server speichert Regelstand, Basis und berechnetes Ergebnis unveränderlich im Ereignis. `GET /api/v1/devices/{id}/events` liefert die letzten 500 Kontrollereignisse mit Actor, Zeit, Referenzen und ursprünglichem Berechnungsergebnis (`X-Has-More` bei weiteren Ereignissen). Die aktuelle Geräteakte berechnet zeitabhängige Zustände bei jedem Lesen neu, ohne Nachtjob. Alte Regelstände und Wiederholantworten bleiben erhalten. Änderungen mit veralteter Geräteversion liefern 409; Ereignis, Outbox und Idempotenzantwort entstehen atomar.
 
-Die Oberfläche verlangt vor der Bearbeitung das Laden der Geräteakte und hält diese Basis fest. Unbestätigte Antworten werden mit identischem Inhalt/Schlüssel wiederholt, auch nach erneuter Anmeldung mit demselben Konto. Diese Entwürfe liegen nur im Arbeitsspeicher; kein Offline- oder Wiederanlaufversprechen nach Schließen der Seite. Es gibt weiterhin keine Gerätefreigabe, keine automatische Ausnahme aus Gerätenamen und keine Benachrichtigungszustellung.
+Die Oberfläche verlangt vor der Bearbeitung das Laden der Geräteakte und hält diese Basis fest. Unbestätigte Antworten werden mit identischem Inhalt/Schlüssel wiederholt, auch nach erneuter Anmeldung mit demselben Konto. Diese Entwürfe liegen nur im Arbeitsspeicher; kein Offline- oder Wiederanlaufversprechen nach Schließen der Seite. Eine vollständige Einsatzfreigabe bleibt offen. Einzelne Sperren können inzwischen ausdrücklich geschlossen werden; automatische Ausnahmen aus Gerätenamen und Benachrichtigungszustellung gibt es weiterhin nicht.
+
+
+### Wiederkehrende Prüfungen und unabhängige Sperren
+
+Schema 9 erweitert die unveränderlichen Kontrollereignisse. Alle folgenden Mutationen verwenden dieselben Session-/Origin-/CSRF-/Idempotenz- und Geräteversionsprüfungen. Die Oberfläche unterstützt Prüfungen, Sperrmeldung und das ausdrückliche Schließen einer geladenen Sperre.
+
+| Endpoint | Pflichtangaben zusätzlich zu `expected_version`, `evidence`, `note` |
+| --- | --- |
+| `POST /api/v1/devices/{id}/inspections` | `qualification`, `assignment`, `control_type`, `performed_on`, `result` (`passed`/`failed`), `examiner`, `method` |
+| `POST /api/v1/devices/{id}/defects` | `block_reason` (`defect`/`recall`/`quarantine`) |
+| `POST /api/v1/devices/{id}/releases` | `qualification`, `assignment`, `block_id` einer aktiven Sperre |
+
+Prüfungen und Freigaben benötigen `device_manager` im Gerätebereich. Helfer dürfen ausschließlich `defect` melden; Rückruf/Quarantäne bleiben Geräteverantwortlichen vorbehalten. `method` kann die Methode/Messwerte oder eine konkrete Protokollreferenz dokumentieren; `examiner` benennt Prüfer/Firma. Referenzen werden erfasst, eine unabhängige Prüfung von Qualifikation oder Dokumentinhalt bleibt offen.
+
+Prüfungen benötigen eine ausdrücklich erforderliche Kontrollregel. Ihr Tagesdatum darf weder zukünftig noch älter als die aktuelle Fristbasis oder der jüngste Prüfnachweis dieser Kontrollart sein. Bestandene Prüfungen setzen die neue Basis nur für ihre Kontrollart. Monats-/Jahresfristen werden serverseitig berechnet; bei einer exakten Terminregel ist `next_due_on` ausdrücklich anhand des Nachweises einzutragen. Das ursprüngliche Berechnungsergebnis wird gespeichert, aktuelle Zustände werden beim Lesen neu berechnet. Eine bestehende kürzere Anlassfrist bleibt erhalten, bis sie mit eigener Regelversion neu bewertet wird.
+
+Ein fehlgeschlagenes Prüfergebnis verändert die Fristbasis nicht und erzeugt eine separate `inspection_failed`-Sperre. Defekt/Rückruf/Quarantäne und jeder einzelne Prüfversagensnachweis bleiben als getrennte Einträge in `active_blocks` sichtbar. Eine bestandene Prüfung, eine Regeländerung oder eine Ausnahme schließt keine Sperre. `releases` schließt ausschließlich die benannte Sperre mit eigenen Nachweisen; eine Prüfversagenssperre setzt zusätzlich einen später gespeicherten bestandenen und noch fristgültigen Nachweis derselben Kontrollart voraus. Frühere Nachweise und historische Wiederholantworten bleiben erhalten. Das Schließen aller Sperren erteilt weiterhin keine vollständige Einsatzfreigabe (`readiness=not_assessed`).
