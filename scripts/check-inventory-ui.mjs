@@ -51,7 +51,7 @@ try {
  await call('Page.addScriptToEvaluateOnNewDocument',{source:`
  const realFetch = window.fetch.bind(window);
  window.testBalances = [{batch_id:'batch',location_id:'warehouse',state:'available',quantity:10,usable_quantity:10,version:1,product:'Demo',unit:'Stück',lot:'DEMO',location:'Lager',expires_on:'2030-01-01',blocked:false}];
- window.posted = []; window.devicePosted=[];window.deviceReplies=new Map();window.loseDeviceReply=false;window.deviceVersion=0;window.deviceBlocks=[{id:"recall-block",reason:"recall",note:"Synthetic recall"}];
+ window.posted = []; window.devicePosted=[];window.deviceReplies=new Map();window.loseDeviceReply=false;window.testDocuments=[];window.documentPosted=[];window.documentReplies=new Map();window.loseDocumentReply=false;window.deviceVersion=0;window.deviceBlocks=[{id:"recall-block",reason:"recall",note:"Synthetic recall"}];
  window.pack = {id:'pack',location_id:'warehouse',version:1,title:'Material',check_valid_hours:24,created_at:new Date().toISOString(),note:'Synthetic',items:[{product_id:'product',quantity:5,min_remaining_days:30}]};
  window.testIdentifiers = [];window.identifierPosted = [];window.identifierReplies = new Map();window.loseIdentifierReply = false;window.nonInventoryStockPosts = [];
  window.materialBasis = 'a'.repeat(64);window.packPosted = [];window.packReplies = new Map();window.losePackReply = false;
@@ -82,8 +82,15 @@ try {
   }
   else if (path.startsWith('/api/v1/stock/') && options.method === 'POST' && path !== '/api/v1/stock/inventories') {window.nonInventoryStockPosts.push({path,body:options.body});data = {movement_id:'not-expected'};}
   else if (path === '/api/v1/devices') data = [{id:'device',location_id:'warehouse',version:window.deviceVersion,active_blocks:window.deviceBlocks,inventory_number:'SYNTH-1',name:'<img src=x onerror=alert(1)>',manufacturer:'Demo',model:'Model',serial_or_lot:'SERIAL'}];
+  else if(path==='/api/v1/devices/device/documents' && !options.method)data=window.testDocuments;
+  else if(path==='/api/v1/devices/device/documents' && options.method==='POST'){
+   const key=options.headers['Idempotency-Key'],request=JSON.parse(options.body);window.documentPosted.push({key,body:options.body});
+   if(window.documentReplies.has(key))return new Response(JSON.stringify(window.documentReplies.get(key)),{status:200,headers:{'Content-Type':'application/json'}});
+   data={id:'document',device_id:'device',filename:request.filename,size:atob(request.content).length,sha256:'a'.repeat(64),status:'quarantined'};window.testDocuments.push(data);window.documentReplies.set(key,data);
+   if(window.loseDocumentReply){window.loseDocumentReply=false;throw new Error('Lost upload response');}
+  }
   else if (path === '/api/v1/devices/device/book') data={id:'device',version:window.deviceVersion,active_blocks:window.deviceBlocks};
-  else if (path === '/api/v1/devices/device/commission' || path === '/api/v1/devices/device/rules' || path === '/api/v1/devices/device/inspections' || path === '/api/v1/devices/device/defects' || path === '/api/v1/devices/device/releases') {
+  else if (path === '/api/v1/devices/device/commission' || path === '/api/v1/devices/device/rules' || path === '/api/v1/devices/device/inspections' || path === '/api/v1/devices/device/defects' || path === '/api/v1/devices/device/releases' || path === '/api/v1/devices/device/instructions') {
    const key=options.headers['Idempotency-Key'],request=JSON.parse(options.body);window.devicePosted.push({path,key,body:options.body});
    if(window.deviceReplies.has(key))return new Response(JSON.stringify(window.deviceReplies.get(key)),{status:200,headers:{'Content-Type':'application/json'}});
    if(request.expected_version!==window.deviceVersion)return new Response(JSON.stringify({message:'Geräteakte wurde geändert; erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
@@ -239,12 +246,27 @@ try {
  await until('window.devicePosted.length === 7');
  assert.deepEqual(await evaluate('({path:window.devicePosted[6].path,block:JSON.parse(window.devicePosted[6].body).block_id})'),{path:'/api/v1/devices/device/releases',block:'recall-block'});
  await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
+ await evaluate("document.querySelector('#device-begin').click()");
+ await until("document.querySelector('#device-basis').textContent.includes('Geräteversion 5')");
+ await evaluate("const transfer=new DataTransfer();transfer.items.add(new File(['Synthetic instruction proof\\n'],'proof.txt',{type:'text/plain'}));document.querySelector('#document-file').files=transfer.files;document.querySelector('#document-note').value='Synthetic proof';window.loseDocumentReply=true;document.querySelector('#document-upload-form').requestSubmit()");
+ await until("document.querySelector('#document-status').textContent.includes('Upload nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#document-file').disabled"),true);
+ await evaluate("document.querySelector('#document-upload-form').requestSubmit()");
+ await until('window.documentPosted.length === 2');
+ assert.deepEqual(await evaluate('window.documentPosted[0]'),await evaluate('window.documentPosted[1]'));
+ await until("document.querySelector('#document-status').textContent.includes('in Quarantäne')");
+ await until("document.querySelector('#device-instruction-document').options.length === 2");
+ assert.equal(await evaluate("document.querySelector('#document-list a').getAttribute('href').endsWith('/download?review=true')"),true);
+ await evaluate("document.querySelector('#device-action').value='instruction';document.querySelector('#device-action').dispatchEvent(new Event('change'));document.querySelector('#device-instructor').value='Instructor';document.querySelector('#device-trainee').value='Trainee';document.querySelector('#device-document-version').value='Revision 2';document.querySelector('#device-instruction-document').value='document';document.querySelector('#device-control-form').requestSubmit()");
+ await until('window.devicePosted.length === 8');
+ assert.deepEqual(await evaluate('({path:window.devicePosted[7].path,doc:JSON.parse(window.devicePosted[7].body).document_id,scope:JSON.parse(window.devicePosted[7].body).instruction_scope})'),{path:'/api/v1/devices/device/instructions',doc:'document',scope:'device'});
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
  await evaluate("signedOut('Test logout')");
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');
  await new Promise(resolve => {if (browser.exitCode !== null) resolve();else browser.once('exit',resolve);});
- server.close();await rm(profile,{recursive:true,force:true});
+ server.close();await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});
 }

@@ -8,7 +8,7 @@ let csrf = '', user = null, locations = [], balances = [], catalog = [], movemen
 const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Entnahme',inventory:'Inventur',reversal:'Gegenbuchung'};
 const stateNames = {available:'Verfügbar',quarantined:'Quarantäne',damaged:'Beschädigt'};
 function signedOut(message) {
- deviceDraft = null; deviceRecords = []; document.querySelector('#device-basis').textContent = ''; document.querySelector('#device-control-form').hidden = true; document.querySelector('#devices-list').replaceChildren(); document.querySelector('#devices-status').textContent = '';
+ deviceDraft = null; deviceRecords = []; document.querySelector('#document-file').value=''; document.querySelector('#document-list').replaceChildren(); document.querySelector('#document-status').textContent=''; document.querySelector('#document-upload-form').hidden=true; document.querySelector('#device-basis').textContent = ''; document.querySelector('#device-control-form').hidden = true; document.querySelector('#devices-list').replaceChildren(); document.querySelector('#devices-status').textContent = '';
  csrf = ''; user = null; countDraft = null; checkDraft = null; packDraft = null; scannerReset(); list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
  login.hidden = false; inventory.hidden = true; status.textContent = message;
 }
@@ -224,7 +224,7 @@ document.querySelector('#reload').addEventListener('click',load);
  document.querySelector('#history-older').addEventListener('click',async () => {historyOffset += 50;await loadHistory();bookingChoices();});
  document.querySelector('#history-newer').addEventListener('click',async () => {historyOffset = Math.max(0,historyOffset-50);await loadHistory();bookingChoices();});
 window.addEventListener('pagehide',stopCamera);
-window.addEventListener('beforeunload',event => {if (pending || packPending || identifierPending || devicePending) {event.preventDefault();event.returnValue = '';}});
+window.addEventListener('beforeunload',event => {if (pending || packPending || identifierPending || devicePending || documentPending) {event.preventDefault();event.returnValue = '';}});
 
 
 let packVersions = [], packDraft = null, checkDraft = null, packPending = null, material = null;
@@ -482,7 +482,7 @@ document.addEventListener('visibilitychange',() => {if (document.hidden) stopCam
 restore();
 
 
-let deviceRecords = [], deviceDraft = null, devicePending = null;
+let deviceRecords = [], deviceDraft = null, devicePending = null, documentPending = null;
 const deadlineNames = {UNKNOWN:'ungeklärt',NOT_APPLICABLE:'nachgewiesene Ausnahme',CURRENT:'aktuell',DUE_SOON:'bald fällig',OVERDUE:'überfällig'};
 async function loadDevices() {
  const owner = user?.id; if (!owner) return;
@@ -496,12 +496,14 @@ async function loadDevices() {
  for (const device of devices) {
  const item = document.createElement('li');
  const controls = ['STK','MTK','electrical'].map(kind => {const d=device.controls?.[kind];return `${kind}: ${deadlineNames[d?.state] || 'ungeklärt'}${d?.due_on ? ' bis '+d.due_on : ''}`;}).join(' · ');
- item.textContent = `${device.inventory_number} · ${device.name} · ${device.manufacturer} / ${device.model} · Serien-/Losnummer ${device.serial_or_lot} · ${device.commissioned_on ? 'Inbetriebnahme '+device.commissioned_on : 'Noch nicht in Betrieb genommen'} · ${controls} · Aktive Sperren: ${(device.active_blocks || []).map(block=>block.reason).join(", ") || "keine erfasste"} · Vollständige Einsatzfreigabe ungeklärt`;
+ item.textContent = `${device.inventory_number} · ${device.name} · ${device.manufacturer} / ${device.model} · Serien-/Losnummer ${device.serial_or_lot} · ${device.commissioned_on ? 'Inbetriebnahme '+device.commissioned_on : 'Noch nicht in Betrieb genommen'} · ${controls} · Einweisungsnachweise: ${(device.instructions || []).length} · Aktive Sperren: ${(device.active_blocks || []).map(block=>block.reason).join(", ") || "keine erfasste"} · Vollständige Einsatzfreigabe ungeklärt`;
+ for(const instruction of device.instructions || []){const proof=document.createElement('p');proof.textContent=`Einweisung ${instruction.performed_on}: ${instruction.instructor} → ${instruction.trainee} · ${instruction.scope==='model'?'Bauart':'Gerät'} · Unterlage ${instruction.document_version} · Anhang in Quarantäne`;item.append(proof);}
  entries.append(item);
  }
- if (!devicePending) options(document.querySelector('#device-choice'),devices.filter(device => locations.some(location => location.id === device.location_id && can(location,['device_manager','helper']))).map(device => ({id:device.id,label:device.inventory_number+' · '+device.name})));
- if(!devicePending) deviceAllowedActions();
+ if (!devicePending && !documentPending) options(document.querySelector('#device-choice'),devices.filter(device => locations.some(location => location.id === device.location_id && can(location,['device_manager','helper']))).map(device => ({id:device.id,label:device.inventory_number+' · '+device.name})));
+ if(!devicePending && !documentPending) deviceAllowedActions();
  document.querySelector('#device-control-form').hidden = !devicePending && !document.querySelector('#device-choice').options.length;
+ if(documentPending)document.querySelector('#document-upload-form').hidden=false;
  message.textContent = devices.length ? `${devices.length} Geräte angezeigt.${response.headers.get('X-Has-More') === 'true' ? ' Weitere Geräte vorhanden; Übersicht begrenzt.' : ''}` : 'Keine Geräte im freigegebenen Bereich registriert.';
  } catch (error) { if (user?.id === owner) message.textContent = error.message; }
 }
@@ -521,23 +523,27 @@ for (const kind of ['STK','MTK','electrical']) {
 }
 function lockDeviceForm() {
  const form=document.querySelector('#device-control-form');
- for(const control of form.elements)control.disabled=Boolean(devicePending);
- const submit=form.querySelector('button[type=submit]');submit.disabled=devicePending ? devicePending.owner!==user?.id : !deviceDraft;
+ for(const control of form.elements)control.disabled=Boolean(devicePending || documentPending);
+ const submit=form.querySelector('button[type=submit]');submit.disabled=documentPending ? true : devicePending ? devicePending.owner!==user?.id : !deviceDraft;
+ lockDocumentForm();
  submit.textContent=devicePending?'Nachweis identisch erneut senden':'Nachweis speichern';
 }
 function deviceAllowedActions(){
  const record=deviceRecords.find(record=>record.id===document.querySelector('#device-choice').value);
  const manager=record && locations.some(location=>location.id===record.location_id && can(location,['device_manager']));
- options(document.querySelector('#device-action'),manager?[{id:'commission',label:'Inbetriebnahme dokumentieren'},{id:'rules',label:'Kontrollpflichten versionieren'},{id:'inspection',label:'Prüfung dokumentieren'},{id:'defect',label:'Sperre melden'},{id:'release',label:'Eine Sperre ausdrücklich freigeben'}]:[{id:'defect',label:'Defekt melden'}]);
+ options(document.querySelector('#device-action'),manager?[{id:'commission',label:'Inbetriebnahme dokumentieren'},{id:'rules',label:'Kontrollpflichten versionieren'},{id:'inspection',label:'Prüfung dokumentieren'},{id:'defect',label:'Sperre melden'},{id:'release',label:'Eine Sperre ausdrücklich freigeben'},{id:'instruction',label:'Einweisung dokumentieren'}]:[{id:'defect',label:'Defekt melden'}]);
  options(document.querySelector('#device-block-reason'),manager?[{id:'defect',label:'Defekt'},{id:'recall',label:'Rückruf'},{id:'quarantine',label:'Quarantäne'}]:[{id:'defect',label:'Defekt'}]);
+ document.querySelector('#document-upload-form').hidden=!manager && !documentPending;
  deviceActionFields();
 }
 function deviceActionFields(){
  const action=document.querySelector('#device-action').value;
  document.querySelector('#device-rule-fields').hidden=action!=='rules';
- document.querySelector('#device-date-field').hidden=!['commission','inspection'].includes(action);
- document.querySelector('#device-date').required=['commission','inspection'].includes(action);
+ document.querySelector('#device-date-field').hidden=!['commission','inspection','instruction'].includes(action);
+ document.querySelector('#device-date').required=['commission','inspection','instruction'].includes(action);
  document.querySelector('#device-inspection-fields').hidden=action!=='inspection';
+ document.querySelector('#device-instruction-fields').hidden=action!=='instruction';
+ for(const id of ['device-instructor','device-trainee','device-document-version','device-instruction-document'])document.querySelector('#'+id).required=action==='instruction';
  for(const id of ['device-inspection-result','device-examiner','device-method'])document.querySelector('#'+id).required=action==='inspection';
  document.querySelector('#device-block-reason-field').hidden=action!=='defect';document.querySelector('#device-release-field').hidden=action!=='release';document.querySelector('#device-release-block').required=action==='release';
  document.querySelector('#device-qualification').required=action!=='defect';document.querySelector('#device-assignment').required=action!=='defect';
@@ -545,18 +551,19 @@ function deviceActionFields(){
 document.querySelector('#device-action').addEventListener('change',deviceActionFields);
 document.querySelector('#device-choice').addEventListener('change',()=>{deviceDraft=null;deviceAllowedActions();lockDeviceForm();});
 document.querySelector('#device-begin').addEventListener('click',async()=>{
- if(!user || devicePending)return;const owner=user.id,id=document.querySelector('#device-choice').value;deviceDraft=null;lockDeviceForm();
- try{const response=await fetch(`/api/v1/devices/${encodeURIComponent(id)}/book`);if(!response.ok)throw new Error('Geräteakte nicht verfügbar.');const record=await response.json();if(user?.id!==owner || document.querySelector('#device-choice').value!==id)return;deviceDraft={id,version:record.version};options(document.querySelector('#device-release-block'),(record.active_blocks || []).map(block=>({id:block.id,label:block.reason+' · '+block.note})));document.querySelector('#device-basis').textContent=`Geladene Geräteversion ${record.version}. Änderungen erfordern einen neuen Abgleich.`;lockDeviceForm();}catch(error){if(user?.id===owner)document.querySelector('#device-basis').textContent=error.message;}
+ if(!user || devicePending || documentPending)return;const owner=user.id,id=document.querySelector('#device-choice').value;deviceDraft=null;lockDeviceForm();
+ try{const response=await fetch(`/api/v1/devices/${encodeURIComponent(id)}/book`);if(!response.ok)throw new Error('Geräteakte nicht verfügbar.');const record=await response.json();if(user?.id!==owner || document.querySelector('#device-choice').value!==id)return;deviceDraft={id,version:record.version};options(document.querySelector('#device-release-block'),(record.active_blocks || []).map(block=>({id:block.id,label:block.reason+' · '+block.note})));document.querySelector('#device-basis').textContent=`Geladene Geräteversion ${record.version}. Änderungen erfordern einen neuen Abgleich.`;lockDeviceForm();await loadDeviceDocuments(id,owner);}catch(error){if(user?.id===owner)document.querySelector('#device-basis').textContent=error.message;}
 });
 document.querySelector('#device-control-form').addEventListener('submit',async event=>{
- event.preventDefault();if(!user || devicePending && devicePending.owner!==user.id || !devicePending && !deviceDraft)return;
+ event.preventDefault();if(documentPending || !user || devicePending && devicePending.owner!==user.id || !devicePending && !deviceDraft)return;
  if(!devicePending){const action=document.querySelector('#device-action').value;const body={expected_version:deviceDraft.version,evidence:document.querySelector('#device-evidence').value,qualification:document.querySelector('#device-qualification').value,assignment:document.querySelector('#device-assignment').value,note:document.querySelector('#device-note').value};
  if(action==='commission')body.performed_on=document.querySelector('#device-date').value;
  else if(action==='rules') body.rules=['STK','MTK','electrical'].map(kind=>({control_type:kind,applicability:document.querySelector(`#device-${kind}-applicability`).value,mode:document.querySelector(`#device-${kind}-mode`).value,interval_months:Number(document.querySelector(`#device-${kind}-interval_months`).value),exact_date:document.querySelector(`#device-${kind}-exact_date`).value,earlier_date:document.querySelector(`#device-${kind}-earlier_date`).value,earlier_evidence:document.querySelector(`#device-${kind}-earlier_evidence`).value,evidence:document.querySelector(`#device-${kind}-evidence`).value}));
  if(action==='inspection')Object.assign(body,{performed_on:document.querySelector('#device-date').value,control_type:document.querySelector('#device-inspection-kind').value,result:document.querySelector('#device-inspection-result').value,examiner:document.querySelector('#device-examiner').value,method:document.querySelector('#device-method').value,next_due_on:document.querySelector('#device-next-due').value});
  if(action==='defect')body.block_reason=document.querySelector('#device-block-reason').value;
+ if(action==='instruction')Object.assign(body,{performed_on:document.querySelector('#device-date').value,instructor:document.querySelector('#device-instructor').value,trainee:document.querySelector('#device-trainee').value,instruction_scope:document.querySelector('#device-instruction-scope').value,transfer_evidence:document.querySelector('#device-transfer-evidence').value,document_version:document.querySelector('#device-document-version').value,document_id:document.querySelector('#device-instruction-document').value});
  if(action==='release')body.block_id=document.querySelector('#device-release-block').value;
- const route={inspection:'inspections',defect:'defects',release:'releases'}[action] || action;
+ const route={inspection:'inspections',defect:'defects',release:'releases',instruction:'instructions'}[action] || action;
  devicePending={owner:user.id,path:`/api/v1/devices/${encodeURIComponent(deviceDraft.id)}/${route}`,key:crypto.randomUUID(),body:JSON.stringify(body)};
  }
  lockDeviceForm();const saved=devicePending;
@@ -567,3 +574,33 @@ document.querySelector('#device-control-form').addEventListener('submit',async e
  }catch{if(user?.id===saved.owner)document.querySelector('#device-basis').textContent='Nachweis nicht bestätigt. Mit demselben Schlüssel erneut senden.';}
 });
 deviceActionFields();
+
+function lockDocumentForm(){
+ const form=document.querySelector('#document-upload-form');for(const control of form.elements)control.disabled=Boolean(documentPending || devicePending);
+ const button=form.querySelector('button[type=submit]');button.disabled=documentPending ? documentPending.owner!==user?.id : !deviceDraft || Boolean(devicePending);
+ button.textContent=documentPending?'Anhang identisch erneut senden':'Anhang speichern';
+}
+async function loadDeviceDocuments(id,owner){
+ const response=await fetch(`/api/v1/devices/${encodeURIComponent(id)}/documents`);if(!response.ok)throw new Error('Anhänge nicht verfügbar.');const documents=await response.json();if(user?.id!==owner || document.querySelector('#device-choice').value!==id)return;
+ const list=document.querySelector('#document-list');list.replaceChildren();
+ const manager=locations.some(location=>deviceRecords.some(record=>record.id===id && record.location_id===location.id) && can(location,['device_manager']));
+ for(const document of documents){const item=window.document.createElement('li');item.textContent=`${document.filename} · ${document.size} Bytes · Quarantäne · SHA-256 ${document.sha256}`;
+ if(manager){const link=window.document.createElement('a');link.textContent=' Ungeprüften Anhang zur Prüfung herunterladen';link.href=`/api/v1/devices/${encodeURIComponent(id)}/documents/${encodeURIComponent(document.id)}/download?review=true`;item.append(link);}list.append(item);}
+ if(!devicePending)options(document.querySelector('#device-instruction-document'),[{id:'',label:'Anhang ausdrücklich auswählen'},...documents.map(document=>({id:document.id,label:document.filename+' · Quarantäne'}))]);
+}
+document.querySelector('#document-upload-form').addEventListener('submit',async event=>{
+ event.preventDefault();if(!user || devicePending || documentPending && documentPending.owner!==user.id || !documentPending && !deviceDraft)return;
+ if(!documentPending){const file=document.querySelector('#document-file').files[0];if(!file || file.size<1 || file.size>4194304){document.querySelector('#document-status').textContent='Datei muss zwischen 1 Byte und 4 MiB groß sein.';return;}
+ const owner=user.id,draft={...deviceDraft};let bytes;try{bytes=new Uint8Array(await file.arrayBuffer());}catch{document.querySelector('#document-status').textContent='Datei konnte nicht gelesen werden.';return;}
+ if(user?.id!==owner || deviceDraft?.id!==draft.id || deviceDraft?.version!==draft.version || documentPending || devicePending)return;
+ let raw='';for(let index=0;index<bytes.length;index+=32768)raw+=String.fromCharCode(...bytes.subarray(index,index+32768));
+ const extension=file.name.split('.').pop().toLowerCase();const type={pdf:'application/pdf',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',txt:'text/plain'}[extension];
+ documentPending={owner,id:draft.id,key:crypto.randomUUID(),body:JSON.stringify({expected_version:draft.version,filename:file.name,media_type:type || 'unsupported',content:btoa(raw),note:document.querySelector('#document-note').value})};
+ }
+ lockDeviceForm();const saved=documentPending;
+ try{const response=await fetch(`/api/v1/devices/${encodeURIComponent(saved.id)}/documents`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':saved.key},body:saved.body});const result=await response.json();if(user?.id!==saved.owner)return;
+ if(response.status===401){signedOut('Bitte erneut anmelden; Anhang identisch wiederholen.');return;}
+ if(response.status>=500){document.querySelector('#document-status').textContent='Upload nicht bestätigt. Identisch erneut senden.';return;}
+ documentPending=null;document.querySelector('#document-status').textContent=response.ok?'Anhang gespeichert und in Quarantäne.':result.message;if(!response.ok)deviceDraft=null;else document.querySelector('#document-file').value='';lockDeviceForm();if(response.ok)await loadDeviceDocuments(saved.id,saved.owner);
+ }catch{if(user?.id===saved.owner)document.querySelector('#document-status').textContent='Upload nicht bestätigt. Identisch erneut senden.';}
+});

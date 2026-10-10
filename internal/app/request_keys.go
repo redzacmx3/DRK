@@ -8,7 +8,7 @@ import (
 // All module mutations share a user/key namespace. The IMMEDIATE transaction
 // serializes cross-module claims; legacy schemas may not have every table yet.
 func rejectOtherKey(ctx context.Context, tx *sql.Tx, user, key, ownTable string) error {
-	for _, table := range []string{"idempotency_keys", "packlist_requests", "catalog_requests", "device_requests", "device_control_requests"} {
+	for _, table := range []string{"idempotency_keys", "packlist_requests", "catalog_requests", "device_requests", "device_control_requests", "document_requests"} {
 		if table == ownTable {
 			continue
 		}

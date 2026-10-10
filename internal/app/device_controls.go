@@ -10,20 +10,26 @@ import (
 )
 
 type deviceControlInput struct {
-	ExpectedVersion int            `json:"expected_version"`
-	PerformedOn     string         `json:"performed_on,omitempty"`
-	Evidence        string         `json:"evidence"`
-	Qualification   string         `json:"qualification"`
-	Assignment      string         `json:"assignment"`
-	Note            string         `json:"note"`
-	ControlType     string         `json:"control_type,omitempty"`
-	Result          string         `json:"result,omitempty"`
-	Examiner        string         `json:"examiner,omitempty"`
-	Method          string         `json:"method,omitempty"`
-	NextDueOn       string         `json:"next_due_on,omitempty"`
-	BlockReason     string         `json:"block_reason,omitempty"`
-	BlockID         string         `json:"block_id,omitempty"`
-	Rules           []DeadlineRule `json:"rules,omitempty"`
+	Instructor       string         `json:"instructor,omitempty"`
+	Trainee          string         `json:"trainee,omitempty"`
+	InstructionScope string         `json:"instruction_scope,omitempty"`
+	TransferEvidence string         `json:"transfer_evidence,omitempty"`
+	DocumentVersion  string         `json:"document_version,omitempty"`
+	DocumentID       string         `json:"document_id,omitempty"`
+	ExpectedVersion  int            `json:"expected_version"`
+	PerformedOn      string         `json:"performed_on,omitempty"`
+	Evidence         string         `json:"evidence"`
+	Qualification    string         `json:"qualification"`
+	Assignment       string         `json:"assignment"`
+	Note             string         `json:"note"`
+	ControlType      string         `json:"control_type,omitempty"`
+	Result           string         `json:"result,omitempty"`
+	Examiner         string         `json:"examiner,omitempty"`
+	Method           string         `json:"method,omitempty"`
+	NextDueOn        string         `json:"next_due_on,omitempty"`
+	BlockReason      string         `json:"block_reason,omitempty"`
+	BlockID          string         `json:"block_id,omitempty"`
+	Rules            []DeadlineRule `json:"rules,omitempty"`
 }
 
 func readDevice(ctx context.Context, tx *sql.Tx, user, id string, now time.Time) (deviceRecord, error) {
@@ -46,6 +52,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 		return err
 	}
 	defer rows.Close()
+	record.Instructions = []instructionProof{}
 	record.ActiveBlocks = []deviceBlock{}
 	record.EffectiveRules = map[string]DeadlineRule{}
 	record.PassedVersions = map[string]int{}
@@ -83,6 +90,14 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 			}
 		} else if action == "defect" {
 			record.ActiveBlocks = append(record.ActiveBlocks, deviceBlock{eventID, input.BlockReason, "", version, input.Note})
+		} else if action == "instruction" {
+			var proof struct {
+				Document documentRecord `json:"document"`
+			}
+			if err = json.Unmarshal([]byte(payload), &proof); err != nil {
+				return err
+			}
+			record.Instructions = append(record.Instructions, instructionProof{version, input.Instructor, input.Trainee, input.PerformedOn, input.InstructionScope, input.DocumentID, input.DocumentVersion, proof.Document.SHA256, proof.Document.Status})
 		} else if action == "release" {
 			remaining := []deviceBlock{}
 			for _, block := range record.ActiveBlocks {
@@ -110,6 +125,9 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 			return err
 		}
 		record.Controls[rule.ControlType] = deadline
+	}
+	if len(record.Instructions) > 0 {
+		record.Reasons = append(record.Reasons, "Einweisungsanhänge noch in Quarantäne")
 	}
 	for _, block := range record.ActiveBlocks {
 		record.Reasons = append(record.Reasons, "Aktive Sperre: "+block.Reason)
@@ -169,6 +187,10 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		return nil, conflict("device_version_conflict", "Geräteakte wurde geändert; erneut prüfen.")
 	}
 	version := record.Version + 1
+	if action != "instruction" && (input.Instructor != "" || input.Trainee != "" || input.InstructionScope != "" || input.TransferEvidence != "" || input.DocumentVersion != "" || input.DocumentID != "") {
+		return bad("Einweisungsangaben separat erfassen.")
+	}
+
 	if action == "commission" || action == "rules" {
 		if input.ControlType != "" || input.Result != "" || input.Examiner != "" || input.Method != "" || input.NextDueOn != "" || input.BlockReason != "" || input.BlockID != "" {
 			return bad("Prüf- und Sperrfelder separat erfassen.")
@@ -229,7 +251,7 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 				return bad("Ungültige Kontrollregel: " + err.Error())
 			}
 		}
-	} else if action == "inspection" || action == "defect" || action == "release" {
+	} else if action == "inspection" || action == "defect" || action == "release" || action == "instruction" {
 		if err = validateDeviceAction(ctx, tx, user, action, &input, record, now); err != nil {
 			return nil, err
 		}
@@ -245,10 +267,18 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		}
 		calculated[rule.ControlType] = deadline
 	}
+	var document *documentRecord
+	if action == "instruction" {
+		document = &documentRecord{}
+		if err = tx.QueryRowContext(ctx, `SELECT id,device_id,filename,media_type,size,sha256,created_by,created_at,note,status FROM device_documents WHERE id=? AND device_id=?`, input.DocumentID, id).Scan(&document.ID, &document.DeviceID, &document.Filename, &document.MediaType, &document.Size, &document.SHA256, &document.CreatedBy, &document.CreatedAt, &document.Note, &document.Status); err != nil {
+			return nil, err
+		}
+	}
 	payload, _ := json.Marshal(struct {
 		deviceControlInput
 		Calculated map[string]Deadline `json:"calculated"`
-	}{input, calculated})
+		Document   *documentRecord     `json:"document,omitempty"`
+	}{input, calculated, document})
 	event := newID()
 	if _, err = tx.ExecContext(ctx, `INSERT INTO device_control_events VALUES(?,?,?,?,?,?,?)`, event, id, version, action, user, now.UTC().Format(time.RFC3339Nano), string(payload)); err != nil {
 		return nil, err
@@ -269,6 +299,7 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 	return encoded, nil
 }
 func deviceControlRoutes(mux *http.ServeMux, a *authService) {
+	documentRoutes(mux, a)
 	mux.HandleFunc("GET /api/v1/devices/{id}/events", func(w http.ResponseWriter, r *http.Request) {
 		user, err := a.session(r)
 		if err != nil {
@@ -313,8 +344,8 @@ func deviceControlRoutes(mux *http.ServeMux, a *authService) {
 		json.NewEncoder(w).Encode(events)
 	})
 
-	for _, action := range []string{"commission", "rules", "inspection", "defect", "release"} {
-		route := map[string]string{"inspection": "inspections", "defect": "defects", "release": "releases"}[action]
+	for _, action := range []string{"commission", "rules", "inspection", "defect", "release", "instruction"} {
+		route := map[string]string{"inspection": "inspections", "defect": "defects", "release": "releases", "instruction": "instructions"}[action]
 		if route == "" {
 			route = action
 		}

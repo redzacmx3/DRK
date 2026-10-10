@@ -25,7 +25,20 @@ type deviceBlock struct {
 	Version     int    `json:"version"`
 	Note        string `json:"note"`
 }
+type instructionProof struct {
+	Version         int    `json:"version"`
+	Instructor      string `json:"instructor"`
+	Trainee         string `json:"trainee"`
+	PerformedOn     string `json:"performed_on"`
+	Scope           string `json:"scope"`
+	DocumentID      string `json:"document_id"`
+	DocumentVersion string `json:"document_version"`
+	DocumentSHA256  string `json:"document_sha256"`
+	DocumentStatus  string `json:"document_status"`
+}
 type deviceRecord struct {
+	Instructions []instructionProof `json:"instructions"`
+
 	ActiveBlocks    []deviceBlock           `json:"active_blocks"`
 	EffectiveRules  map[string]DeadlineRule `json:"control_rules,omitempty"`
 	PassedDates     map[string]string       `json:"-"`
@@ -45,7 +58,7 @@ type deviceRecord struct {
 }
 
 func registeredDevice(input deviceInput, id, actor, created string) deviceRecord {
-	return deviceRecord{ActiveBlocks: []deviceBlock{}, EffectiveRules: map[string]DeadlineRule{}, PassedDates: map[string]string{}, InspectionDates: map[string]string{}, PassedVersions: map[string]int{}, deviceInput: input, ID: id, CreatedBy: actor, CreatedAt: created, Lifecycle: "NOT_COMMISSIONED", Readiness: "not_assessed", Reasons: []string{"Inbetriebnahmenachweis fehlt", "Kontrollpflichten noch nicht bewertet"}, Controls: map[string]Deadline{"STK": {State: "UNKNOWN"}, "MTK": {State: "UNKNOWN"}, "electrical": {State: "UNKNOWN"}}}
+	return deviceRecord{Instructions: []instructionProof{}, ActiveBlocks: []deviceBlock{}, EffectiveRules: map[string]DeadlineRule{}, PassedDates: map[string]string{}, InspectionDates: map[string]string{}, PassedVersions: map[string]int{}, deviceInput: input, ID: id, CreatedBy: actor, CreatedAt: created, Lifecycle: "NOT_COMMISSIONED", Readiness: "not_assessed", Reasons: []string{"Inbetriebnahmenachweis fehlt", "Kontrollpflichten noch nicht bewertet"}, Controls: map[string]Deadline{"STK": {State: "UNKNOWN"}, "MTK": {State: "UNKNOWN"}, "electrical": {State: "UNKNOWN"}}}
 }
 func registerDevice(ctx context.Context, db *sql.DB, user, token, key string, input deviceInput, now time.Time) ([]byte, error) {
 	for _, v := range []string{input.LocationID, input.InventoryNumber, input.Name, input.Manufacturer, input.Model, input.SerialOrLot} {

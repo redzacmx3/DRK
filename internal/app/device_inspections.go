@@ -13,6 +13,38 @@ func validateDeviceAction(ctx context.Context, tx *sql.Tx, user, action string, 
 		return bad("Prüfung verwendet ausschließlich die gespeicherte Kontrollregel.")
 	}
 	switch action {
+	case "instruction":
+		if input.ControlType != "" || input.Result != "" || input.Examiner != "" || input.Method != "" || input.NextDueOn != "" || input.BlockReason != "" || input.BlockID != "" {
+			return bad("Einweisung enthält keine Prüf-/Sperrfelder.")
+		}
+		date, err := civilDate(input.PerformedOn)
+		if err != nil {
+			return bad("Gültiges Einweisungsdatum erforderlich.")
+		}
+		berlin, err := time.LoadLocation("Europe/Berlin")
+		if err != nil {
+			return err
+		}
+		if date.Format("2006-01-02") > now.In(berlin).Format("2006-01-02") {
+			return bad("Einweisung darf nicht zukünftig sein.")
+		}
+		if !validReason(input.Instructor) || !validReason(input.Trainee) || !validReason(input.DocumentVersion) {
+			return bad("Einweisende/eingewiesene Person und Dokumentversion erforderlich.")
+		}
+		if input.InstructionScope != "device" && input.InstructionScope != "model" {
+			return bad("Einweisung für dieses Gerät oder diese Bauart ausdrücklich angeben.")
+		}
+		if (input.InstructionScope == "model" && !validReason(input.TransferEvidence)) || (input.InstructionScope == "device" && input.TransferEvidence != "") {
+			return bad("Bauartübertragbarkeit gesondert nachweisen.")
+		}
+		var exists bool
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM device_documents WHERE id=? AND device_id=?)`, input.DocumentID, record.ID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return bad("Dokument muss an genau dieser Geräteakte hinterlegt sein.")
+		}
+
 	case "inspection":
 		if input.BlockReason != "" || input.BlockID != "" {
 			return bad("Sperrfelder gehören nicht zum Prüfergebnis.")
