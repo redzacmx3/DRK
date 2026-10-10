@@ -171,7 +171,43 @@ node scripts/check-inventory-ui.mjs
 # Abweichendes Chromium über CHROMIUM_BIN angeben.
 ```
 
-Dieser Check prüft die Oberfläche mit simulierter API: ausdrücklichen Zählstart, eingefrorene Basis trotz Neuladen, erneute Zählung nach Konflikt und Nullzählung. Die Go-Tests prüfen die echte SQLite-Transaktion, Rechte, Migration und konkurrierende Korrekturen. Der Browsercheck ersetzt keinen HTTPS-/Compose-Funktionstest.
+Dieser Check prüft die Oberfläche mit simulierter API: ausdrücklichen Zähl-/Prüfstart, eingefrorene Inventur-/Packlisten-/Prüfbasis trotz Neuladen, erneuten Start nach Konflikt, Nullzählung und identische Wiederholung nach verlorener Prüfantwort. Die Go-Tests prüfen die echte SQLite-Transaktion, Rechte, Migration und konkurrierende Korrekturen. Der Browsercheck ersetzt keinen HTTPS-/Compose-Funktionstest.
+
+## Material-Sollpacklisten und physische Prüfung
+
+Materialwarte veröffentlichen pro Lagerort unveränderliche Sollversionen; Helfer und Materialwarte dokumentieren physische Prüfungen, Viewer lesen. Eine neue Version ersetzt die bisherige Sollversion, erhält aber frühere Inhalte und Nachweise. Geräte, verpflichtendes Geräte-Zubehör, genehmigte Artikelalternativen und vollständige Einsatzfreigabe folgen separat; die aktuelle Bewertung ist ausdrücklich `material_only`, `overall_readiness` bleibt `not_assessed`.
+
+In der Oberfläche Lagerort wählen, **Sollversion bearbeiten**, Sollpositionen mit Menge in Basiseinheiten und Mindestrestlaufzeit in Tagen hinzufügen und mit Begründung speichern. Die Basisversion bleibt während der Bearbeitung fest. Je Lagerort gilt genau die höchste veröffentlichte Version. Mengen: 1–1.000.000.000, Restlaufzeit: 0–3650 Tage, 1–100 eindeutige Artikelpositionen, Prüfgültigkeit: ausdrücklich 1–168 Stunden (Oberflächenvorschlag 24). Aktuell wählt die Oberfläche Artikel aus dem Chargenkatalog; Artikel-/Chargenanlage erfolgt weiterhin per CLI.
+
+| Endpunkt | Funktion |
+|---|---|
+| `GET /api/v1/packlists` | Aktuelle Sollversionen im eigenen Bereich |
+| `GET /api/v1/packlists?history=true` | Auch frühere Sollversionen, höchstens 100 Einträge |
+| `POST /api/v1/packlists` | Neue Sollversion veröffentlichen, nur Materialwart |
+| `GET /api/v1/packlists/{id}` | Unveränderliche Sollversion mit Positionen |
+| `GET /api/v1/packlists/{id}/readiness` | Aktuelle Materialbewertung mit Gründen, Datenbasis und letztem physischem Check |
+| `POST /api/v1/packlists/{id}/checks` | Physisches Ergebnis mit Begründung und eingefrorener Datenbasis dokumentieren |
+| `GET /api/v1/packlists/{id}/checks` | Letzte 50 Prüfnachweise samt unverändert gespeichertem Datenstand |
+
+Die begrenzten Listen melden weitere Einträge über `X-Has-More: true`; Blättern dieser Packlisten-/Prüfnachweislisten ist noch nicht implementiert. Die Oberfläche nennt die Grenze. Direkte Objektzugriffe bleiben bereichsbezogen geschützt.
+
+Beispiel für eine Veröffentlichung (JSON, mit Session, CSRF, Origin und `Idempotency-Key`):
+
+```json
+{"location_id":"LOCATION_UUID","expected_version":0,"title":"Sanitätskoffer – Material","check_valid_hours":24,"note":"Sollstand festgelegt","items":[{"product_id":"PRODUCT_UUID","quantity":5,"min_remaining_days":30}]}
+```
+
+`expected_version` ist 0 bei der ersten Veröffentlichung, danach die bisher höchste Version; konkurrierende Bearbeitungen liefern 409. Dieselbe Benutzer-/Schlüsselkombination darf auch nicht für Materialbuchungen oder einen anderen Packlistenvorgang wiederverwendet werden. Version/Nachweis, Akteur-/Zeit-Ereignis, eigene Packlisten-Outbox und gespeicherte Idempotenzantwort werden gemeinsam in einer kurzen IMMEDIATE-Transaktion geschrieben. Migration 5 ergänzt diese Tabellen, ohne bestehende Bestandsdaten zu ändern; vor Upgrade Snapshot und Dienststopp wie oben.
+
+Nutzbar zählt nur Ware im Zustand `available`, ohne globale Sperre und mit bekanntem, gültigem Verfall mindestens am Berliner Tagesdatum plus Mindestrestlaufzeit. Die Grenze ist einschließlich: 30 Tage am 10.10.2026 erfordern mindestens 09.11.2026. Beschädigte, quarantänisierte, gesperrte, abgelaufene oder zu kurz haltbare Mengen zählen physisch, erfüllen aber keinen Sollbestand. Unbekannte kritische Verfallsdaten verhindern eine positive Materialbewertung, auch wenn andere Chargen rechnerisch die Sollmenge erreichen. Die Antwort nennt physische, nutzbare, ausgeschlossene und ungeklärte Mengen sowie Fehlmengen; es erfolgt keine Reservierung oder automatische Entnahme.
+
+Ausreichender Bestand ergibt zunächst `needs_check`. Vor einer physischen Prüfung ausdrücklich **Physische Prüfung beginnen**; dieser Schritt friert den Datenstand ein. Die Bedienperson prüft tatsächlich Inhalt, Mengen und Verpackungsintegrität und wählt ein positives oder negatives Ergebnis mit Notiz. Ein negatives Ergebnis ändert keine Bestände und hebt keine Sperren auf. Für festgestellte Differenzen die Inventur beziehungsweise den vorgesehenen Sperrworkflow verwenden; eine positive physische Bestätigung überstimmt niemals Fehlmengen oder ungeklärte Materialdaten.
+
+```json
+{"basis_hash":"HASH_AUS_READINESS","physical_passed":true,"note":"Inhalt, Mengen und Verpackungsintegrität physisch geprüft"}
+```
+
+`ready` gilt ausschließlich für die Materialbewertung und verlangt erfüllte Sollpositionen sowie einen aktuellen positiven physischen Nachweis. Datenbasis enthält Sollversion, Berliner Kalendertag und sämtliche relevanten Chargen-/Bestandsdaten einschließlich Versionsnummer, Zustand, Sperre und Verfall. Eine Bestandsbuchung (auch später gegengebucht), Änderung relevanter Sperr-/Verfallsdaten, neue Sollversion, Tageswechsel oder Ablauf der Prüfgültigkeit verlangt erneute Prüfung. Die Gültigkeitsgrenze ist exklusiv. Der Server berechnet dies bei jedem Lesen; es ist kein Nachtjob erforderlich. Eine beim Speichern veränderte Grundlage liefert 409, ohne Nachweis zu schreiben. Unveränderlich gespeicherte frühere Datenstände ermöglichen die Nachvollziehbarkeit. Bei einer verlorenen Antwort exakt denselben Request samt Schlüssel erneut senden; die gespeicherte Antwort ist historisch, für die aktuelle Bewertung anschließend neu lesen.
 
 ## Docker Compose (Linux-Entwicklung)
 
@@ -202,4 +238,4 @@ In dieser Cloud bei einem schreibgeschützten Standard-Docker-Verzeichnis `DOCKE
 
 ## Nächste Umsetzung
 
-Als Nächstes Packlisten/Einsatzbereitschaft und Scanner umsetzen. Vor Pilotfreigabe die [Blueprint-Abnahmekriterien](docs/blueprint-v2.md) erfüllen.
+Als Nächstes Scanner und Produktkennungen umsetzen; vollständige Geräte-/Zubehörbewertung und Packlistenalternativen ergänzen. Vor Pilotfreigabe die [Blueprint-Abnahmekriterien](docs/blueprint-v2.md) erfüllen.

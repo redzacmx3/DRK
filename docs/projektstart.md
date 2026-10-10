@@ -2,9 +2,9 @@
 
 ## Stand des ersten Meilensteins
 
-Implementiert: Go-Dienst, eingebettete HTML/JS-Oberfläche, explizite SQLite-Migrationen v1–v4, synthetische Betreiber-/Betriebsstätten-/Lagerortdaten und lesende Lagerort-API. HTTPS-Anmeldung mit Argon2id, widerrufbaren Sessions und Viewer-Rechten je Betriebsstätte schützt die Lagerortliste und direkte Objektzugriffe. Lokale CLI für Kontoanlage, Bereichsänderung, Kontosperre und Artikel-/Chargenanlage. Materialfluss mit Wareneingang, atomarer Umlagerung und Entnahme, Quellversionen, Idempotenz, Bewegungsjournal/Audit und Outbox ist umgesetzt. Die Oberfläche zeigt physische/nutzbare Mengen und erlaubt Buchungen je Rolle. Vollständige Gegenbuchungen und versionierte Inventuren mit Pflichtbegründung, Nullzählung und unveränderlichem Journal sind ergänzt. SQLite-Treiber: mattn/go-sqlite3 mit CGO. Die Readiness prüft das Schema und Datenbankzugriff. Dockerfile und Compose-Entwicklungskonfiguration sind vorhanden.
+Implementiert: Go-Dienst, eingebettete HTML/JS-Oberfläche, explizite SQLite-Migrationen v1–v5, synthetische Betreiber-/Betriebsstätten-/Lagerortdaten und lesende Lagerort-API. HTTPS-Anmeldung mit Argon2id, widerrufbaren Sessions und Viewer-Rechten je Betriebsstätte schützt die Lagerortliste und direkte Objektzugriffe. Lokale CLI für Kontoanlage, Bereichsänderung, Kontosperre und Artikel-/Chargenanlage. Materialfluss mit Wareneingang, atomarer Umlagerung und Entnahme, Quellversionen, Idempotenz, Bewegungsjournal/Audit und Outbox ist umgesetzt. Die Oberfläche zeigt physische/nutzbare Mengen und erlaubt Buchungen je Rolle. Vollständige Gegenbuchungen und versionierte Inventuren mit Pflichtbegründung, Nullzählung und unveränderlichem Journal sind ergänzt. Versionierte Material-Sollpacklisten mit Mindestrestlaufzeit, bereichsbezogener Materialbewertung und unveränderlichen physischen Prüfnachweisen sind umgesetzt. Eine vollständige Einsatzfreigabe einschließlich Gerätebewertung ist noch offen. SQLite-Treiber: mattn/go-sqlite3 mit CGO. Die Readiness prüft das Schema und Datenbankzugriff. Dockerfile und Compose-Entwicklungskonfiguration sind vorhanden.
 
-Offen: weitere Rollen und Fachrechte, Packlisten/Scanner, PWA-Funktionen, Dokumente und vollständige Backup/Restore-Abnahme. Ein SQLite-Snapshot vor Migrationen ist über die CLI möglich. Die aktuelle Oberfläche ist nur für synthetische Entwicklungsdaten vorgesehen.
+Offen: weitere Rollen und Fachrechte, Geräte-/Zubehörbewertung, Packlistenalternativen und Scanner, PWA-Funktionen, Dokumente und vollständige Backup/Restore-Abnahme. Ein SQLite-Snapshot vor Migrationen ist über die CLI möglich. Die aktuelle Oberfläche ist nur für synthetische Entwicklungsdaten vorgesehen.
 
 ## Weitere Umsetzung
 
@@ -24,7 +24,7 @@ Offen: weitere Rollen und Fachrechte, Packlisten/Scanner, PWA-Funktionen, Dokume
 - Unberechtigte Objektzugriffe und Schreibzugriffe ohne CSRF-Nachweis scheitern.
 - Restore prüft Integrität, Fremdschlüssel und Dokumentreferenzen.
 
-Danach folgen Geräteakte, Fristen, Packlisten, Scanner und Exporte gemäß Blueprint. Ein separates Frontend-Buildwerkzeug wird aktuell nicht benötigt; die Oberfläche wird direkt eingebettet. Der Produktionsbetrieb bleibt offen. Das Blueprint-Compose-Beispiel ist weiterhin konzeptionell; die Compose-Datei im Repository dient der Linux-Entwicklung.
+Danach folgen Geräteakte, Fristen, vollständige Geräte-/Zubehörpacklisten, Scanner und Exporte gemäß Blueprint. Ein separates Frontend-Buildwerkzeug wird aktuell nicht benötigt; die Oberfläche wird direkt eingebettet. Der Produktionsbetrieb bleibt offen. Das Blueprint-Compose-Beispiel ist weiterhin konzeptionell; die Compose-Datei im Repository dient der Linux-Entwicklung.
 
 ## Vor Pilotbetrieb zu klären
 

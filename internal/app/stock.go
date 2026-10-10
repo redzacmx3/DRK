@@ -142,6 +142,9 @@ func bookStock(ctx context.Context, db *sql.DB, user, tokenHash, key, kind strin
 			}
 		}
 	}
+	if err = rejectPackKey(ctx, tx, user, key); err != nil {
+		return nil, err
+	}
 	var existingHash, response string
 	err = tx.QueryRowContext(ctx, `SELECT request_hash,response_json FROM idempotency_keys WHERE user_id=? AND key=?`, user, key).Scan(&existingHash, &response)
 	if err == nil {

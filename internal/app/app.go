@@ -63,11 +63,11 @@ func Migrate(db *sql.DB) (migrationErr error) {
 	if err = tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 4 {
+	if version > 5 {
 		return fmt.Errorf("unsupported schema version %d", version)
 	}
-	for next := version + 1; next <= 4; next++ {
-		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_auth.sql", 3: "migrations/003_stock.sql", 4: "migrations/004_corrections.sql"}[next]
+	for next := version + 1; next <= 5; next++ {
+		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_auth.sql", 3: "migrations/003_stock.sql", 4: "migrations/004_corrections.sql", 5: "migrations/005_packlists.sql"}[next]
 		script, err := assets.ReadFile(name)
 		if err != nil {
 			return err
@@ -129,15 +129,15 @@ func Ready(ctx context.Context, db *sql.DB) error {
 	if err := db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version != 4 {
+	if version != 5 {
 		return fmt.Errorf("schema migration required")
 	}
 	var count int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM locations`).Scan(&count); err != nil {
 		return err
 	}
-	var users, roles, sessions, stock bool
-	return db.QueryRowContext(ctx, `SELECT EXISTS(SELECT id,password_hash,active FROM users), EXISTS(SELECT user_id,site_id,role FROM role_assignments), EXISTS(SELECT token_hash,csrf_hash FROM sessions), EXISTS(SELECT 1 FROM product_types JOIN batches ON 1=0 JOIN stock_balances ON 1=0 JOIN stock_movements ON 1=0 JOIN movement_lines ON 1=0 JOIN audit_events ON 1=0 JOIN outbox ON 1=0 JOIN idempotency_keys ON 1=0)`).Scan(&users, &roles, &sessions, &stock)
+	var users, roles, sessions, stock, packs bool
+	return db.QueryRowContext(ctx, `SELECT EXISTS(SELECT id,password_hash,active FROM users), EXISTS(SELECT user_id,site_id,role FROM role_assignments), EXISTS(SELECT token_hash,csrf_hash FROM sessions), EXISTS(SELECT 1 FROM product_types JOIN batches ON 1=0 JOIN stock_balances ON 1=0 JOIN stock_movements ON 1=0 JOIN movement_lines ON 1=0 JOIN audit_events ON 1=0 JOIN outbox ON 1=0 JOIN idempotency_keys ON 1=0), EXISTS(SELECT 1 FROM packlist_versions JOIN packlist_items ON 1=0 JOIN readiness_checks ON 1=0 JOIN packlist_events ON 1=0 JOIN packlist_outbox ON 1=0 JOIN packlist_requests ON 1=0)`).Scan(&users, &roles, &sessions, &stock, &packs)
 }
 
 type Location struct {
@@ -156,6 +156,7 @@ func HandlerWithOrigin(db *sql.DB, origin string) http.Handler {
 	auth.routes(mux)
 	stockRoutes(mux, auth)
 	correctionRoutes(mux, auth)
+	packlistRoutes(mux, auth)
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
 		if Ready(r.Context(), db) != nil {

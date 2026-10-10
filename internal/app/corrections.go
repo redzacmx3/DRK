@@ -71,6 +71,9 @@ func activeStockSession(ctx context.Context, tx *sql.Tx, user, tokenHash string,
 	return nil
 }
 func replayCorrection(ctx context.Context, tx *sql.Tx, user, key, hash string) ([]byte, error) {
+	if err := rejectPackKey(ctx, tx, user, key); err != nil {
+		return nil, err
+	}
 	var oldHash, response string
 	err := tx.QueryRowContext(ctx, `SELECT request_hash,response_json FROM idempotency_keys WHERE user_id=? AND key=?`, user, key).Scan(&oldHash, &response)
 	if err == sql.ErrNoRows {
@@ -309,6 +312,9 @@ func bookReversal(ctx context.Context, db *sql.DB, user, tokenHash, key, origina
 	return saveCorrection(ctx, tx, user, key, hash, record, lines, now)
 }
 func correctionBody(w http.ResponseWriter, r *http.Request, input any) bool {
+	return mutationBody(w, r, input, 4096)
+}
+func mutationBody(w http.ResponseWriter, r *http.Request, input any, limit int64) bool {
 	if !validKey(r.Header.Get("Idempotency-Key")) {
 		apiError(w, 400, "idempotency_required", "Gültiger Idempotency-Key erforderlich.")
 		return false
@@ -317,11 +323,11 @@ func correctionBody(w http.ResponseWriter, r *http.Request, input any) bool {
 		apiError(w, 415, "content_type", "JSON erforderlich.")
 		return false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(input) != nil || decoder.Decode(&struct{}{}) != io.EOF {
-		apiError(w, 400, "invalid_request", "Ungültige Korrekturdaten.")
+		apiError(w, 400, "invalid_request", "Ungültige Anfragedaten.")
 		return false
 	}
 	return true

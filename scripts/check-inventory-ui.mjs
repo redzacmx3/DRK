@@ -52,14 +52,28 @@ try {
  const realFetch = window.fetch.bind(window);
  window.testBalances = [{batch_id:'batch',location_id:'warehouse',state:'available',quantity:10,usable_quantity:10,version:1,product:'Demo',unit:'Stück',lot:'DEMO',location:'Lager',expires_on:'2030-01-01',blocked:false}];
  window.posted = [];
+ window.pack = {id:'pack',location_id:'warehouse',version:1,title:'Material',check_valid_hours:24,created_at:new Date().toISOString(),note:'Synthetic',items:[{product_id:'product',quantity:5,min_remaining_days:30}]};
+ window.materialBasis = 'a'.repeat(64);window.packPosted = [];window.packReplies = new Map();window.losePackReply = false;
+
  window.fetch = async (input,options={}) => {
   const path = typeof input === 'string' ? input : input.url;
   let data;
   if (path === '/api/v1/me') data = {id:'synthetic-user',username:'test',csrf_token:'synthetic-csrf',rights:[{site_id:'site',role:'material_manager'}]};
   else if (path === '/api/v1/locations') data = [{id:'warehouse',name:'Lager',site:'Demo',operator:'Demo',site_id:'site'}];
-  else if (path === '/api/v1/stock/catalog') data = [{id:'batch',product:'Demo',unit:'Stück',lot:'DEMO'}];
+  else if (path === '/api/v1/stock/catalog') data = [{id:'batch',product_id:'product',product:'Demo',unit:'Stück',lot:'DEMO'}];
   else if (path === '/api/v1/stock/balances') data = window.testBalances;
   else if (path.startsWith('/api/v1/stock/movements?')) data = [];
+  else if (path.startsWith('/api/v1/packlists?')) data = [window.pack];
+  else if (path === '/api/v1/packlists/pack/readiness') data = {scope:'material_only',overall_readiness:'not_assessed',status:'needs_check',data_as_of:new Date().toISOString(),packlist:window.pack,current_version:true,basis_hash:window.materialBasis,reasons:['Physischer Prüfnachweis fehlt.'],items:[{product:'Demo',unit:'Stück',quantity:5,physical_quantity:10,usable_quantity:10,shortfall:0,min_remaining_days:30,unknown_quantity:0}],last_check:null};
+  else if (path === '/api/v1/packlists/pack/checks' && !options.method) data = [];
+  else if (path === '/api/v1/packlists' || path === '/api/v1/packlists/pack/checks') {
+   const request = JSON.parse(options.body),key = options.headers['Idempotency-Key'];window.packPosted.push({path,request,key});
+   if (window.packReplies.has(key)) return new Response(JSON.stringify(window.packReplies.get(key)),{status:201,headers:{'Content-Type':'application/json'}});
+   if (path.endsWith('/checks') && request.basis_hash !== window.materialBasis || path === '/api/v1/packlists' && request.expected_version !== window.pack.version) return new Response(JSON.stringify({message:'Datenstand geändert; erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
+   data = path.endsWith('/checks') ? {id:'proof'} : window.pack;
+   window.packReplies.set(key,data);
+   if (window.losePackReply) {window.losePackReply=false;throw new Error('Simulated lost response');}
+  }
   else if (path === '/api/v1/stock/inventories') {
    const request = JSON.parse(options.body);window.posted.push(request);
    if (request.expected_version !== window.testBalances[0].version) return new Response(JSON.stringify({code:'stock_conflict',message:'Neue Zählung erforderlich.'}),{status:409,headers:{'Content-Type':'application/json'}});
@@ -91,7 +105,39 @@ try {
  await until('window.posted.length === 2');
  assert.deepEqual(await evaluate('({version:window.posted[1].expected_version,count:window.posted[1].counted_quantity})'),{version:2,count:0});
  await until("document.querySelector('#status').textContent.includes('Buchung bestätigt')");
- console.log('Browser UI passed: explicit count start, frozen basis across reload, mandatory recount on conflict and valid zero count (simulated API).');
+ await until("document.querySelector('#pack-choice').value === 'pack'");
+ assert.equal(await evaluate("document.querySelector('#material-check button[type=submit]').disabled"),true);
+ await evaluate("document.querySelector('#check-start').click()");
+ await until("!document.querySelector('#check-result').disabled");
+ assert.equal(await evaluate("document.querySelector('#check-result').value"),'');
+ await evaluate("window.materialBasis='b'.repeat(64);document.querySelector('#pack-refresh').click()");
+ await until("material && material.basis_hash === 'b'.repeat(64)");
+ await evaluate("document.querySelector('#check-result').value='passed';document.querySelector('#check-note').value='Physisch geprüft';document.querySelector('#material-check').requestSubmit()");
+ await until('window.packPosted.length === 1');
+ assert.equal(await evaluate('window.packPosted[0].request.basis_hash'),'a'.repeat(64));
+ await until("document.querySelector('#status').textContent.includes('Datenstand geändert')");
+ assert.equal(await evaluate("document.querySelector('#material-check button[type=submit]').disabled"),true);
+ await evaluate("document.querySelector('#check-start').click()");
+ await until("!document.querySelector('#check-result').disabled");
+ await evaluate("window.losePackReply=true;document.querySelector('#check-result').value='failed';document.querySelector('#check-note').value='Verpackung beschädigt';document.querySelector('#material-check').requestSubmit()");
+ await until("document.querySelector('#status').textContent.includes('Vorgang nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#check-result').disabled"),true);
+ await evaluate("document.querySelector('#material-check').requestSubmit()");
+ await until('window.packPosted.length === 3');
+ assert.deepEqual(await evaluate('window.packPosted[1]'),await evaluate('window.packPosted[2]'));
+ assert.equal(await evaluate('window.packPosted[2].request.physical_passed'),false);
+ await until("document.querySelector('#status').textContent.includes('Packlistenvorgang bestätigt')");
+ await evaluate("document.querySelector('#pack-edit-start').click()");
+ await until("!document.querySelector('#pack-title').disabled");
+ await evaluate("window.pack.version=2;document.querySelector('#pack-refresh').click()");
+ await until("document.querySelector('#pack-choice').textContent.includes('Sollversion 2')");
+ await evaluate("document.querySelector('#pack-note').value='Sollmenge geändert';document.querySelector('#pack-editor').requestSubmit()");
+ await until('window.packPosted.length === 4');
+ assert.equal(await evaluate('window.packPosted[3].request.expected_version'),1);
+ await until("document.querySelector('#status').textContent.includes('Datenstand geändert')");
+ assert.equal(await evaluate("document.querySelector('#pack-editor button[type=submit]').disabled"),true);
+ console.log('Browser UI passed: frozen inventory/count and packlist/check bases, mandatory restart after conflict, zero count and exact retry after lost check response (simulated API).');
+
 } finally {
  socket?.close();browser.kill('SIGTERM');
  await new Promise(resolve => {if (browser.exitCode !== null) resolve();else browser.once('exit',resolve);});

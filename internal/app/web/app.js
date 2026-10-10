@@ -8,7 +8,7 @@ let csrf = '', user = null, locations = [], balances = [], catalog = [], movemen
 const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Entnahme',inventory:'Inventur',reversal:'Gegenbuchung'};
 const stateNames = {available:'Verfügbar',quarantined:'Quarantäne',damaged:'Beschädigt'};
 function signedOut(message) {
- csrf = ''; user = null; countDraft = null; list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
+ csrf = ''; user = null; countDraft = null; checkDraft = null; packDraft = null; list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
  login.hidden = false; inventory.hidden = true; status.textContent = message;
 }
 function can(location, roles) { return user.rights.some(right => right.site_id === location.site_id && roles.includes(right.role)); }
@@ -116,8 +116,9 @@ async function load() {
    const detail = document.createElement('p'); detail.textContent = `${location.site} · ${location.operator}`;
    item.append(name,detail); list.append(item);
   }
-  status.textContent = pending ? 'Eine Buchung ist noch nicht bestätigt. Mit demselben Konto erneut senden.' : `${locations.length} Lagerorte geladen.`;
+  status.textContent = (pending || packPending) ? 'Ein Vorgang ist noch nicht bestätigt. Mit demselben Konto erneut senden.' : `${locations.length} Lagerorte geladen.`;
   await loadStock();
+  if (user) await loadPacklists();
  } catch { status.textContent = 'Daten konnten nicht geladen werden. Verbindung prüfen und erneut laden.'; if (!pending) booking.hidden = true; }
 }
 async function restore() {
@@ -146,7 +147,7 @@ login.addEventListener('submit',async event => {
 document.querySelector('#logout').addEventListener('click',async () => {
  try {
   const response = await fetch('/api/v1/auth/logout',{method:'POST',headers:{'X-CSRF-Token':csrf}});
-  if (response.ok || response.status === 401) signedOut(pending ? 'Abgemeldet. Eine unbestätigte Buchung benötigt erneute Anmeldung mit demselben Konto.' : 'Abgemeldet.');
+  if (response.ok || response.status === 401) signedOut((pending || packPending) ? 'Abgemeldet. Eine unbestätigte Buchung benötigt erneute Anmeldung mit demselben Konto.' : 'Abgemeldet.');
   else status.textContent = 'Abmeldung fehlgeschlagen. Bitte erneut versuchen.';
  } catch { status.textContent = 'Abmeldung konnte nicht bestätigt werden. Verbindung prüfen.'; }
 });
@@ -198,7 +199,7 @@ booking.addEventListener('submit',async event => {
   const result = await response.json();
   if (response.status === 401) { pending.uncertain = true; signedOut('Bitte mit demselben Konto erneut anmelden und die offene Buchung erneut senden.'); return; }
   if (response.status >= 500 || !response.ok && pending.uncertain) throw new Error('uncertain');
-  pending = null; countDraft = null; lockBooking(false); historyOffset = 0; await loadStock();
+  pending = null; countDraft = null; lockBooking(false); historyOffset = 0; await loadStock(); if (user) await loadPacklists();
   status.textContent = response.ok ? `Buchung bestätigt: ${result.movement_id}` : result.message || 'Buchung abgelehnt.';
  } catch { if (pending) pending.uncertain = true; status.textContent = 'Buchung nicht bestätigt. Erneut senden verwendet denselben Schlüssel. Diese Seite bis zur Klärung nicht neu laden.'; }
  finally { if (user) lockBooking(Boolean(pending)); }
@@ -217,5 +218,115 @@ document.querySelector('#start-count').addEventListener('click',async () => {
 document.querySelector('#reload').addEventListener('click',load);
  document.querySelector('#history-older').addEventListener('click',async () => {historyOffset += 50;await loadHistory();bookingChoices();});
  document.querySelector('#history-newer').addEventListener('click',async () => {historyOffset = Math.max(0,historyOffset-50);await loadHistory();bookingChoices();});
-window.addEventListener('beforeunload',event => {if (pending) {event.preventDefault();event.returnValue = '';}});
+window.addEventListener('beforeunload',event => {if (pending || packPending) {event.preventDefault();event.returnValue = '';}});
+
+
+let packVersions = [], packDraft = null, checkDraft = null, packPending = null, material = null;
+const materialNames = {ready:'Materialbestand erfüllt · physisch geprüft',needs_check:'Physische Prüfung erforderlich',shortfall:'Nutzbarer Sollbestand unterschritten',unknown:'Kritische Materialdaten ungeklärt',physical_failed:'Physische Abweichung festgestellt',obsolete:'Sollversion ersetzt'};
+function productChoices() {
+ return [...new Map(catalog.map(batch => [batch.product_id,{id:batch.product_id,label:`${batch.product} · ${batch.unit}`}])).values()];
+}
+function packControls() {
+ if (!user) return;
+ const manager = locations.some(location => can(location,['material_manager']));
+ const chosen = packVersions.find(pack => pack.id === document.querySelector('#pack-choice').value);
+ const target = locations.find(location => location.id === chosen?.location_id);
+ document.querySelector('#pack-editor').hidden = !manager && !packPending;
+ document.querySelector('#material-check').hidden = packPending?.kind !== 'check' && (!target || !can(target,['helper','material_manager']) || !material?.current_version);
+ for (const form of [document.querySelector('#pack-editor'),document.querySelector('#material-check')]) for (const control of form.elements) control.disabled = Boolean(packPending);
+ document.querySelector('#pack-choice').disabled = Boolean(packPending);
+ document.querySelector('#pack-location').disabled = Boolean(packPending || packDraft);
+ document.querySelector('#check-start').disabled = Boolean(packPending) || !material?.current_version;
+ document.querySelector('#check-result').disabled = Boolean(packPending) || !checkDraft;
+ document.querySelector('#check-note').disabled = Boolean(packPending) || !checkDraft;
+ const publish = document.querySelector('#pack-editor button[type=submit]');
+ const check = document.querySelector('#material-check button[type=submit]');
+ publish.disabled = packPending ? packPending.owner !== user?.id || packPending.kind !== 'publish' : !packDraft;
+ check.disabled = packPending ? packPending.owner !== user?.id || packPending.kind !== 'check' : !checkDraft;
+ publish.textContent = packPending?.kind === 'publish' ? 'Sollversion erneut senden' : 'Neue Sollversion speichern';
+ check.textContent = packPending?.kind === 'check' ? 'Prüfnachweis erneut senden' : 'Prüfnachweis speichern';
+ for (const id of ['pack-title','pack-hours','pack-note','pack-add-item']) document.querySelector(`#${id}`).disabled = Boolean(packPending) || !packDraft;
+ document.querySelector('#pack-edit-basis').textContent = packDraft ? `Bearbeitung auf Basis von Sollversion ${packDraft.version}.` : 'Lagerort wählen und Bearbeitung beginnen.';
+ document.querySelector('#check-basis').textContent = checkDraft ? 'Prüfung gestartet. Der Datenstand bleibt bis zur Bestätigung fest; Änderungen erfordern eine erneute Prüfung.' : 'Vor dem Prüfen ausdrücklich beginnen.';
+}
+function addPackItem(item = {}) {
+ const row = document.createElement('fieldset'); const article = document.createElement('select'); article.className = 'pack-product'; article.required = true; options(article,productChoices()); if (item.product_id) article.value = item.product_id;
+ const quantity = document.createElement('input'); quantity.className = 'pack-quantity'; quantity.type = 'number'; quantity.min = '1'; quantity.max = '1000000000'; quantity.step = '1'; quantity.required = true; quantity.value = item.quantity || 1;
+ const days = document.createElement('input'); days.className = 'pack-days'; days.type = 'number'; days.min = '0'; days.max = '3650'; days.step = '1'; days.required = true; days.value = item.min_remaining_days || 0;
+ for (const [text,control] of [['Artikel',article],['Sollmenge in Basiseinheiten',quantity],['Mindestrestlaufzeit in Tagen',days]]) {const label = document.createElement('label');label.textContent = text;label.append(control);row.append(label);}
+ const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Sollposition entfernen'; remove.addEventListener('click',() => row.remove());row.append(remove);document.querySelector('#pack-items').append(row);
+}
+async function loadMaterial() {
+ material = null; document.querySelector('#readiness-status').textContent = 'Materialbewertung wird geladen …'; const id = document.querySelector('#pack-choice').value;
+ document.querySelector('#pack-rows').replaceChildren();document.querySelector('#readiness-reasons').replaceChildren();document.querySelector('#proof-history').replaceChildren();document.querySelector('#last-proof').textContent = '';
+ if (!id) {document.querySelector('#readiness-status').textContent = 'Noch keine Sollpackliste vorhanden.';packControls();return false;}
+ try {
+  const [response,proofResponse] = await Promise.all([fetch(`/api/v1/packlists/${id}/readiness`,{cache:'no-store'}),fetch(`/api/v1/packlists/${id}/checks`,{cache:'no-store'})]);
+  if (response.status === 401 || proofResponse.status === 401) {signedOut('Bitte erneut anmelden.');return false;}
+  if (!response.ok || !proofResponse.ok) throw new Error('unavailable');
+  const result = await response.json();if (document.querySelector('#pack-choice').value !== id) return false;material = result;
+  document.querySelector('#readiness-status').textContent = `${materialNames[result.status]} · Datenstand ${new Date(result.data_as_of).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})}`;
+  for (const reason of result.reasons) {const li = document.createElement('li');li.textContent = reason;document.querySelector('#readiness-reasons').append(li);}
+  for (const item of result.items) {const row = document.createElement('tr');for (const text of [item.product,`${item.quantity} ${item.unit}`,item.physical_quantity,item.usable_quantity,item.shortfall,`${item.min_remaining_days} Tage${item.unknown_quantity ? ` · ${item.unknown_quantity} ungeklärt` : ''}`]) {const td = document.createElement('td');td.textContent = text;row.append(td);}document.querySelector('#pack-rows').append(row);}
+  if (result.last_check) {const proof = result.last_check;document.querySelector('#last-proof').textContent = `Letzte physische Prüfung: ${proof.username} · ${new Date(proof.created_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})} · ${proof.current ? 'aktuell' : 'veraltet'} · ${proof.note}`;}
+  for (const proof of await proofResponse.json()) {const li = document.createElement('li');li.textContent = `${new Date(proof.created_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})} · ${proof.username} · ${proof.physical_passed ? 'Keine Abweichung' : 'Abweichung'} · ${proof.note}`;document.querySelector('#proof-history').append(li);}
+  if (proofResponse.headers.get('X-Has-More') === 'true') {const li = document.createElement('li');li.textContent = 'Anzeige auf die letzten 50 Prüfnachweise begrenzt.';document.querySelector('#proof-history').append(li);}
+  packControls();return true;
+ } catch {document.querySelector('#readiness-status').textContent = 'Materialbewertung nicht verfügbar. Keine Prüfung mit ungeklärtem Datenstand.';packControls();return false;}
+}
+async function loadPacklists() {
+ try {
+  const response = await fetch('/api/v1/packlists?history=true',{cache:'no-store'});
+  if (response.status === 401) {signedOut('Bitte erneut anmelden.');return false;}
+  if (!response.ok) throw new Error('unavailable');packVersions = await response.json();
+  options(document.querySelector('#pack-choice'),packVersions.map(pack => ({id:pack.id,label:`${pack.title} · ${locations.find(location => location.id === pack.location_id)?.name || ''} · Sollversion ${pack.version}`})));
+  if (!packDraft) options(document.querySelector('#pack-location'),locations.filter(location => can(location,['material_manager'])).map(location => ({id:location.id,label:location.name})));
+  document.querySelector('#pack-status').textContent = `${packVersions.length} Sollversionen geladen.${response.headers.get('X-Has-More') === 'true' ? ' Anzeige auf 100 Versionen begrenzt.' : ''}`;
+  await loadMaterial(); return true;
+ } catch {material = null;document.querySelector('#pack-status').textContent = 'Sollpacklisten nicht verfügbar.';packControls();return false;}
+}
+document.querySelector('#pack-choice').addEventListener('change',() => {checkDraft = null;loadMaterial();});
+document.querySelector('#pack-refresh').addEventListener('click',loadPacklists);
+document.querySelector('#pack-edit-start').addEventListener('click',async () => {
+ if (!user || packPending) return;packDraft = null;if (!await loadPacklists() || !user || packPending) return;
+ const location = document.querySelector('#pack-location').value;if (!location) return;
+ const existing = packVersions.find(pack => pack.location_id === location);
+ packDraft = {owner:user.id,location,version:existing?.version || 0};
+ document.querySelector('#pack-title').value = existing?.title || 'Material-Sollpackliste';document.querySelector('#pack-hours').value = existing?.check_valid_hours || 24;document.querySelector('#pack-note').value = '';
+ document.querySelector('#pack-items').replaceChildren();for (const item of existing?.items || [{}]) addPackItem(item);packControls();
+});
+document.querySelector('#pack-add-item').addEventListener('click',() => {if (packDraft && document.querySelectorAll('#pack-items fieldset').length < 100) addPackItem();});
+document.querySelector('#check-start').addEventListener('click',async () => {
+ if (!user || packPending) return;checkDraft = null;if (!await loadMaterial() || !user || !material.current_version) return;
+ checkDraft = {owner:user.id,id:material.packlist.id,basis:material.basis_hash};document.querySelector('#check-result').value = '';document.querySelector('#check-note').value = '';packControls();
+});
+async function sendPackMutation(kind) {
+ if (!user || packPending && (packPending.owner !== user.id || packPending.kind !== kind)) return;
+ if (!packPending) {
+  let data,path;
+  if (kind === 'publish') {
+   if (!packDraft || packDraft.owner !== user.id) return;
+   const items = [...document.querySelectorAll('#pack-items fieldset')].map(row => ({product_id:row.querySelector('.pack-product').value,quantity:row.querySelector('.pack-quantity').valueAsNumber,min_remaining_days:row.querySelector('.pack-days').valueAsNumber}));
+   if (!items.length || new Set(items.map(item => item.product_id)).size !== items.length) {status.textContent = 'Mindestens eine eindeutige Sollposition angeben.';return;}
+   data = {location_id:packDraft.location,expected_version:packDraft.version,title:document.querySelector('#pack-title').value,check_valid_hours:document.querySelector('#pack-hours').valueAsNumber,note:document.querySelector('#pack-note').value,items};path = '/api/v1/packlists';
+  } else {
+   if (!checkDraft || checkDraft.owner !== user.id || checkDraft.id !== document.querySelector('#pack-choice').value) return;
+   if (!['passed','failed'].includes(document.querySelector('#check-result').value)) {status.textContent = 'Prüfergebnis ausdrücklich auswählen.';return;}
+   data = {basis_hash:checkDraft.basis,physical_passed:document.querySelector('#check-result').value === 'passed',note:document.querySelector('#check-note').value};path = `/api/v1/packlists/${checkDraft.id}/checks`;
+  }
+  packPending = {owner:user.id,kind,path,data,key:crypto.randomUUID(),uncertain:false};
+ }
+ packControls();document.querySelector(`#${kind === 'publish' ? 'pack-editor' : 'material-check'} button[type=submit]`).disabled = true;
+ try {
+  const response = await fetch(packPending.path,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':packPending.key},body:JSON.stringify(packPending.data)});const result = await response.json();
+  if (response.status === 401) {packPending.uncertain = true;signedOut('Mit demselben Konto anmelden und offenen Packlistenvorgang erneut senden.');return;}
+  if (response.status >= 500 || !response.ok && packPending.uncertain) throw new Error('uncertain');
+  packPending = null;packDraft = null;checkDraft = null;
+  await loadPacklists();if (response.ok && kind === 'publish') {document.querySelector('#pack-choice').value = result.id;await loadMaterial();}
+  status.textContent = response.ok ? 'Packlistenvorgang bestätigt.' : result.message || 'Vorgang abgelehnt. Neu laden und erneut prüfen.';
+ } catch {if (packPending) packPending.uncertain = true;status.textContent = 'Vorgang nicht bestätigt. Erneut senden verwendet denselben Datenstand und Schlüssel. Diese Seite bis zur Klärung nicht neu laden.';}
+ finally {if (user) packControls();}
+}
+document.querySelector('#pack-editor').addEventListener('submit',event => {event.preventDefault();sendPackMutation('publish');});
+document.querySelector('#material-check').addEventListener('submit',event => {event.preventDefault();sendPackMutation('check');});
 restore();
