@@ -76,18 +76,14 @@ func run() error {
 	lot := flags.String("lot", "", "manufacturer lot")
 	expires := flags.String("expires-on", "", "exact expiry day YYYY-MM-DD, empty if unknown")
 	site := flags.String("site", "", "viewer site UUID (comma-separated for set-sites)")
-	addr := flags.String("listen", "127.0.0.1:8080", "loopback listen address")
+	addr := flags.String("listen", "127.0.0.1:8080", "listen IP address")
+	allowNetwork := flags.Bool("allow-network-listen", false, "allow an explicit non-loopback HTTPS listener behind a protected network")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
 	}
 	if os.Args[1] == "serve" {
-		host, _, err := net.SplitHostPort(*addr)
-		if err != nil {
+		if err := validateListen(*addr, *allowNetwork); err != nil {
 			return err
-		}
-		ip := net.ParseIP(host)
-		if ip == nil || !ip.IsLoopback() {
-			return fmt.Errorf("development server requires a loopback address; production proxy support is not configured")
 		}
 	}
 	if os.Args[1] == "serve" {
@@ -183,7 +179,7 @@ func run() error {
 			defer cancel()
 			srv.Shutdown(shutdown)
 		}()
-		log.Printf("development server listening on %s", *addr)
+		log.Printf("HTTPS server listening on %s", *addr)
 		err = srv.ListenAndServeTLS(*cert, *key)
 		if err == http.ErrServerClosed {
 			return nil
@@ -192,4 +188,21 @@ func run() error {
 	default:
 		return fmt.Errorf("unknown command %q", os.Args[1])
 	}
+}
+
+// Network exposure is opt-in. TLS and exact browser origin remain required;
+// forwarded headers do not establish trust or bypass HTTPS authentication.
+func validateListen(addr string, allowNetwork bool) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || port == "" {
+		return fmt.Errorf("listen requires an explicit IP address and port")
+	}
+	if !ip.IsLoopback() && !allowNetwork {
+		return fmt.Errorf("non-loopback HTTPS listener requires --allow-network-listen; restrict published ports to the intended private network")
+	}
+	return nil
 }

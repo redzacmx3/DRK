@@ -1,0 +1,43 @@
+# NAS / Dockhand test deployment. TLS is required on both sides of Traefik.
+# Load .env.nas explicitly with --env-file, or set these variables in Dockhand.
+name: drk-nas
+
+x-inventory: &inventory
+  build: .
+  image: drk-inventory:nas
+  user: "1000:1000"
+  read_only: true
+  init: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  volumes:
+    - inventory_data:/data
+    - ${DRK_TLS_DIR:?Set the absolute NAS TLS directory}:/certs:ro
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m,uid=1000,gid=1000,mode=1770
+  stop_grace_period: 10s
+
+services:
+  inventory:
+    <<: *inventory
+    restart: unless-stopped
+    command: ["serve", "--db", "/data/inventory.db", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--origin", "${DRK_ORIGIN:?Set the exact public HTTPS origin}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
+    ports:
+      - "${DRK_BIND_IP:?Set the NAS Tailscale IPv4 address}:${DRK_HTTPS_PORT:-8443}:8080"
+    healthcheck:
+      test: ["CMD", "/app/inventory", "healthcheck", "--url", "https://localhost:8080/health/ready", "--ca", "/certs/cert.pem"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 1s
+  # Explicit one-shot CLI, excluded from normal Dockhand stack startup.
+  maintenance:
+    <<: *inventory
+    profiles: [maintenance]
+    command: ["migrate", "--db", "/data/inventory.db"]
+    restart: "no"
+
+volumes:
+  inventory_data:
+    name: ${DRK_DATA_VOLUME:-drk_nas_inventory_data}

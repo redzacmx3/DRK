@@ -1,0 +1,22 @@
+# Traefik FILE-provider dynamic configuration on the VPS.
+# Replace the domain, NAS Tailscale IP and resolver/entrypoint names.
+http:
+  routers:
+    drk-inventory:
+      rule: "Host(`inventar.example.de`)"
+      entryPoints: [websecure]
+      service: drk-inventory
+      tls:
+        certResolver: letsencrypt
+  services:
+    drk-inventory:
+      loadBalancer:
+        passHostHeader: true
+        serversTransport: drk-nas-verified
+        servers:
+          - url: "https://100.64.1.2:8443"
+  serversTransports:
+    drk-nas-verified:
+      serverName: drk-nas.internal
+      rootCAs:
+        - /etc/traefik/certs/drk-nas.pem

@@ -4,3 +4,7 @@ var
 *.db
 *.db-shm
 *.db-wal
+
+.env
+.env.nas
+**/*.pem

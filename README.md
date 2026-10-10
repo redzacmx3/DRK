@@ -6,11 +6,15 @@ Administrative Verwaltung von Medizinprodukten, Sanitätsmaterial und mobilen Pa
 
 Modularer Go-Dienst mit eingebetteter HTML/JS-Oberfläche, SQLite und expliziten Migrationen. Synthetische Betreiber, Betriebsstätte und Lagerorte. HTTPS-Anmeldung, widerrufbare Sessions und Rechte je Betriebsstätte. Die Oberfläche zeigt Lagerorte und Materialbestand im zugewiesenen Bereich und bietet Wareneingang, Umlagerung, Entnahme, Gegenbuchung und Inventur. Das Bewegungsjournal zeigt frühere Einträge und deren Korrekturbezüge.
 
-Geräteakten mit Kontrollen, Sperren, Einweisungen und Anhängen in Quarantäne sind vorhanden. Sollpacklisten erfassen Geräte und Zubehör sowie getrennte physische Material- und Geräteprüfnachweise. Noch offen: weitere Rollen/Aktionen und Geräteabläufe, Nutzerqualifikation und vollständige Einsatzfreigabe, Malwareprüfung und Dokumentfreigabe, vollständige PWA, produktive Proxy-Konfiguration und vollständige Backup-/Restore-Verfahren. Nur synthetische Daten verwenden. Der Entwicklungsserver bindet ausschließlich an Loopback; Forwarded-Header werden nicht vertraut.
+Geräteakten mit Kontrollen, Sperren, Einweisungen und Anhängen in Quarantäne sind vorhanden. Sollpacklisten erfassen Geräte und Zubehör sowie getrennte physische Material- und Geräteprüfnachweise. Noch offen: weitere Rollen/Aktionen und Geräteabläufe, Nutzerqualifikation und vollständige Einsatzfreigabe, Malwareprüfung und Dokumentfreigabe, vollständige PWA, produktive Proxy-Konfiguration und vollständige Backup-/Restore-Verfahren. Nur synthetische Daten verwenden. Der Entwicklungsserver bindet standardmäßig an Loopback; die separate NAS-Konfiguration aktiviert eine Netzwerkbindung ausdrücklich. Forwarded-Header werden nicht vertraut.
 
 ## Schnelle Erstinventarisierung
 
 [Excel-Vorlage für Geräte und Equipment](docs/vorlagen/Geraete-Ersterfassung.xlsx) mit 100 festen Inventarnummern, Code-39-Etiketten und USB-Scanner-Suche. [Kurzanleitung](docs/erstinventarisierung.md). Im Programm: CSV UTF-8 prüfen, Standorte zuordnen und atomar importieren. Wiederholungen werden übersprungen; bestehende Akten werden nicht überschrieben. Fehlende Grunddaten bleiben ungeklärt, Defekt/Quarantäne erzeugen echte Sperren. Neue Vorlagen mit eigenen Nummern lassen sich im Programm oder mit `bin/inventory device-template --out NEUER-PFAD.xlsx` erzeugen. [Excel-Vorlage für Verbrauchsmaterial](docs/vorlagen/Verbrauchsmaterial-Ersterfassung.xlsx) und [Anleitung](docs/verbrauchsmaterial-erfassung.md) sind ebenfalls verfügbar: Erstbestand oder späterer Zugang in Basiseinheiten, mit Vorschau, Chargen/Verfall und dauerhafter Erfassungskennung gegen Doppelbuchung.
+
+## NAS und Dockhand
+
+Für den Ugreen DXP2800: [Installationsanleitung](docs/nas-dockhand.md), [NAS-Compose-Datei](compose.nas.yaml) und [Traefik-Beispiel](deploy/traefik-nas.example.yaml). Das Image wird aus dem GitHub-Checkout auf dem NAS gebaut. Browser und Backend verwenden HTTPS; Zugriff vom VPS erfolgt über Tailscale. Getestete NAS-Konfiguration für synthetische Testdaten, kein abgeschlossener produktiver Betrieb.
 
 ## Entwicklungsumgebung
 
