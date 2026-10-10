@@ -484,7 +484,7 @@ func deviceImportRoutes(mux *http.ServeMux, a *authService) {
 			return
 		}
 		defer tx.Rollback()
-		cookie, _ := r.Cookie(cookieName)
+		cookie, _ := r.Cookie(a.cookieName())
 		if err = activeStockSession(r.Context(), tx, user.ID, digest(cookie.Value), a.now()); err != nil {
 			sendStockError(w, err)
 			return
@@ -506,7 +506,7 @@ func deviceImportRoutes(mux *http.ServeMux, a *authService) {
 		if !mutationBody(w, r, &input, 4<<20) {
 			return
 		}
-		cookie, _ := r.Cookie(cookieName)
+		cookie, _ := r.Cookie(a.cookieName())
 		body, err := commitDeviceImport(r.Context(), a.db, user.ID, digest(cookie.Value), r.Header.Get("Idempotency-Key"), input, a.now())
 		packResponse(w, body, err, 201)
 	})

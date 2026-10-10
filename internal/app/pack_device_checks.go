@@ -164,7 +164,7 @@ func packDeviceCheckRoutes(mux *http.ServeMux, a *authService) {
 		if !mutationBody(w, r, &input, 32768) {
 			return
 		}
-		cookie, _ := r.Cookie(cookieName)
+		cookie, _ := r.Cookie(a.cookieName())
 		body, err := recordDeviceCheck(r.Context(), a.db, user.ID, digest(cookie.Value), r.Header.Get("Idempotency-Key"), r.PathValue("id"), input, a.now())
 		packResponse(w, body, err, 201)
 	})

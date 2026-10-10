@@ -1,5 +1,7 @@
 # DRK Warenbestand
 
+Einfacher HTTP/HTTPS-Teststart: [Docker-Schnellstart](docs/schnellstart-docker.md).
+
 Administrative Verwaltung von Medizinprodukten, Sanitätsmaterial und mobilen Packlisten. Fachliche Grundlage: [Architektur-Blueprint v2](docs/blueprint-v2.md). Seine rechtlichen Quellen wurden beim Umgebungsetup nicht erneut geprüft.
 
 ## Implementierter Entwicklungsstand

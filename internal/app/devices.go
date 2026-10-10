@@ -161,7 +161,7 @@ func deviceRoutes(mux *http.ServeMux, a *authService) {
 		if !mutationBody(w, r, &input, 4096) {
 			return
 		}
-		cookie, _ := r.Cookie(cookieName)
+		cookie, _ := r.Cookie(a.cookieName())
 		body, err := registerDevice(r.Context(), a.db, user.ID, digest(cookie.Value), r.Header.Get("Idempotency-Key"), input, a.now())
 		if err != nil {
 			sendStockError(w, err)

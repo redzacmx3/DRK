@@ -278,7 +278,7 @@ func writeAuthorized(a *authService, w http.ResponseWriter, r *http.Request) (id
 	if !a.sameOrigin(w, r) {
 		return user, false
 	}
-	cookie, _ := r.Cookie(cookieName)
+	cookie, _ := r.Cookie(a.cookieName())
 	var hash string
 	if err = a.db.QueryRowContext(r.Context(), `SELECT csrf_hash FROM sessions WHERE token_hash=?`, digest(cookie.Value)).Scan(&hash); err != nil {
 		a.sessionError(w, err)
@@ -325,7 +325,7 @@ func stockRoutes(mux *http.ServeMux, a *authService) {
 				apiError(w, 400, "invalid_request", "Ungültige Buchungsdaten.")
 				return
 			}
-			cookie, _ := r.Cookie(cookieName)
+			cookie, _ := r.Cookie(a.cookieName())
 			result, err := bookStock(r.Context(), a.db, user.ID, digest(cookie.Value), key, kind, input, a.now())
 			if err != nil {
 				sendStockError(w, err)

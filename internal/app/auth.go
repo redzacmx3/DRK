@@ -161,6 +161,7 @@ type attemptWindow struct {
 type authService struct {
 	db         *sql.DB
 	origin     string
+	localHTTP  bool
 	now        func() time.Time
 	dummy      string
 	mu         sync.Mutex
@@ -170,6 +171,12 @@ type authService struct {
 
 func newAuth(db *sql.DB, origin string) *authService {
 	return &authService{db: db, origin: origin, now: time.Now, dummy: passwordHash(randomToken()), attempts: map[string]attemptWindow{}, loginSlots: make(chan struct{}, 2)}
+}
+func (a *authService) cookieName() string {
+	if a.localHTTP {
+		return "drk-local-session"
+	}
+	return cookieName
 }
 func apiError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
@@ -185,7 +192,7 @@ func (a *authService) sessionError(w http.ResponseWriter, err error) {
 }
 func (a *authService) session(r *http.Request) (identity, error) {
 	var user identity
-	cookie, err := r.Cookie(cookieName)
+	cookie, err := r.Cookie(a.cookieName())
 	if err != nil || len(cookie.Value) != 43 {
 		return user, errUnauthenticated
 	}
@@ -254,7 +261,7 @@ func (a *authService) allowLogin(r *http.Request) bool {
 }
 func (a *authService) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/login", func(w http.ResponseWriter, r *http.Request) {
-		if r.TLS == nil {
+		if r.TLS == nil && !a.localHTTP {
 			apiError(w, 400, "https_required", "Anmeldung benötigt HTTPS.")
 			return
 		}
@@ -317,7 +324,7 @@ func (a *authService) routes(mux *http.ServeMux) {
 			apiError(w, 401, "invalid_credentials", "Benutzername oder Passwort ungültig.")
 			return
 		}
-		if old, err := r.Cookie(cookieName); err == nil {
+		if old, err := r.Cookie(a.cookieName()); err == nil {
 			if _, err = tx.ExecContext(r.Context(), `DELETE FROM sessions WHERE token_hash=?`, digest(old.Value)); err != nil {
 				apiError(w, 503, "unavailable", "Datenbank nicht verfügbar.")
 				return
@@ -335,7 +342,7 @@ func (a *authService) routes(mux *http.ServeMux) {
 			apiError(w, 503, "unavailable", "Datenbank nicht verfügbar.")
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: cookieName, Value: token, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: int(absoluteLifetime.Seconds())})
+		http.SetCookie(w, &http.Cookie{Name: a.cookieName(), Value: token, Path: "/", Secure: !a.localHTTP, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: int(absoluteLifetime.Seconds())})
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"csrf_token": csrf, "username": input.Username})
 	})
@@ -369,7 +376,7 @@ func (a *authService) routes(mux *http.ServeMux) {
 			a.sessionError(w, err)
 			return
 		}
-		cookie, _ := r.Cookie(cookieName)
+		cookie, _ := r.Cookie(a.cookieName())
 		json.NewEncoder(w).Encode(struct {
 			ID       string  `json:"id"`
 			Username string  `json:"username"`
@@ -386,7 +393,7 @@ func (a *authService) routes(mux *http.ServeMux) {
 			a.sessionError(w, err)
 			return
 		}
-		cookie, _ := r.Cookie(cookieName)
+		cookie, _ := r.Cookie(a.cookieName())
 		var expected string
 		if err = a.db.QueryRowContext(r.Context(), `SELECT csrf_hash FROM sessions WHERE token_hash=?`, digest(cookie.Value)).Scan(&expected); err != nil {
 			a.sessionError(w, err)
@@ -400,7 +407,7 @@ func (a *authService) routes(mux *http.ServeMux) {
 			a.sessionError(w, err)
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: cookieName, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+		http.SetCookie(w, &http.Cookie{Name: a.cookieName(), Path: "/", Secure: !a.localHTTP, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 		w.WriteHeader(http.StatusNoContent)
 	})
 }

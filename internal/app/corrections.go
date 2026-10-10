@@ -342,7 +342,7 @@ func correctionRoutes(mux *http.ServeMux, a *authService) {
 		if !correctionBody(w, r, &input) {
 			return
 		}
-		cookie, _ := r.Cookie(cookieName)
+		cookie, _ := r.Cookie(a.cookieName())
 		response, err := bookInventory(r.Context(), a.db, user.ID, digest(cookie.Value), r.Header.Get("Idempotency-Key"), input, a.now())
 		if err != nil {
 			sendStockError(w, err)
@@ -361,7 +361,7 @@ func correctionRoutes(mux *http.ServeMux, a *authService) {
 		if !correctionBody(w, r, &input) {
 			return
 		}
-		cookie, _ := r.Cookie(cookieName)
+		cookie, _ := r.Cookie(a.cookieName())
 		response, err := bookReversal(r.Context(), a.db, user.ID, digest(cookie.Value), r.Header.Get("Idempotency-Key"), r.PathValue("id"), input, a.now())
 		if err != nil {
 			sendStockError(w, err)

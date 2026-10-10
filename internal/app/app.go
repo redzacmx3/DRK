@@ -151,7 +151,13 @@ type Location struct {
 func Handler(db *sql.DB) http.Handler { return HandlerWithOrigin(db, "https://localhost:8080") }
 
 func HandlerWithOrigin(db *sql.DB, origin string) http.Handler {
+	return HandlerWithTransport(db, origin, false)
+}
+
+// HandlerWithTransport permits plaintext only with explicit local HTTP opt-in.
+func HandlerWithTransport(db *sql.DB, origin string, localHTTP bool) http.Handler {
 	auth := newAuth(db, origin)
+	auth.localHTTP = localHTTP
 	mux := http.NewServeMux()
 	auth.routes(mux)
 	stockRoutes(mux, auth)

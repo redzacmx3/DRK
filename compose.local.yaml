@@ -1,0 +1,33 @@
+# Quick local test. HTTPS remains the executable's default; this file opts into HTTP.
+name: drk-local
+x-app: &app
+  build: .
+  image: ${DRK_IMAGE:-drk-inventory:local}
+  user: "1000:1000"
+  volumes:
+    - inventory_data:/data
+    - ${DRK_TLS_DIR:-./var/tls}:/certs:ro
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+services:
+  init:
+    <<: *app
+    command: ["init", "--db", "/data/inventory.db"]
+    restart: "no"
+  inventory:
+    <<: *app
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    command: ["serve", "--db", "/data/inventory.db", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--http=${DRK_HTTP:-true}", "--origin", "${DRK_ORIGIN:-http://localhost:8080}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
+    ports:
+      - "${DRK_BIND_IP:-127.0.0.1}:${DRK_PORT:-8080}:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/app/inventory", "healthcheck", "--url", "${DRK_HEALTH_URL:-http://localhost:8080/health/ready}", "--ca", "${DRK_HEALTH_CA:-}"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+volumes:
+  inventory_data:
+    name: ${DRK_DATA_VOLUME:-drk_local_inventory_data}

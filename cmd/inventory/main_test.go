@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"github.com/redzacmx3/DRK/internal/app"
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestNetworkListenerRequiresExplicitOptIn(t *testing.T) {
 	for _, tt := range []struct {
@@ -18,5 +23,52 @@ func TestNetworkListenerRequiresExplicitOptIn(t *testing.T) {
 				t.Fatalf("allow=%v: %v", tt.allow, err)
 			}
 		})
+	}
+}
+
+func TestFreshInitializationDoesNotUpgradeExistingDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "inventory.db")
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	os.Args = []string{"inventory", "init", "--db", path}
+	if err := run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(); err != nil {
+		t.Fatal(err)
+	}
+	db, err := app.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err = db.Exec("DELETE FROM schema_migrations WHERE version=15"); err != nil {
+		t.Fatal(err)
+	}
+	if err = run(); err == nil {
+		t.Fatal("existing old schema automatically upgraded")
+	}
+	var version int
+	if err = db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != 14 {
+		t.Fatalf("existing schema changed: %d %v", version, err)
+	}
+}
+
+func TestOriginMustMatchExplicitTransport(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	for _, args := range [][]string{
+		{"serve", "--http", "--origin", "https://localhost:8080"},
+		{"serve", "--origin", "http://localhost:8080"},
+		{"serve", "--http", "--origin", "http://localhost:8080/path"},
+	} {
+		path := filepath.Join(t.TempDir(), "must-not-exist.db")
+		os.Args = append(append([]string{"inventory"}, args...), "--db", path)
+		if err := run(); err == nil {
+			t.Fatal("invalid origin accepted")
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatal("invalid transport created database")
+		}
 	}
 }

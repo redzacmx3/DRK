@@ -364,7 +364,7 @@ func scannerRoutes(mux *http.ServeMux, a *authService) {
 		if !mutationBody(w, r, &input, 4096) {
 			return
 		}
-		cookie, _ := r.Cookie(cookieName)
+		cookie, _ := r.Cookie(a.cookieName())
 		body, err := addIdentifier(r.Context(), a.db, user.ID, digest(cookie.Value), r.Header.Get("Idempotency-Key"), input, a.now())
 		packResponse(w, body, err, 201)
 	})
@@ -379,7 +379,7 @@ func scannerRoutes(mux *http.ServeMux, a *authService) {
 		if !mutationBody(w, r, &input, 4096) {
 			return
 		}
-		cookie, _ := r.Cookie(cookieName)
+		cookie, _ := r.Cookie(a.cookieName())
 		body, err := revokeIdentifier(r.Context(), a.db, user.ID, digest(cookie.Value), r.Header.Get("Idempotency-Key"), r.PathValue("id"), input.Note, a.now())
 		packResponse(w, body, err, 201)
 	})
