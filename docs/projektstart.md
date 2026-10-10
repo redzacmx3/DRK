@@ -98,3 +98,7 @@ Separate Excel-Vorlage mit festen Erfassungsnummern, Code-39-Etiketten, USB-Scan
 ## Geräte-Grunddatenänderung (Schema 15)
 
 Versionierte Ergänzung/Korrektur von Bezeichnung, Hersteller, Modell und Serien-/Losnummer durch Geräteverantwortliche. Unveränderliche Registrierung und gemeinsame Geräteereignisse mit Vorher-/Nachher-Werten, Akteur, Zeit, Nachweis und Begründung. Bei Identifikationsänderung nach technischen Nachweisen entsteht eine eigene Quarantänesperre; keine automatische technische Freigabe. UI mit vorgeladenen Werten, Änderungshistorie und unverändertem Wiederholschlüssel bei unklarer Antwort. CSV-Wiederimporte setzen ergänzte Grunddaten nicht zurück.
+
+## Lesender Geräteübersichts-Export
+
+Geschützter CSV-Download aus einem konsistenten Datenbank-Snapshot mit aktuellem Grunddatenstand, Version, Betriebsstätten-/Betreiberbezug, Fristen, Sperren und Anzahl der Einweisungsnachweise. Oberfläche enthält einen direkten Downloadlink. Formelähnliche Zellen und numerische Identifikationsnummern erhalten Textschutz. Keine Migration; begrenzter Überblick, kein vollständiger Medizinproduktebuch-Export oder Einsatzfreigabenachweis. Weiterer Schritt: vollständiger lesbarer Gerätebuch-Export mit Fachhistorie und Nachweismanifest.
