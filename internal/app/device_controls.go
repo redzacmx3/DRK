@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 )
 
 type deviceControlInput struct {
+	Details          *deviceDetails `json:"details,omitempty"`
 	Instructor       string         `json:"instructor,omitempty"`
 	Trainee          string         `json:"trainee,omitempty"`
 	InstructionScope string         `json:"instruction_scope,omitempty"`
@@ -77,7 +79,24 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 			return err
 		}
 		record.Version = version
-		if action == "commission" {
+		if action == "details" {
+			if input.Details == nil {
+				return fmt.Errorf("missing device details")
+			}
+			record.Name = input.Details.Name
+			record.Manufacturer = input.Details.Manufacturer
+			record.Model = input.Details.Model
+			record.SerialOrLot = input.Details.SerialOrLot
+			var proof struct {
+				IdentityReview bool `json:"identity_review"`
+			}
+			if err = json.Unmarshal([]byte(payload), &proof); err != nil {
+				return err
+			}
+			if proof.IdentityReview {
+				record.ActiveBlocks = append(record.ActiveBlocks, deviceBlock{eventID, "quarantine", "", version, "Geräteidentifikation geändert: technische Nachweise und Einweisungen vor Freigabe prüfen. " + input.Note})
+			}
+		} else if action == "commission" {
 			record.CommissionedOn = input.PerformedOn
 			record.Lifecycle = "IN_SERVICE"
 		} else if action == "rules" {
@@ -153,7 +172,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 }
 func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action string, input deviceControlInput, now time.Time) ([]byte, error) {
 	bad := func(message string) ([]byte, error) { return nil, &stockError{400, "invalid_device_control", message} }
-	if input.ExpectedVersion < 0 || !validReason(input.Evidence) || (action != "defect" && (!validReason(input.Qualification) || !validReason(input.Assignment))) || !validReason(input.Note) {
+	if input.ExpectedVersion < 0 || !validReason(input.Evidence) || (action != "defect" && action != "details" && (!validReason(input.Qualification) || !validReason(input.Assignment))) || !validReason(input.Note) {
 		return bad("Nachweis, Qualifikation, betrieblicher Auftrag und Begründung erforderlich.")
 	}
 	canonical, _ := json.Marshal(input)
@@ -193,6 +212,19 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 	}
 	if record.Version != input.ExpectedVersion {
 		return nil, conflict("device_version_conflict", "Geräteakte wurde geändert; erneut prüfen.")
+	}
+	if action != "details" && input.Details != nil {
+		return bad("Grunddaten separat erfassen.")
+	}
+	var beforeDetails *deviceDetails
+	identityReview := false
+	if action == "details" {
+		if err := validateDeviceDetails(input, record); err != nil {
+			return nil, err
+		}
+		before := currentDeviceDetails(record)
+		beforeDetails = &before
+		identityReview = (before.Manufacturer != input.Details.Manufacturer || before.Model != input.Details.Model || before.SerialOrLot != input.Details.SerialOrLot) && (record.CommissionedOn != "" || len(record.Instructions) > 0 || len(record.InspectionDates) > 0)
 	}
 	version := record.Version + 1
 	if action != "instruction" && (input.Instructor != "" || input.Trainee != "" || input.InstructionScope != "" || input.TransferEvidence != "" || input.DocumentVersion != "" || input.DocumentID != "") {
@@ -263,7 +295,7 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		if err = validateDeviceAction(ctx, tx, user, action, &input, record, now); err != nil {
 			return nil, err
 		}
-	} else {
+	} else if action != "details" {
 		return bad("Unbekannter Vorgang.")
 	}
 
@@ -284,9 +316,11 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 	}
 	payload, _ := json.Marshal(struct {
 		deviceControlInput
-		Calculated map[string]Deadline `json:"calculated"`
-		Document   *documentRecord     `json:"document,omitempty"`
-	}{input, calculated, document})
+		Calculated     map[string]Deadline `json:"calculated"`
+		Document       *documentRecord     `json:"document,omitempty"`
+		BeforeDetails  *deviceDetails      `json:"before_details,omitempty"`
+		IdentityReview bool                `json:"identity_review,omitempty"`
+	}{input, calculated, document, beforeDetails, identityReview})
 	event := newID()
 	if _, err = tx.ExecContext(ctx, `INSERT INTO device_control_events VALUES(?,?,?,?,?,?,?)`, event, id, version, action, user, now.UTC().Format(time.RFC3339Nano), string(payload)); err != nil {
 		return nil, err
@@ -352,7 +386,7 @@ func deviceControlRoutes(mux *http.ServeMux, a *authService) {
 		json.NewEncoder(w).Encode(events)
 	})
 
-	for _, action := range []string{"commission", "rules", "inspection", "defect", "release", "instruction"} {
+	for _, action := range []string{"commission", "rules", "inspection", "defect", "release", "instruction", "details"} {
 		route := map[string]string{"inspection": "inspections", "defect": "defects", "release": "releases", "instruction": "instructions"}[action]
 		if route == "" {
 			route = action

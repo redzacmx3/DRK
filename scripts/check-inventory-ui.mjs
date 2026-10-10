@@ -51,7 +51,7 @@ try {
  await call('Page.addScriptToEvaluateOnNewDocument',{source:`
  const realFetch = window.fetch.bind(window);
  window.testBalances = [{batch_id:'batch',location_id:'warehouse',state:'available',quantity:10,usable_quantity:10,version:1,product:'Demo',unit:'Stück',lot:'DEMO',location:'Lager',expires_on:'2030-01-01',blocked:false}];
- window.posted = []; window.devicePosted=[];window.deviceReplies=new Map();window.loseDeviceReply=false;window.testDocuments=[];window.documentPosted=[];window.documentReplies=new Map();window.loseDocumentReply=false;window.deviceVersion=0;window.deviceBlocks=[{id:"recall-block",reason:"recall",note:"Synthetic recall"}];
+ window.posted = []; window.devicePosted=[];window.deviceReplies=new Map();window.loseDeviceReply=false;window.testDocuments=[];window.documentPosted=[];window.documentReplies=new Map();window.loseDocumentReply=false;window.deviceVersion=0;window.deviceDetails={name:"<img src=x onerror=alert(1)>",manufacturer:"Demo",model:"Model",serial_or_lot:"SERIAL"};window.deviceHistory=[];window.deviceBlocks=[{id:"recall-block",reason:"recall",note:"Synthetic recall"}];
  window.stockIntakePosted=[];window.stockIntakePreviewPosted=[];window.stockIntakeReplies=new Map();window.stockIntakeBasis='1'.repeat(64);window.loseStockIntakeReply=false;
  window.intakePosted=[];window.intakePreviewPosted=[];window.intakeReplies=new Map();window.intakeBasis='1'.repeat(64);window.loseIntakeReply=false;
  window.pack = {id:'pack',location_id:'warehouse',version:1,title:'Material',check_valid_hours:24,created_at:new Date().toISOString(),note:'Synthetic',items:[{product_id:'product',quantity:5,min_remaining_days:30}]};
@@ -103,7 +103,7 @@ try {
    if(request.basis_hash!==window.stockIntakeBasis)return new Response(JSON.stringify({message:'Vorschau geändert; CSV erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
    data={import_id:'import',created_count:1,unchanged_count:0,created_device_ids:['created-device']};window.stockIntakeReplies.set(key,data);if(window.loseStockIntakeReply){window.loseStockIntakeReply=false;throw new Error('Lost import reply');}
   }
-  else if (path === '/api/v1/devices') data = [{id:'device',location_id:'warehouse',version:window.deviceVersion,active_blocks:window.deviceBlocks,inventory_number:'SYNTH-1',name:'<img src=x onerror=alert(1)>',manufacturer:'Demo',model:'Model',serial_or_lot:'SERIAL'}];
+  else if (path === '/api/v1/devices') data = [{id:'device',location_id:'warehouse',version:window.deviceVersion,active_blocks:window.deviceBlocks,inventory_number:'SYNTH-1',...window.deviceDetails}];
   else if(path==='/api/v1/devices/device/documents' && !options.method)data=window.testDocuments;
   else if(path==='/api/v1/devices/device/documents' && options.method==='POST'){
    const key=options.headers['Idempotency-Key'],request=JSON.parse(options.body);window.documentPosted.push({key,body:options.body});
@@ -111,11 +111,13 @@ try {
    data={id:'document',device_id:'device',filename:request.filename,size:atob(request.content).length,sha256:'a'.repeat(64),status:'quarantined'};window.testDocuments.push(data);window.documentReplies.set(key,data);
    if(window.loseDocumentReply){window.loseDocumentReply=false;throw new Error('Lost upload response');}
   }
-  else if (path === '/api/v1/devices/device/book') data={id:'device',version:window.deviceVersion,active_blocks:window.deviceBlocks};
-  else if (path === '/api/v1/devices/device/commission' || path === '/api/v1/devices/device/rules' || path === '/api/v1/devices/device/inspections' || path === '/api/v1/devices/device/defects' || path === '/api/v1/devices/device/releases' || path === '/api/v1/devices/device/instructions') {
+  else if (path === '/api/v1/devices/device/book') data={id:'device',version:window.deviceVersion,active_blocks:window.deviceBlocks,...window.deviceDetails};
+  else if(path==='/api/v1/devices/device/events')data=window.deviceHistory;
+  else if (path === '/api/v1/devices/device/details' || path === '/api/v1/devices/device/commission' || path === '/api/v1/devices/device/rules' || path === '/api/v1/devices/device/inspections' || path === '/api/v1/devices/device/defects' || path === '/api/v1/devices/device/releases' || path === '/api/v1/devices/device/instructions') {
    const key=options.headers['Idempotency-Key'],request=JSON.parse(options.body);window.devicePosted.push({path,key,body:options.body});
    if(window.deviceReplies.has(key))return new Response(JSON.stringify(window.deviceReplies.get(key)),{status:200,headers:{'Content-Type':'application/json'}});
    if(request.expected_version!==window.deviceVersion)return new Response(JSON.stringify({message:'Geräteakte wurde geändert; erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
+   if(path.endsWith('/details')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'details',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:{...request,before_details:window.deviceDetails,identity_review:true}});window.deviceDetails={...request.details};}
    data={id:'device',version:++window.deviceVersion};window.deviceReplies.set(key,data);
    if(window.loseDeviceReply){window.loseDeviceReply=false;throw new Error('Lost device response');}
   }
@@ -306,6 +308,23 @@ try {
  await until('window.devicePosted.length === 8');
  assert.deepEqual(await evaluate('({path:window.devicePosted[7].path,doc:JSON.parse(window.devicePosted[7].body).document_id,scope:JSON.parse(window.devicePosted[7].body).instruction_scope})'),{path:'/api/v1/devices/device/instructions',doc:'document',scope:'device'});
  await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
+ await evaluate("document.querySelector('#device-begin').click()");
+ await until("deviceDraft && !document.querySelector('#device-control-form button[type=submit]').disabled");
+ await evaluate("document.querySelector('#device-action').value='details';document.querySelector('#device-action').dispatchEvent(new Event('change'))");
+ assert.equal(await evaluate("document.querySelector('#device-details-fields').hidden"),false);
+ assert.equal(await evaluate("document.querySelector('#device-detail-serial').value"),'SERIAL');
+ assert.equal(await evaluate("document.querySelector('#device-qualification').required"),false);
+ await evaluate("document.querySelector('#device-detail-name').value='<svg onload=alert(1)>';document.querySelector('#device-detail-model').value='Corrected model';window.loseDeviceReply=true;document.querySelector('#device-control-form').requestSubmit()");
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#device-detail-model').disabled"),true);
+ await evaluate("document.querySelector('#device-control-form').requestSubmit()");
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
+ assert.deepEqual(await evaluate('window.devicePosted.at(-1)'),await evaluate('window.devicePosted.at(-2)'));
+ assert.deepEqual(await evaluate('JSON.parse(window.devicePosted.at(-1).body).details'),{name:'<svg onload=alert(1)>',manufacturer:'Demo',model:'Corrected model',serial_or_lot:'SERIAL'});
+ assert.equal(await evaluate('JSON.parse(window.devicePosted.at(-1).body).qualification===undefined'),true);
+ await until("document.querySelector('#device-history').textContent.includes('Corrected model')");
+ assert.equal(await evaluate("document.querySelector('#device-history svg')===null"),true);
+ assert.equal(await evaluate("document.querySelector('#device-history').textContent.includes('Quarantänesperre')"),true);
  assert.equal(await evaluate("document.querySelector('#device-import').hidden"),false);
  assert.equal(await evaluate("document.querySelector('#device-import-commit').disabled"),true);
  await evaluate("const intakeTransfer=new DataTransfer();intakeTransfer.items.add(new File(['Inventarnummer;Bezeichnung;Standort;Seriennummer\\nCSV-UI-1;Equipment;Offline Lager;000123\\n'],'intake.csv',{type:'text/csv'}));document.querySelector('#device-import-file').files=intakeTransfer.files;document.querySelector('#device-import-file').dispatchEvent(new Event('change'));document.querySelector('#device-import-form').requestSubmit()");
@@ -367,7 +386,7 @@ try {
  assert.equal(await evaluate("JSON.parse(window.stockIntakePosted[2].body).csv.includes('000123')"),true);
  await evaluate("signedOut('Test logout')");
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');
