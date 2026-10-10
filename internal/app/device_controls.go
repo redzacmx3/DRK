@@ -11,27 +11,28 @@ import (
 )
 
 type deviceControlInput struct {
-	Details          *deviceDetails `json:"details,omitempty"`
-	Instructor       string         `json:"instructor,omitempty"`
-	Trainee          string         `json:"trainee,omitempty"`
-	InstructionScope string         `json:"instruction_scope,omitempty"`
-	TransferEvidence string         `json:"transfer_evidence,omitempty"`
-	DocumentVersion  string         `json:"document_version,omitempty"`
-	DocumentID       string         `json:"document_id,omitempty"`
-	ExpectedVersion  int            `json:"expected_version"`
-	PerformedOn      string         `json:"performed_on,omitempty"`
-	Evidence         string         `json:"evidence"`
-	Qualification    string         `json:"qualification"`
-	Assignment       string         `json:"assignment"`
-	Note             string         `json:"note"`
-	ControlType      string         `json:"control_type,omitempty"`
-	Result           string         `json:"result,omitempty"`
-	Examiner         string         `json:"examiner,omitempty"`
-	Method           string         `json:"method,omitempty"`
-	NextDueOn        string         `json:"next_due_on,omitempty"`
-	BlockReason      string         `json:"block_reason,omitempty"`
-	BlockID          string         `json:"block_id,omitempty"`
-	Rules            []DeadlineRule `json:"rules,omitempty"`
+	MasterData       *deviceMasterData `json:"master_data,omitempty"`
+	Details          *deviceDetails    `json:"details,omitempty"`
+	Instructor       string            `json:"instructor,omitempty"`
+	Trainee          string            `json:"trainee,omitempty"`
+	InstructionScope string            `json:"instruction_scope,omitempty"`
+	TransferEvidence string            `json:"transfer_evidence,omitempty"`
+	DocumentVersion  string            `json:"document_version,omitempty"`
+	DocumentID       string            `json:"document_id,omitempty"`
+	ExpectedVersion  int               `json:"expected_version"`
+	PerformedOn      string            `json:"performed_on,omitempty"`
+	Evidence         string            `json:"evidence"`
+	Qualification    string            `json:"qualification"`
+	Assignment       string            `json:"assignment"`
+	Note             string            `json:"note"`
+	ControlType      string            `json:"control_type,omitempty"`
+	Result           string            `json:"result,omitempty"`
+	Examiner         string            `json:"examiner,omitempty"`
+	Method           string            `json:"method,omitempty"`
+	NextDueOn        string            `json:"next_due_on,omitempty"`
+	BlockReason      string            `json:"block_reason,omitempty"`
+	BlockID          string            `json:"block_id,omitempty"`
+	Rules            []DeadlineRule    `json:"rules,omitempty"`
 }
 
 func readDevice(ctx context.Context, tx *sql.Tx, user, id string, now time.Time) (deviceRecord, error) {
@@ -79,7 +80,13 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 			return err
 		}
 		record.Version = version
-		if action == "details" {
+		if action == "master_data" {
+			if input.MasterData == nil {
+				return fmt.Errorf("missing master data")
+			}
+			copy := *input.MasterData
+			record.MasterData = &copy
+		} else if action == "details" {
 			if input.Details == nil {
 				return fmt.Errorf("missing device details")
 			}
@@ -172,7 +179,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 }
 func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action string, input deviceControlInput, now time.Time) ([]byte, error) {
 	bad := func(message string) ([]byte, error) { return nil, &stockError{400, "invalid_device_control", message} }
-	if input.ExpectedVersion < 0 || !validReason(input.Evidence) || (action != "defect" && action != "details" && (!validReason(input.Qualification) || !validReason(input.Assignment))) || !validReason(input.Note) {
+	if input.ExpectedVersion < 0 || !validReason(input.Evidence) || (action != "defect" && action != "details" && action != "master_data" && (!validReason(input.Qualification) || !validReason(input.Assignment))) || !validReason(input.Note) {
 		return bad("Nachweis, Qualifikation, betrieblicher Auftrag und Begründung erforderlich.")
 	}
 	canonical, _ := json.Marshal(input)
@@ -215,6 +222,17 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 	}
 	if action != "details" && input.Details != nil {
 		return bad("Grunddaten separat erfassen.")
+	}
+	var beforeMasterData *deviceMasterData
+	if action != "master_data" && input.MasterData != nil {
+		return bad("Stammdaten separat erfassen.")
+	}
+	if action == "master_data" {
+		if err := validateMasterData(input, record, now); err != nil {
+			return nil, err
+		}
+		before := currentMasterData(record)
+		beforeMasterData = &before
 	}
 	var beforeDetails *deviceDetails
 	identityReview := false
@@ -295,7 +313,7 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		if err = validateDeviceAction(ctx, tx, user, action, &input, record, now); err != nil {
 			return nil, err
 		}
-	} else if action != "details" {
+	} else if action != "details" && action != "master_data" {
 		return bad("Unbekannter Vorgang.")
 	}
 
@@ -316,11 +334,12 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 	}
 	payload, _ := json.Marshal(struct {
 		deviceControlInput
-		Calculated     map[string]Deadline `json:"calculated"`
-		Document       *documentRecord     `json:"document,omitempty"`
-		BeforeDetails  *deviceDetails      `json:"before_details,omitempty"`
-		IdentityReview bool                `json:"identity_review,omitempty"`
-	}{input, calculated, document, beforeDetails, identityReview})
+		Calculated       map[string]Deadline `json:"calculated"`
+		Document         *documentRecord     `json:"document,omitempty"`
+		BeforeMasterData *deviceMasterData   `json:"before_master_data,omitempty"`
+		BeforeDetails    *deviceDetails      `json:"before_details,omitempty"`
+		IdentityReview   bool                `json:"identity_review,omitempty"`
+	}{input, calculated, document, beforeMasterData, beforeDetails, identityReview})
 	event := newID()
 	if _, err = tx.ExecContext(ctx, `INSERT INTO device_control_events VALUES(?,?,?,?,?,?,?)`, event, id, version, action, user, now.UTC().Format(time.RFC3339Nano), string(payload)); err != nil {
 		return nil, err
@@ -386,8 +405,8 @@ func deviceControlRoutes(mux *http.ServeMux, a *authService) {
 		json.NewEncoder(w).Encode(events)
 	})
 
-	for _, action := range []string{"commission", "rules", "inspection", "defect", "release", "instruction", "details"} {
-		route := map[string]string{"inspection": "inspections", "defect": "defects", "release": "releases", "instruction": "instructions"}[action]
+	for _, action := range []string{"commission", "rules", "inspection", "defect", "release", "instruction", "details", "master_data"} {
+		route := map[string]string{"inspection": "inspections", "defect": "defects", "release": "releases", "instruction": "instructions", "master_data": "master-data"}[action]
 		if route == "" {
 			route = action
 		}

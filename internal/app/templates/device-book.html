@@ -38,6 +38,8 @@
 <td>{{.Device.Lifecycle}}</td>
 </tr>
 </table>
+<h2>Bestandsverzeichnis-Stammdaten</h2>
+{{if .Device.MasterData}}<table><tr><th>Geräteart</th><td>{{.Device.MasterData.AssetType}}</td></tr><tr><th>Anschaffungsjahr</th><td>{{.Device.MasterData.AcquisitionYear}}</td></tr><tr><th>Wirtschaftsakteur: Funktion</th><td>{{.Device.MasterData.ActorRole}}</td></tr><tr><th>Name / Firma</th><td>{{.Device.MasterData.ActorName}}</td></tr><tr><th>Anschrift laut Nachweis</th><td>{{.Device.MasterData.ActorAddress}}</td></tr><tr><th>Betriebliche Zuordnung</th><td>{{.Device.MasterData.OperationalAssignment}}</td></tr></table>{{else}}<p>Noch keine Stammdaten ergänzt.</p>{{end}}
 <h2>Einordnung und Datenlücken</h2>
 <ul>{{range .Warnings}}<li>{{.}}</li>{{end}}</ul>
 <h2>Kontrollfristen</h2>

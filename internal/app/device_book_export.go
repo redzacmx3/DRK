@@ -11,6 +11,7 @@ import (
 	"html/template"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -87,7 +88,7 @@ func bookProofFields(proof json.RawMessage) []bookProofField {
 	if json.Unmarshal(proof, &values) != nil {
 		return []bookProofField{{"Originaldaten", string(proof)}}
 	}
-	labels := map[string]string{"name": "Bezeichnung", "manufacturer": "Hersteller", "model": "Modell", "serial_or_lot": "Serien-/Losnummer", "inventory_number": "Inventarnummer", "location_id": "Lagerort-ID", "performed_on": "Fachliches Datum", "evidence": "Nachweisreferenz", "qualification": "Qualifikationsreferenz", "assignment": "Betrieblicher Auftrag", "note": "Begründung / Notiz", "control_type": "Kontrollart", "result": "Ergebnis", "examiner": "Prüfer / Firma", "method": "Methode / Messwerte", "block_reason": "Sperrgrund", "block_id": "Betroffene Sperre", "rules": "Bestätigte Kontrollregeln", "calculated": "Berechnete Fristen", "instructor": "Einweisende Person", "trainee": "Eingewiesene Person", "instruction_scope": "Geltungsbereich der Einweisung", "transfer_evidence": "Übertragbarkeitsnachweis", "document_version": "Unterlagenversion", "document_id": "Dokument-ID", "document": "Gebundener Anhangsnachweis", "details": "Neue Grunddaten", "before_details": "Grunddaten vor der Änderung", "identity_review": "Identifikationsänderung erfordert Prüfung", "expected_version": "Bearbeitungsbasis: Geräteversion", "filename": "Dateiname", "media_type": "Dateityp", "sha256": "SHA-256", "size": "Dateigröße in Bytes", "status": "Status", "created_by": "Akteur-ID", "created_at": "Erfassungszeitpunkt", "id": "Objekt-ID", "device_id": "Geräte-ID"}
+	labels := map[string]string{"master_data": "Neue Stammdaten", "before_master_data": "Stammdaten vor der Änderung", "name": "Bezeichnung", "manufacturer": "Hersteller", "model": "Modell", "serial_or_lot": "Serien-/Losnummer", "inventory_number": "Inventarnummer", "location_id": "Lagerort-ID", "performed_on": "Fachliches Datum", "evidence": "Nachweisreferenz", "qualification": "Qualifikationsreferenz", "assignment": "Betrieblicher Auftrag", "note": "Begründung / Notiz", "control_type": "Kontrollart", "result": "Ergebnis", "examiner": "Prüfer / Firma", "method": "Methode / Messwerte", "block_reason": "Sperrgrund", "block_id": "Betroffene Sperre", "rules": "Bestätigte Kontrollregeln", "calculated": "Berechnete Fristen", "instructor": "Einweisende Person", "trainee": "Eingewiesene Person", "instruction_scope": "Geltungsbereich der Einweisung", "transfer_evidence": "Übertragbarkeitsnachweis", "document_version": "Unterlagenversion", "document_id": "Dokument-ID", "document": "Gebundener Anhangsnachweis", "details": "Neue Grunddaten", "before_details": "Grunddaten vor der Änderung", "identity_review": "Identifikationsänderung erfordert Prüfung", "expected_version": "Bearbeitungsbasis: Geräteversion", "filename": "Dateiname", "media_type": "Dateityp", "sha256": "SHA-256", "size": "Dateigröße in Bytes", "status": "Status", "created_by": "Akteur-ID", "created_at": "Erfassungszeitpunkt", "id": "Objekt-ID", "device_id": "Geräte-ID"}
 	keys := []string{}
 	for key := range values {
 		keys = append(keys, key)
@@ -118,7 +119,7 @@ var deviceBookTemplate = template.Must(template.New("device-book.html").Funcs(te
 	"fields": bookProofFields,
 	"proof":  func(value any) string { b, _ := json.MarshalIndent(value, "", "  "); return string(b) },
 	"action": func(value string) string {
-		names := map[string]string{"registration": "Registrierung", "details": "Grunddatenänderung", "commission": "Inbetriebnahme", "rules": "Kontrollregeln", "inspection": "Prüfung", "defect": "Sperrmeldung", "release": "Sperrenfreigabe", "instruction": "Einweisung", "document": "Anhang erfasst"}
+		names := map[string]string{"registration": "Registrierung", "master_data": "Bestandsverzeichnis-Stammdaten", "details": "Grunddatenänderung", "commission": "Inbetriebnahme", "rules": "Kontrollregeln", "inspection": "Prüfung", "defect": "Sperrmeldung", "release": "Sperrenfreigabe", "instruction": "Einweisung", "document": "Anhang erfasst"}
 		if name := names[value]; name != "" {
 			return name
 		}
@@ -152,7 +153,7 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 		now := a.now()
 		book := deviceBookExport{FormatVersion: 1, GeneratedAt: now.UTC().Format(time.RFC3339Nano), Documents: []documentRecord{}, Warnings: []string{
 			"Alle gespeicherten Einträge dieser Geräteakte im gemeinsamen Datenbankstand. Keine vollständige Einsatzfreigabe.",
-			"Noch nicht strukturiert erfasst: Anschaffungsjahr, Herstelleranschrift/Wirtschaftsakteure, Buchpflichtbewertung, Instandhaltungen, Behörden-/Herstellermeldungen, Außerbetriebnahme und Aufbewahrungsfrist. Rechtliche Vollständigkeit ist nicht bestätigt.",
+			"Noch nicht strukturiert erfasst: Buchpflichtbewertung, Instandhaltungen, Behörden-/Herstellermeldungen, Außerbetriebnahme und Aufbewahrungsfrist. Rechtliche Vollständigkeit ist nicht bestätigt.",
 			"Qualifikations-, Auftrags- und Prüfbezüge sind erfasste Referenzen; ihre unabhängige Prüfung ist nicht bestätigt.",
 			"Anhangsinhalte in Quarantäne sind ausgeschlossen; Metadaten, Prüfsummen und Erfassungshistorie sind enthalten.",
 			"SHA-256 prüft Dateikonsistenz; keine digitale Signatur oder Bestätigung der Herkunft."}}
@@ -180,6 +181,9 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 		if err != nil {
 			sendExportError(w, err)
 			return
+		}
+		if gaps := masterDataGaps(book.Device); len(gaps) > 0 {
+			book.Warnings = append(book.Warnings, "Ungeklärte Bestandsverzeichnis-Stammdaten: "+strings.Join(gaps, ", ")+".")
 		}
 		var provenance bookIntakeProvenance
 		err = tx.QueryRowContext(ctx, `SELECT asset_kind,observed_condition,external_code,source_location,row_hash FROM device_intake WHERE device_id=?`, id).Scan(&provenance.Kind, &provenance.Condition, &provenance.ExternalCode, &provenance.SourceLocation, &provenance.RowHash)

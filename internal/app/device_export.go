@@ -99,7 +99,7 @@ func deviceExportRoutes(mux *http.ServeMux, a *authService) {
 		writer := csv.NewWriter(&data)
 		writer.Comma = ';'
 		writer.UseCRLF = true
-		writer.Write([]string{"Datenstand UTC", "Betreiber", "Betriebsstätte", "Lagerort", "Geräte-ID", "Inventarnummer", "Bezeichnung", "Hersteller", "Modell", "Serien-/Losnummer", "Geräteversion", "Inbetriebnahme", "Lebenszyklus", "STK Status", "STK Frist", "MTK Status", "MTK Frist", "Elektrisch Status", "Elektrisch Frist", "Aktive Sperren", "Einweisungsnachweise", "Bewertung", "Hinweise"})
+		writer.Write([]string{"Datenstand UTC", "Betreiber", "Betriebsstätte", "Lagerort", "Geräte-ID", "Inventarnummer", "Bezeichnung", "Hersteller", "Modell", "Serien-/Losnummer", "Geräteversion", "Inbetriebnahme", "Lebenszyklus", "STK Status", "STK Frist", "MTK Status", "MTK Frist", "Elektrisch Status", "Elektrisch Frist", "Aktive Sperren", "Einweisungsnachweise", "Bewertung", "Hinweise", "Geräteart", "Anschaffungsjahr", "Wirtschaftsakteur Funktion", "Wirtschaftsakteur Firma", "Wirtschaftsakteur Anschrift", "Betriebliche Zuordnung"})
 		for i := range entries {
 			e := &entries[i]
 			d := &e.record
@@ -112,6 +112,8 @@ func deviceExportRoutes(mux *http.ServeMux, a *authService) {
 				blocks = append(blocks, b.Reason+": "+b.Note)
 			}
 			record := []string{now.UTC().Format(time.RFC3339), e.operator, e.site, e.location, d.ID, csvIdentifier(d.InventoryNumber), d.Name, d.Manufacturer, d.Model, csvIdentifier(d.SerialOrLot), strconv.Itoa(d.Version), d.CommissionedOn, d.Lifecycle, d.Controls["STK"].State, d.Controls["STK"].DueOn, d.Controls["MTK"].State, d.Controls["MTK"].DueOn, d.Controls["electrical"].State, d.Controls["electrical"].DueOn, strings.Join(blocks, " | "), strconv.Itoa(len(d.Instructions)), "Vollständige Einsatzfreigabe ungeklärt", strings.Join(d.Reasons, " | ")}
+			master := currentMasterData(*d)
+			record = append(record, master.AssetType, master.AcquisitionYear, master.ActorRole, master.ActorName, master.ActorAddress, master.OperationalAssignment)
 			for n := range record {
 				record[n] = csvText(record[n])
 			}

@@ -24,11 +24,15 @@ func validateDeviceDetails(input deviceControlInput, record deviceRecord) error 
 			return bad("Grunddaten auf 160 Zeichen begrenzen, ohne Rand-Leerzeichen oder Steuerzeichen.")
 		}
 	}
-	if input.PerformedOn != "" || input.ControlType != "" || input.Result != "" || input.Examiner != "" || input.Method != "" || input.NextDueOn != "" || input.BlockReason != "" || input.BlockID != "" || len(input.Rules) > 0 || input.Instructor != "" || input.Trainee != "" || input.InstructionScope != "" || input.TransferEvidence != "" || input.DocumentVersion != "" || input.DocumentID != "" || input.Qualification != "" || input.Assignment != "" {
+	if hasTechnicalControlFields(input) {
 		return bad("Grunddatenänderung getrennt von Prüfungen, Einweisungen und Freigaben erfassen.")
 	}
 	if *input.Details == currentDeviceDetails(record) {
 		return conflict("device_details_unchanged", "Keine Grunddaten geändert.")
 	}
 	return nil
+}
+
+func hasTechnicalControlFields(input deviceControlInput) bool {
+	return input.PerformedOn != "" || input.ControlType != "" || input.Result != "" || input.Examiner != "" || input.Method != "" || input.NextDueOn != "" || input.BlockReason != "" || input.BlockID != "" || len(input.Rules) > 0 || input.Instructor != "" || input.Trainee != "" || input.InstructionScope != "" || input.TransferEvidence != "" || input.DocumentVersion != "" || input.DocumentID != "" || input.Qualification != "" || input.Assignment != ""
 }
