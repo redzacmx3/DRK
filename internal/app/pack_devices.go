@@ -133,6 +133,10 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 			assessed.Status = "blocked"
 			assessed.Reasons = append(assessed.Reasons, "Gerät befindet sich nicht am Sollort.")
 		}
+		if record.Decommission != nil {
+			assessed.Status = "blocked"
+			assessed.Reasons = append(assessed.Reasons, "Gerät außer Betrieb seit "+record.Decommission.PerformedOn)
+		}
 		if record.CommissionedOn == "" {
 			if assessed.Status != "blocked" {
 				assessed.Status = "unknown"

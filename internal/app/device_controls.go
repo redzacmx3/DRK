@@ -64,6 +64,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 		return err
 	}
 	defer rows.Close()
+	record.Decommission = nil
 	record.Maintenances = nil
 	record.Instructions = []instructionProof{}
 	record.ActiveBlocks = []deviceBlock{}
@@ -108,6 +109,13 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 		} else if action == "commission" {
 			record.CommissionedOn = input.PerformedOn
 			record.Lifecycle = "IN_SERVICE"
+		} else if action == "decommission" {
+			date, err := civilDate(input.PerformedOn)
+			if err != nil {
+				return err
+			}
+			record.Lifecycle = "DECOMMISSIONED"
+			record.Decommission = &decommissionProof{eventID, version, input.PerformedOn, date.AddDate(5, 0, 0).Format("2006-01-02"), input.Evidence}
 		} else if action == "rules" {
 			record.EffectiveRules = map[string]DeadlineRule{}
 			for _, rule := range input.Rules {
@@ -169,6 +177,9 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 		return nil
 	}
 	record.Reasons = []string{"Vollständige Gerätefreigabe noch nicht bewertet"}
+	if record.Decommission != nil {
+		record.Reasons = append(record.Reasons, "Gerät außer Betrieb seit "+record.Decommission.PerformedOn)
+	}
 	if record.CommissionedOn == "" {
 		record.Reasons = append(record.Reasons, "Inbetriebnahmenachweis fehlt")
 	}
@@ -198,7 +209,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 }
 func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action string, input deviceControlInput, now time.Time) ([]byte, error) {
 	bad := func(message string) ([]byte, error) { return nil, &stockError{400, "invalid_device_control", message} }
-	if input.ExpectedVersion < 0 || !validReason(input.Evidence) || (action != "defect" && action != "details" && action != "master_data" && (!validReason(input.Qualification) || !validReason(input.Assignment))) || !validReason(input.Note) {
+	if input.ExpectedVersion < 0 || !validReason(input.Evidence) || (action != "defect" && action != "details" && action != "master_data" && action != "decommission" && (!validReason(input.Qualification) || !validReason(input.Assignment))) || !validReason(input.Note) {
 		return bad("Nachweis, Qualifikation, betrieblicher Auftrag und Begründung erforderlich.")
 	}
 	canonical, _ := json.Marshal(input)
@@ -238,6 +249,14 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 	}
 	if record.Version != input.ExpectedVersion {
 		return nil, conflict("device_version_conflict", "Geräteakte wurde geändert; erneut prüfen.")
+	}
+	if record.Decommission != nil && (action == "commission" || action == "rules" || action == "inspection" || action == "instruction" || action == "maintenance") {
+		return nil, conflict("device_decommissioned", "Gerät ist außer Betrieb; neue technische Nachweise sind gesperrt.")
+	}
+	if action == "decommission" {
+		if err := validateDecommission(input, record, now); err != nil {
+			return nil, err
+		}
 	}
 	if action != "details" && input.Details != nil {
 		return bad("Grunddaten separat erfassen.")
@@ -340,7 +359,7 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		if err = validateDeviceAction(ctx, tx, user, action, &input, record, now); err != nil {
 			return nil, err
 		}
-	} else if action != "details" && action != "master_data" && action != "maintenance" {
+	} else if action != "details" && action != "master_data" && action != "maintenance" && action != "decommission" {
 		return bad("Unbekannter Vorgang.")
 	}
 
@@ -435,7 +454,7 @@ func deviceControlRoutes(mux *http.ServeMux, a *authService) {
 		json.NewEncoder(w).Encode(events)
 	})
 
-	for _, action := range []string{"commission", "rules", "inspection", "defect", "release", "instruction", "details", "master_data", "maintenance"} {
+	for _, action := range []string{"commission", "rules", "inspection", "defect", "release", "instruction", "details", "master_data", "maintenance", "decommission"} {
 		route := map[string]string{"inspection": "inspections", "defect": "defects", "release": "releases", "instruction": "instructions", "master_data": "master-data", "maintenance": "maintenance"}[action]
 		if route == "" {
 			route = action

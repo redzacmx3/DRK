@@ -119,7 +119,7 @@ var deviceBookTemplate = template.Must(template.New("device-book.html").Funcs(te
 	"fields": bookProofFields,
 	"proof":  func(value any) string { b, _ := json.MarshalIndent(value, "", "  "); return string(b) },
 	"action": func(value string) string {
-		names := map[string]string{"maintenance": "Instandhaltung", "registration": "Registrierung", "master_data": "Bestandsverzeichnis-Stammdaten", "details": "Grunddatenänderung", "commission": "Inbetriebnahme", "rules": "Kontrollregeln", "inspection": "Prüfung", "defect": "Sperrmeldung", "release": "Sperrenfreigabe", "instruction": "Einweisung", "document": "Anhang erfasst"}
+		names := map[string]string{"decommission": "Außerbetriebnahme", "maintenance": "Instandhaltung", "registration": "Registrierung", "master_data": "Bestandsverzeichnis-Stammdaten", "details": "Grunddatenänderung", "commission": "Inbetriebnahme", "rules": "Kontrollregeln", "inspection": "Prüfung", "defect": "Sperrmeldung", "release": "Sperrenfreigabe", "instruction": "Einweisung", "document": "Anhang erfasst"}
 		if name := names[value]; name != "" {
 			return name
 		}
@@ -153,7 +153,7 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 		now := a.now()
 		book := deviceBookExport{FormatVersion: 1, GeneratedAt: now.UTC().Format(time.RFC3339Nano), Documents: []documentRecord{}, Warnings: []string{
 			"Alle gespeicherten Einträge dieser Geräteakte im gemeinsamen Datenbankstand. Keine vollständige Einsatzfreigabe.",
-			"Noch nicht strukturiert erfasst: Buchpflichtbewertung, Behörden-/Herstellermeldungen, Außerbetriebnahme und Aufbewahrungsfrist. Rechtliche Vollständigkeit ist nicht bestätigt.",
+			"Noch nicht strukturiert erfasst: Buchpflichtbewertung, Behörden-/Herstellermeldungen, vollständiger Aufbewahrungsplan und ergänzende Buchkorrekturen. Rechtliche Vollständigkeit ist nicht bestätigt.",
 			"Qualifikations-, Auftrags- und Prüfbezüge sind erfasste Referenzen; ihre unabhängige Prüfung ist nicht bestätigt.",
 			"Anhangsinhalte in Quarantäne sind ausgeschlossen; Metadaten, Prüfsummen und Erfassungshistorie sind enthalten.",
 			"SHA-256 prüft Dateikonsistenz; keine digitale Signatur oder Bestätigung der Herkunft."}}

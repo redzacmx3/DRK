@@ -113,11 +113,12 @@ try {
   }
   else if (path === '/api/v1/devices/device/book') data={id:'device',version:window.deviceVersion,active_blocks:window.deviceBlocks,master_data:window.deviceMasterData,...window.deviceDetails};
   else if(path==='/api/v1/devices/device/events')data=window.deviceHistory;
-  else if (path === '/api/v1/devices/device/maintenance' || path === '/api/v1/devices/device/master-data' || path === '/api/v1/devices/device/details' || path === '/api/v1/devices/device/commission' || path === '/api/v1/devices/device/rules' || path === '/api/v1/devices/device/inspections' || path === '/api/v1/devices/device/defects' || path === '/api/v1/devices/device/releases' || path === '/api/v1/devices/device/instructions') {
+  else if (path === '/api/v1/devices/device/decommission' || path === '/api/v1/devices/device/maintenance' || path === '/api/v1/devices/device/master-data' || path === '/api/v1/devices/device/details' || path === '/api/v1/devices/device/commission' || path === '/api/v1/devices/device/rules' || path === '/api/v1/devices/device/inspections' || path === '/api/v1/devices/device/defects' || path === '/api/v1/devices/device/releases' || path === '/api/v1/devices/device/instructions') {
    const key=options.headers['Idempotency-Key'],request=JSON.parse(options.body);window.devicePosted.push({path,key,body:options.body});
    if(window.deviceReplies.has(key))return new Response(JSON.stringify(window.deviceReplies.get(key)),{status:200,headers:{'Content-Type':'application/json'}});
    if(request.expected_version!==window.deviceVersion)return new Response(JSON.stringify({message:'Geräteakte wurde geändert; erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
    if(path.endsWith('/details')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'details',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:{...request,before_details:window.deviceDetails,identity_review:true}});window.deviceDetails={...request.details};}
+   if(path.endsWith('/decommission')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'decommission',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:request});}
    if(path.endsWith('/maintenance')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'maintenance',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:request});}
    if(path.endsWith('/master-data')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'master_data',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:{...request,before_master_data:window.deviceMasterData}});window.deviceMasterData={...request.master_data};}
    data={id:'device',version:++window.deviceVersion};window.deviceReplies.set(key,data);
@@ -210,6 +211,7 @@ try {
  await until('window.packPosted.length===5');
  assert.equal(await evaluate('window.packPosted[4].request.basis_hash'),'d'.repeat(64));
  await until("document.querySelector('#status').textContent.includes('Datenstand geändert')");
+ await until('packPending === null');
  await evaluate("document.querySelector('#physical-device-start').click()");
  await until("document.querySelectorAll('#physical-device-results select').length===3 && !document.querySelector('.device-present').disabled");
  await evaluate("window.losePackReply=true;for(const s of document.querySelectorAll('#physical-device-results select'))s.value='passed';document.querySelector('.device-functional').value='failed';document.querySelector('#physical-device-note').value='Funktion fehlt';document.querySelector('#physical-device-check').requestSubmit()");
@@ -354,6 +356,18 @@ try {
  assert.deepEqual(await evaluate("({path:window.devicePosted[13].path,kind:JSON.parse(window.devicePosted[13].body).maintenance_kind,doc:JSON.parse(window.devicePosted[13].body).document_id})"),{path:'/api/v1/devices/device/maintenance',kind:'repair',doc:'document'});
  await until("document.querySelector('#device-history').textContent.includes('Synthetic company')");
  assert.equal(await evaluate("document.querySelector('#device-history svg')===null"),true);
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
+ await evaluate("document.querySelector('#device-begin').click()");
+ await until("deviceDraft && !document.querySelector('#device-control-form button[type=submit]').disabled");
+ await evaluate("document.querySelector('#device-action').value='decommission';document.querySelector('#device-action').dispatchEvent(new Event('change'));document.querySelector('#device-date').value='2024-02-29';window.loseDeviceReply=true;document.querySelector('#device-control-form').requestSubmit()");
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#device-date').disabled"),true);
+ await evaluate("document.querySelector('#device-control-form').requestSubmit()");
+ await until('window.devicePosted.length === 16');
+ assert.deepEqual(await evaluate('window.devicePosted[14]'),await evaluate('window.devicePosted[15]'));
+ assert.equal(await evaluate('window.devicePosted[15].path'),'/api/v1/devices/device/decommission');
+ assert.equal(await evaluate("'qualification' in JSON.parse(window.devicePosted[15].body)"),false);
+ await until("document.querySelector('#device-history').textContent.includes('Außerbetriebnahme: 2024-02-29')");
  assert.equal(await evaluate("document.querySelector('#device-import').hidden"),false);
  assert.equal(await evaluate("document.querySelector('#device-import-commit').disabled"),true);
  await evaluate("const intakeTransfer=new DataTransfer();intakeTransfer.items.add(new File(['Inventarnummer;Bezeichnung;Standort;Seriennummer\\nCSV-UI-1;Equipment;Offline Lager;000123\\n'],'intake.csv',{type:'text/csv'}));document.querySelector('#device-import-file').files=intakeTransfer.files;document.querySelector('#device-import-file').dispatchEvent(new Event('change'));document.querySelector('#device-import-form').requestSubmit()");

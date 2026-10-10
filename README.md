@@ -292,7 +292,7 @@ Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehö
 
 Die Zustände sind `UNKNOWN`, `NOT_APPLICABLE`, `CURRENT`, `DUE_SOON` und `OVERDUE`. Eine Frist gilt bis einschließlich des fachlichen Tages in `Europe/Berlin`; die Vorwarnschwelle ist ein expliziter Parameter. Fehlendes Basisdatum bleibt ungeklärt. Die Funktion beurteilt keine Gerätesperren und erteilt keine Einsatzfreigabe.
 
-Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 17.
+Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 18.
 
 
 ### Registrierte Geräteakten
@@ -384,7 +384,7 @@ Jedes Gerät in der Übersicht bietet „Geräteakte mit Historie exportieren“
 
 Alle Geräte-Leserollen dürfen Akten innerhalb ihres Bereichs exportieren. Fremde oder unbekannte IDs ergeben dieselbe 404-Antwort. Anhänge in Quarantäne werden nicht als Dateien verpackt: Metadaten, SHA-256 und ihre gebundenen Nachweisreferenzen bleiben sichtbar; der gesonderte Prüfdownload bleibt Geräteverantwortlichen vorbehalten. SHA-256 ermöglicht Konsistenzprüfungen, ist keine Signatur oder unabhängige Herkunftsbestätigung. Personenangaben aus Einweisungen bleiben Teil der geschützten Akte; eine heruntergeladene Kopie unterliegt anschließend der Verantwortung des Empfängers.
 
-Dieser Export enthält vollständig die gespeicherten Fachdaten **dieser Geräteakte**, einschließlich Historien über die 500 Einträge der Bildschirmansicht hinaus. Er bestätigt keine vollständige rechtliche Dokumentation: bisher nicht strukturierte Pflichtangaben und Abläufe werden im Export ausdrücklich als Lücken benannt. Keine automatische Einsatzfreigabe, keine Aufhebung von Sperren oder Quarantäne. Grenze je Historienbereich: 2000 Einträge, insgesamt 8 MiB unkomprimierte Exportdateien, zehn Sekunden Erzeugungszeit. Die zwei gemeinsamen Exportplätze gelten auch für CSV. Bei Überschreitung wird das gesamte Archiv abgelehnt; keine stille Kürzung. Dieser Export erfordert keine eigene Schemaänderung; aktueller Gesamtstand: Version 17.
+Dieser Export enthält vollständig die gespeicherten Fachdaten **dieser Geräteakte**, einschließlich Historien über die 500 Einträge der Bildschirmansicht hinaus. Er bestätigt keine vollständige rechtliche Dokumentation: bisher nicht strukturierte Pflichtangaben und Abläufe werden im Export ausdrücklich als Lücken benannt. Keine automatische Einsatzfreigabe, keine Aufhebung von Sperren oder Quarantäne. Grenze je Historienbereich: 2000 Einträge, insgesamt 8 MiB unkomprimierte Exportdateien, zehn Sekunden Erzeugungszeit. Die zwei gemeinsamen Exportplätze gelten auch für CSV. Bei Überschreitung wird das gesamte Archiv abgelehnt; keine stille Kürzung. Dieser Export erfordert keine eigene Schemaänderung; aktueller Gesamtstand: Version 18.
 
 ### Bestandsverzeichnis-Stammdaten (Schema 16)
 
@@ -403,3 +403,13 @@ Ein optionales `document_id` muss zu dieser Geräteakte gehören; ID, Metadaten 
 `failed` erzeugt eine eigene Defektsperre, `follow_up_required` eine eigene Quarantänesperre. `completed` hebt keine Sperre auf, bestätigt keine Kontrollpflicht und setzt keine STK-/MTK-/elektrische Frist neu. Jede Sperre benötigt eine ausdrückliche separate Freigabe. Ein neuer Nachweis veraltet physische Geräteprüfungen; Materialprüfungen bleiben unabhängig. Identifikationsänderungen nach einem Instandhaltungsnachweis erzeugen technische Quarantäne. Bestehende Akten ohne solche Einträge behalten ihre bisherigen Prüfbasiswerte.
 
 Bestehende Installationen vor dem Update sichern und ausdrücklich auf Schema 17 migrieren. Der einfache Docker-Start migriert vorhandene Datenbanken weiterhin nicht automatisch. Eine Nachweisreferenz ist noch keine unabhängige Prüfung von Qualifikation, Dokumentinhalt oder rechtlicher Vollständigkeit.
+
+### Außerbetriebnahme und Mindestaufbewahrung (Schema 18)
+
+Geräteverantwortliche dokumentieren `POST /api/v1/devices/{id}/decommission` mit `expected_version`, `performed_on`, `evidence` und `note`. Die Oberfläche bietet dafür eine eigene Aktion. Das Datum muss gültig, nicht zukünftig und mindestens so spät wie bereits dokumentierte Inbetriebnahme, Prüfungen, Einweisungen und Instandhaltungen sein. Eine zweite Außerbetriebnahme wird abgelehnt; identische alte Anfragen behalten ihre gespeicherte Antwort.
+
+Die Geräteakte bleibt lesbar und exportierbar. `lifecycle=DECOMMISSIONED` blockiert die Geräte-Sollbewertung unabhängig von einzelnen Sperren oder positiven physischen Prüfnachweisen. Neue Inbetriebnahmen, Kontrollregeln, Prüfungen, Einweisungen und Instandhaltungen werden abgelehnt. Administrative Grund-/Stammdatenänderungen, Sperrmeldungen und ausdrücklich dokumentierte Freigaben einzelner Sperren bleiben möglich; eine Sperrenfreigabe reaktiviert das Gerät niemals. Wiederinbetriebnahme und ergänzende Korrektur fehlerhafter Fachnachweise benötigen einen gesonderten künftigen Ablauf.
+
+`decommission.retain_through` nennt einen vorsorglichen Mindesttermin fünf Kalenderjahre nach Außerbetriebnahme, einschließlich dieses Tages. Für den 29. Februar wird konservativ der 1. März des fünften Folgejahres verwendet. Der Termin wird auch bei Equipment angezeigt und bestätigt keine individuelle Buchpflichtbewertung. Längere Fachfristen, Aufbewahrungssperren und Datenschutz-/Löschregeln bleiben zu prüfen. Es gibt keine automatische Löschung. HTML-/JSON-Akte und CSV zeigen Datum und Mindesttermin; gemeinsame Version, Audit/Outbox, Wiederholschutz und Bereichsrechte bleiben erhalten. Material-Prüfbasis bleibt unabhängig, ältere physische Geräteprüfungen werden veraltet.
+
+Vor dem Update einer bestehenden Installation eine neue Sicherung erstellen und ausdrücklich auf Schema 18 migrieren; vorhandene Datenbanken werden beim einfachen Docker-Start nicht automatisch aktualisiert.
