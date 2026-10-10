@@ -75,7 +75,7 @@ func TestUnsupportedSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	db.Exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);INSERT INTO schema_migrations VALUES(19)`)
+	db.Exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);INSERT INTO schema_migrations VALUES(20)`)
 	if Migrate(db) == nil {
 		t.Fatal("accepted future schema")
 	}

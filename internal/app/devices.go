@@ -37,6 +37,7 @@ type instructionProof struct {
 	DocumentStatus  string `json:"document_status"`
 }
 type deviceRecord struct {
+	Corrections  []correctionProof  `json:"corrections,omitempty"`
 	Decommission *decommissionProof `json:"decommission,omitempty"`
 	Maintenances []maintenanceProof `json:"maintenances,omitempty"`
 	MasterData   *deviceMasterData  `json:"master_data,omitempty"`
