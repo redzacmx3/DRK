@@ -47,6 +47,14 @@ func readDevice(ctx context.Context, tx *sql.Tx, user, id string, now time.Time)
 	return record, err
 }
 func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now time.Time) error {
+	var intake deviceIntake
+	intakeErr := tx.QueryRowContext(ctx, `SELECT asset_kind,observed_condition,external_code,source_location FROM device_intake WHERE device_id=?`, record.ID).Scan(&intake.Kind, &intake.Condition, &intake.ExternalCode, &intake.SourceLocation)
+	if intakeErr == nil {
+		record.Intake = &intake
+	} else if intakeErr != sql.ErrNoRows {
+		return intakeErr
+	}
+
 	rows, err := tx.QueryContext(ctx, `SELECT id,version,action,payload_json FROM device_control_events WHERE device_id=? ORDER BY version`, record.ID)
 	if err != nil {
 		return err

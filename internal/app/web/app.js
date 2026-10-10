@@ -8,6 +8,7 @@ let csrf = '', user = null, locations = [], balances = [], catalog = [], movemen
 const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Entnahme',inventory:'Inventur',reversal:'Gegenbuchung'};
 const stateNames = {available:'Verfügbar',quarantined:'Quarantäne',damaged:'Beschädigt'};
 function signedOut(message) {
+ intakeDraft=null;intakeLoading=false;document.querySelector("#device-import-file").value="";document.querySelector("#device-import-rows").replaceChildren();document.querySelector("#device-import-locations").replaceChildren();document.querySelector("#device-import-status").textContent="";document.querySelector("#device-import").hidden=true;
  deviceDraft = null; deviceRecords = []; document.querySelector('#document-file').value=''; document.querySelector('#document-list').replaceChildren(); document.querySelector('#document-status').textContent=''; document.querySelector('#document-upload-form').hidden=true; document.querySelector('#device-basis').textContent = ''; document.querySelector('#device-control-form').hidden = true; document.querySelector('#devices-list').replaceChildren(); document.querySelector('#devices-status').textContent = '';
  csrf = ''; user = null; deviceCheckDraft = null; packAssessment = null; document.querySelector('#physical-device-results').replaceChildren();document.querySelector('#device-proof-history').replaceChildren();document.querySelector('#last-device-proof').textContent='';document.querySelector('#physical-device-check').hidden=true; countDraft = null; checkDraft = null; packDraft = null; scannerReset(); list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
  document.querySelector('#assessment-status').textContent='';document.querySelector('#assessment-reasons').replaceChildren();document.querySelector('#pack-devices').replaceChildren();
@@ -118,7 +119,7 @@ async function load() {
    const detail = document.createElement('p'); detail.textContent = `${location.site} · ${location.operator}`;
    item.append(name,detail); list.append(item);
   }
-  status.textContent = (pending || packPending || identifierPending) ? 'Ein Vorgang ist noch nicht bestätigt. Mit demselben Konto erneut senden.' : `${locations.length} Lagerorte geladen.`;
+  status.textContent = (pending || packPending || identifierPending || intakePending) ? 'Ein Vorgang ist noch nicht bestätigt. Mit demselben Konto erneut senden.' : `${locations.length} Lagerorte geladen.`;
   await loadStock();
   if (user) { await loadPacklists(); if (user) await loadScannerData(); if(user) {await loadDevices();lockDeviceForm();} }
  } catch { status.textContent = 'Daten konnten nicht geladen werden. Verbindung prüfen und erneut laden.'; if (!pending) booking.hidden = true; }
@@ -149,7 +150,7 @@ login.addEventListener('submit',async event => {
 document.querySelector('#logout').addEventListener('click',async () => {
  try {
   const response = await fetch('/api/v1/auth/logout',{method:'POST',headers:{'X-CSRF-Token':csrf}});
-  if (response.ok || response.status === 401) signedOut((pending || packPending || identifierPending) ? 'Abgemeldet. Eine unbestätigte Buchung benötigt erneute Anmeldung mit demselben Konto.' : 'Abgemeldet.');
+  if (response.ok || response.status === 401) signedOut((pending || packPending || identifierPending || intakePending) ? 'Abgemeldet. Eine unbestätigte Buchung benötigt erneute Anmeldung mit demselben Konto.' : 'Abgemeldet.');
   else status.textContent = 'Abmeldung fehlgeschlagen. Bitte erneut versuchen.';
  } catch { status.textContent = 'Abmeldung konnte nicht bestätigt werden. Verbindung prüfen.'; }
 });
@@ -225,7 +226,7 @@ document.querySelector('#reload').addEventListener('click',load);
  document.querySelector('#history-older').addEventListener('click',async () => {historyOffset += 50;await loadHistory();bookingChoices();});
  document.querySelector('#history-newer').addEventListener('click',async () => {historyOffset = Math.max(0,historyOffset-50);await loadHistory();bookingChoices();});
 window.addEventListener('pagehide',stopCamera);
-window.addEventListener('beforeunload',event => {if (pending || packPending || identifierPending || devicePending || documentPending) {event.preventDefault();event.returnValue = '';}});
+window.addEventListener('beforeunload',event => {if (pending || packPending || identifierPending || devicePending || documentPending || intakePending) {event.preventDefault();event.returnValue = '';}});
 
 
 let deviceCheckDraft = null, packAssessment = null;
@@ -495,10 +496,11 @@ document.addEventListener('visibilitychange',() => {if (document.hidden) stopCam
 restore();
 
 
+let intakeDraft = null, intakePending = null, intakeLoading = false;
 let deviceRecords = [], deviceDraft = null, devicePending = null, documentPending = null;
 const deadlineNames = {UNKNOWN:'ungeklärt',NOT_APPLICABLE:'nachgewiesene Ausnahme',CURRENT:'aktuell',DUE_SOON:'bald fällig',OVERDUE:'überfällig'};
 async function loadDevices() {
- const owner = user?.id; if (!owner) return;
+ const owner = user?.id; if (!owner) return;intakeControls();
  const message = document.querySelector('#devices-status');
  const entries = document.querySelector('#devices-list'); entries.replaceChildren();
  try {
@@ -509,7 +511,7 @@ async function loadDevices() {
  for (const device of devices) {
  const item = document.createElement('li');
  const controls = ['STK','MTK','electrical'].map(kind => {const d=device.controls?.[kind];return `${kind}: ${deadlineNames[d?.state] || 'ungeklärt'}${d?.due_on ? ' bis '+d.due_on : ''}`;}).join(' · ');
- item.textContent = `${device.inventory_number} · ${device.name} · ${device.manufacturer} / ${device.model} · Serien-/Losnummer ${device.serial_or_lot} · ${device.commissioned_on ? 'Inbetriebnahme '+device.commissioned_on : 'Noch nicht in Betrieb genommen'} · ${controls} · Einweisungsnachweise: ${(device.instructions || []).length} · Aktive Sperren: ${(device.active_blocks || []).map(block=>block.reason).join(", ") || "keine erfasste"} · Vollständige Einsatzfreigabe ungeklärt`;
+ item.textContent = `${device.inventory_number} · ${device.name} · ${device.manufacturer || "Hersteller ungeklärt"} / ${device.model || "Modell ungeklärt"} · Serien-/Losnummer ${device.serial_or_lot || "ungeklärt"}${device.intake ? " · "+intakeKindNames[device.intake.asset_kind]+" · Erstbeobachtung: "+intakeConditionNames[device.intake.observed_condition]+(device.intake.external_code?" · Fremdcode: "+device.intake.external_code:"") : ""} · ${device.commissioned_on ? 'Inbetriebnahme '+device.commissioned_on : 'Inbetriebnahme nicht dokumentiert'} · ${controls} · Einweisungsnachweise: ${(device.instructions || []).length} · Aktive Sperren: ${(device.active_blocks || []).map(block=>block.reason).join(", ") || "keine erfasste"} · Vollständige Einsatzfreigabe ungeklärt`;
  for(const instruction of device.instructions || []){const proof=document.createElement('p');proof.textContent=`Einweisung ${instruction.performed_on}: ${instruction.instructor} → ${instruction.trainee} · ${instruction.scope==='model'?'Bauart':'Gerät'} · Unterlage ${instruction.document_version} · Anhang in Quarantäne`;item.append(proof);}
  entries.append(item);
  }
@@ -661,3 +663,44 @@ document.querySelector('#physical-device-start').addEventListener('click',async(
  }packControls();
 });
 document.querySelector('#physical-device-check').addEventListener('submit',event=>{event.preventDefault();sendPackMutation('device');});
+
+const intakeKindNames={device:'Gerät',equipment:'Equipment',unknown:'Art ungeklärt'};
+const intakeConditionNames={unknown:'ungeklärt',unremarkable:'unauffällig (keine Freigabe)',defective:'defekt',quarantined:'Quarantäne'};
+function intakeControls(){
+ if(!user)return;
+ const panel=document.querySelector('#device-import');panel.hidden=!intakePending&&!locations.some(location=>can(location,['device_manager']));
+ for(const control of document.querySelector('#device-import-form').elements)control.disabled=Boolean(intakePending)||intakeLoading;
+ if(intakePending?.owner===user.id&&!document.querySelector('#device-import-status').textContent)document.querySelector('#device-import-status').textContent='Ein CSV-Import ist noch nicht bestätigt. Mit denselben Daten erneut senden.';
+ const commit=document.querySelector('#device-import-commit');commit.disabled=intakeLoading||(intakePending?intakePending.owner!==user.id:!intakeDraft?.preview||intakeDraft.preview.error_count>0);
+ commit.textContent=intakePending?'Import mit denselben Daten erneut senden':'Geprüften Import bestätigen';
+}
+function renderIntakePreview(preview){
+ const rows=document.querySelector('#device-import-rows');rows.replaceChildren();
+ for(const row of preview.rows){const line=document.createElement('tr');for(const value of [row.row,row.device.inventory_number,`${intakeKindNames[row.intake.asset_kind]||'ungeklärt'} / ${intakeConditionNames[row.intake.observed_condition]||'ungeklärt'}`,row.device.name,row.intake.source_location,row.message]){const cell=document.createElement('td');cell.textContent=value;line.append(cell);}rows.append(line);}
+ const mappings=document.querySelector('#device-import-locations');mappings.replaceChildren();
+ for(const value of preview.location_values){const label=document.createElement('label');label.textContent=`CSV-Standort „${value}“ zuordnen`;const select=document.createElement('select');select.dataset.source=value;options(select,[{id:'',label:'Name automatisch zuordnen; sonst ausdrücklich wählen'},...preview.location_choices.map(location=>({id:location.id,label:`${location.site} / ${location.name}`}))]);select.value=intakeDraft.locations[value]||'';select.addEventListener('change',()=>{if(select.value)intakeDraft.locations[value]=select.value;else delete intakeDraft.locations[value];intakeDraft.preview=null;document.querySelector('#device-import-status').textContent='Standortzuordnung geändert. Vorschau erneut prüfen.';intakeControls();});label.append(select);mappings.append(label);}
+ document.querySelector('#device-import-status').textContent=`${preview.new_count} neu · ${preview.unchanged_count} unverändert · ${preview.error_count} Fehler · ${preview.unused_count} leere vorbereitete Zeilen ignoriert. ${preview.error_count?'Fehler korrigieren; erst danach bestätigen.':'Vorschau prüfen und Import ausdrücklich bestätigen.'}`;
+}
+document.querySelector('#device-import-file').addEventListener('change',()=>{if(intakePending)return;intakeDraft=null;document.querySelector('#device-import-rows').replaceChildren();document.querySelector('#device-import-locations').replaceChildren();document.querySelector('#device-import-status').textContent='Neue Datei ausgewählt. CSV zuerst prüfen.';intakeControls();});
+document.querySelector('#device-import-form').addEventListener('submit',async event=>{
+ event.preventDefault();const owner=user?.id;if(!owner||intakePending||intakeLoading)return;const message=document.querySelector('#device-import-status');intakeLoading=true;intakeControls();
+ try{
+  if(!intakeDraft){const file=document.querySelector('#device-import-file').files[0];if(!file||file.size>1048576)throw new Error('CSV auswählen, höchstens 1 MiB.');const bytes=await file.arrayBuffer();const csv=new TextDecoder('utf-8',{fatal:true}).decode(bytes);if(user?.id!==owner)return;intakeDraft={owner,csv,locations:{},preview:null};}
+  const response=await fetch('/api/v1/device-import/preview',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({csv:intakeDraft.csv,locations:intakeDraft.locations})});const result=await response.json();if(user?.id!==owner)return;
+  if(response.status===401){signedOut('Bitte erneut anmelden.');return;}if(!response.ok)throw new Error(result.message||'CSV-Vorschau nicht verfügbar.');intakeDraft.preview=result;renderIntakePreview(result);
+ }catch(error){if(user?.id===owner){if(intakeDraft)intakeDraft.preview=null;message.textContent=error instanceof TypeError?'Datei muss CSV UTF-8 sein.':error.message;}}
+ finally{intakeLoading=false;intakeControls();}
+});
+document.querySelector('#device-import-commit').addEventListener('click',async()=>{
+ const owner=user?.id;if(!owner||intakeLoading||intakePending&&intakePending.owner!==owner)return;
+ if(!intakePending){if(intakeDraft?.owner!==owner||!intakeDraft.preview||intakeDraft.preview.error_count)return;intakePending={owner,key:crypto.randomUUID(),data:{csv:intakeDraft.csv,locations:{...intakeDraft.locations},basis_hash:intakeDraft.preview.basis_hash},uncertain:false};}
+ intakeLoading=true;intakeControls();const message=document.querySelector('#device-import-status');
+ try{
+  const response=await fetch('/api/v1/device-import/commit',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':intakePending.key},body:JSON.stringify(intakePending.data)});const result=await response.json();
+  if(response.status===401){intakePending.uncertain=true;signedOut('Mit demselben Konto anmelden und offenen CSV-Import erneut senden.');return;}
+  if(response.status>=500||!response.ok&&intakePending.uncertain)throw new Error('uncertain');intakePending=null;if(user?.id!==owner)return;
+  if(!response.ok){if(intakeDraft)intakeDraft.preview=null;message.textContent=result.message||'Import abgelehnt; Vorschau erneut prüfen.';return;}
+  intakeDraft=null;document.querySelector('#device-import-file').value='';document.querySelector('#device-import-rows').replaceChildren();document.querySelector('#device-import-locations').replaceChildren();message.textContent=`Import bestätigt: ${result.created_count} neu, ${result.unchanged_count} unverändert. Keine Prüf- oder Einsatzfreigabe erteilt.`;await loadDevices();
+ }catch{if(intakePending)intakePending.uncertain=true;if(user?.id===owner)message.textContent='Import nicht bestätigt. Erneut senden verwendet dieselben Daten und denselben Schlüssel. Seite bis zur Klärung nicht neu laden.';}
+ finally{intakeLoading=false;intakeControls();}
+});

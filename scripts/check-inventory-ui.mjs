@@ -40,7 +40,7 @@ try {
  function call(method,params={}) {return new Promise((resolve,reject) => {const id=++sequence;waiting.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}));});}
  async function evaluate(expression) {
   const result = await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});
-  if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
+  if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
   return result.result.value;
  }
  async function until(expression) {
@@ -52,6 +52,7 @@ try {
  const realFetch = window.fetch.bind(window);
  window.testBalances = [{batch_id:'batch',location_id:'warehouse',state:'available',quantity:10,usable_quantity:10,version:1,product:'Demo',unit:'Stück',lot:'DEMO',location:'Lager',expires_on:'2030-01-01',blocked:false}];
  window.posted = []; window.devicePosted=[];window.deviceReplies=new Map();window.loseDeviceReply=false;window.testDocuments=[];window.documentPosted=[];window.documentReplies=new Map();window.loseDocumentReply=false;window.deviceVersion=0;window.deviceBlocks=[{id:"recall-block",reason:"recall",note:"Synthetic recall"}];
+ window.intakePosted=[];window.intakePreviewPosted=[];window.intakeReplies=new Map();window.intakeBasis='1'.repeat(64);window.loseIntakeReply=false;
  window.pack = {id:'pack',location_id:'warehouse',version:1,title:'Material',check_valid_hours:24,created_at:new Date().toISOString(),note:'Synthetic',items:[{product_id:'product',quantity:5,min_remaining_days:30}]};
  window.testIdentifiers = [];window.identifierPosted = [];window.identifierReplies = new Map();window.loseIdentifierReply = false;window.nonInventoryStockPosts = [];
  window.materialBasis = 'a'.repeat(64);window.packPosted = [];window.packReplies = new Map();window.losePackReply = false;
@@ -81,6 +82,16 @@ try {
    else if (request.text === '00001175') Object.assign(data,{status:'ambiguous',parsed:{kind:'ambiguous'},warnings:['Format ausdrücklich wählen.']});
   }
   else if (path.startsWith('/api/v1/stock/') && options.method === 'POST' && path !== '/api/v1/stock/inventories') {window.nonInventoryStockPosts.push({path,body:options.body});data = {movement_id:'not-expected'};}
+  else if (path === '/api/v1/device-import/preview') {
+   const request=JSON.parse(options.body);window.intakePreviewPosted.push(request);const mapped=request.locations?.['Offline Lager']==='warehouse';
+   data={basis_hash:window.intakeBasis,new_count:mapped?1:0,unchanged_count:0,error_count:mapped?0:1,unused_count:99,location_values:['Offline Lager'],location_choices:[{id:'warehouse',name:'Lager',site:'Demo'}],rows:[{row:2,device:{inventory_number:'CSV-UI-1',name:'<img src=x onerror=alert(1)>',location_id:mapped?'warehouse':''},intake:{asset_kind:'equipment',observed_condition:'unknown',source_location:'Offline Lager'},status:mapped?'new':'error',message:mapped?'Wird neu angelegt.':'Standort zuordnen.'}]};
+  }
+  else if(path==='/api/v1/device-import/commit'){
+   const request=JSON.parse(options.body),key=options.headers['Idempotency-Key'];window.intakePosted.push({key,body:options.body});
+   if(window.intakeReplies.has(key))return new Response(JSON.stringify(window.intakeReplies.get(key)),{status:201,headers:{'Content-Type':'application/json'}});
+   if(request.basis_hash!==window.intakeBasis)return new Response(JSON.stringify({message:'Vorschau geändert; CSV erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
+   data={import_id:'import',created_count:1,unchanged_count:0,created_device_ids:['created-device']};window.intakeReplies.set(key,data);if(window.loseIntakeReply){window.loseIntakeReply=false;throw new Error('Lost import reply');}
+  }
   else if (path === '/api/v1/devices') data = [{id:'device',location_id:'warehouse',version:window.deviceVersion,active_blocks:window.deviceBlocks,inventory_number:'SYNTH-1',name:'<img src=x onerror=alert(1)>',manufacturer:'Demo',model:'Model',serial_or_lot:'SERIAL'}];
   else if(path==='/api/v1/devices/device/documents' && !options.method)data=window.testDocuments;
   else if(path==='/api/v1/devices/device/documents' && options.method==='POST'){
@@ -179,7 +190,7 @@ try {
  await until("document.querySelectorAll('#physical-device-results select').length===3 && !document.querySelector('.device-present').disabled");
  assert.deepEqual(await evaluate("[...document.querySelectorAll('#physical-device-results select')].map(s=>s.value)"),['','','']);
  await evaluate("window.devicePhysicalBasis='e'.repeat(64);document.querySelector('#pack-refresh').click()");
- await until("packAssessment.device_basis_hash==='e'.repeat(64)");
+ await until("packAssessment?.device_basis_hash==='e'.repeat(64)");
  await evaluate("for(const s of document.querySelectorAll('#physical-device-results select'))s.value='passed';document.querySelector('#physical-device-note').value='Physisch am Gerät geprüft';document.querySelector('#physical-device-check').requestSubmit()");
  await until('window.packPosted.length===5');
  assert.equal(await evaluate('window.packPosted[4].request.basis_hash'),'d'.repeat(64));
@@ -284,9 +295,36 @@ try {
  await until('window.devicePosted.length === 8');
  assert.deepEqual(await evaluate('({path:window.devicePosted[7].path,doc:JSON.parse(window.devicePosted[7].body).document_id,scope:JSON.parse(window.devicePosted[7].body).instruction_scope})'),{path:'/api/v1/devices/device/instructions',doc:'document',scope:'device'});
  await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
+ assert.equal(await evaluate("document.querySelector('#device-import').hidden"),false);
+ assert.equal(await evaluate("document.querySelector('#device-import-commit').disabled"),true);
+ await evaluate("const intakeTransfer=new DataTransfer();intakeTransfer.items.add(new File(['Inventarnummer;Bezeichnung;Standort;Seriennummer\\nCSV-UI-1;Equipment;Offline Lager;000123\\n'],'intake.csv',{type:'text/csv'}));document.querySelector('#device-import-file').files=intakeTransfer.files;document.querySelector('#device-import-file').dispatchEvent(new Event('change'));document.querySelector('#device-import-form').requestSubmit()");
+ await until("document.querySelector('#device-import-status').textContent.includes('1 Fehler')");
+ assert.equal(await evaluate("document.querySelector('#device-import-commit').disabled"),true);
+ assert.equal(await evaluate("document.querySelector('#device-import-rows img')===null"),true);
+ assert.equal(await evaluate("document.querySelector('#device-import-rows').textContent.includes('<img src=x onerror=alert(1)>')"),true);
+ await evaluate("const select=document.querySelector('#device-import-locations select');select.value='warehouse';select.dispatchEvent(new Event('change'))");
+ assert.equal(await evaluate("document.querySelector('#device-import-commit').disabled"),true);
+ await evaluate("document.querySelector('#device-import-form').requestSubmit()");
+ await until("!document.querySelector('#device-import-commit').disabled");
+ await evaluate("window.intakeBasis='2'.repeat(64);document.querySelector('#device-import-commit').click()");
+ await until("document.querySelector('#device-import-status').textContent.includes('Vorschau geändert')");
+ assert.equal(await evaluate("document.querySelector('#device-import-commit').disabled"),true);
+ assert.equal(await evaluate("JSON.parse(window.intakePosted[0].body).basis_hash"),'1'.repeat(64));
+ await evaluate("document.querySelector('#device-import-form').requestSubmit()");
+ await until("!document.querySelector('#device-import-commit').disabled");
+ await evaluate("window.loseIntakeReply=true;document.querySelector('#device-import-commit').click()");
+ await until("document.querySelector('#device-import-status').textContent.includes('Import nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#device-import-file').disabled"),true);
+ assert.equal(await evaluate("document.querySelector('#device-import-locations select').disabled"),true);
+ await evaluate("document.querySelector('#device-import-commit').click()");
+ await until("document.querySelector('#device-import-status').textContent.includes('Import bestätigt: 1 neu')");
+ assert.equal(await evaluate('window.intakePosted.length'),3);
+ assert.deepEqual(await evaluate('window.intakePosted[1]'),await evaluate('window.intakePosted[2]'));
+ assert.equal(await evaluate("JSON.parse(window.intakePosted[2].body).locations['Offline Lager']"),'warehouse');
+ assert.equal(await evaluate("JSON.parse(window.intakePosted[2].body).csv.includes('000123')"),true);
  await evaluate("signedOut('Test logout')");
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');

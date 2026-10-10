@@ -60,14 +60,14 @@ func run() error {
 	}
 
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: inventory backup|migrate|seed-demo|create-product|create-batch|create-user|set-sites|disable-user|serve --db PATH [--listen 127.0.0.1:8080]")
+		return fmt.Errorf("usage: inventory device-template|backup|migrate|seed-demo|create-product|create-batch|create-user|set-sites|disable-user|serve --db PATH [--listen 127.0.0.1:8080]")
 	}
 	flags := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
 	path := flags.String("db", "inventory.db", "SQLite path")
 	cert := flags.String("tls-cert", "var/tls/cert.pem", "TLS certificate")
 	key := flags.String("tls-key", "var/tls/key.pem", "TLS private key")
 	origin := flags.String("origin", "https://localhost:8080", "exact HTTPS browser origin")
-	out := flags.String("out", "", "new SQLite backup destination")
+	out := flags.String("out", "", "new backup or Excel template destination")
 	username := flags.String("username", "", "account username")
 	role := flags.String("role", "viewer", "viewer, helper, material_manager or device_manager")
 	name := flags.String("name", "", "product name")
@@ -95,6 +95,25 @@ func run() error {
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 			return fmt.Errorf("origin must be an HTTPS origin without path or credentials")
 		}
+	}
+	if os.Args[1] == "device-template" {
+		if *out == "" {
+			return fmt.Errorf("--out is required")
+		}
+		body, err := app.NewDeviceIntakeTemplate()
+		if err != nil {
+			return err
+		}
+		file, err := os.OpenFile(*out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err != nil {
+			return err
+		}
+		_, err = file.Write(body)
+		closeErr := file.Close()
+		if err != nil {
+			return err
+		}
+		return closeErr
 	}
 	db, err := app.Open(*path)
 	if err != nil {

@@ -37,6 +37,7 @@ type instructionProof struct {
 	DocumentStatus  string `json:"document_status"`
 }
 type deviceRecord struct {
+	Intake       *deviceIntake      `json:"intake,omitempty"`
 	Instructions []instructionProof `json:"instructions"`
 
 	ActiveBlocks    []deviceBlock           `json:"active_blocks"`
@@ -129,6 +130,7 @@ func registerDevice(ctx context.Context, db *sql.DB, user, token, key string, in
 }
 func deviceRoutes(mux *http.ServeMux, a *authService) {
 	deviceControlRoutes(mux, a)
+	deviceImportRoutes(mux, a)
 	mux.HandleFunc("GET /api/v1/devices/{id}/book", func(w http.ResponseWriter, r *http.Request) {
 		user, err := a.session(r)
 		if err != nil {

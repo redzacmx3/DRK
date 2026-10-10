@@ -8,6 +8,10 @@ Modularer Go-Dienst mit eingebetteter HTML/JS-Oberfläche, SQLite und expliziten
 
 Geräteakten mit Kontrollen, Sperren, Einweisungen und Anhängen in Quarantäne sind vorhanden. Sollpacklisten erfassen Geräte und Zubehör sowie getrennte physische Material- und Geräteprüfnachweise. Noch offen: weitere Rollen/Aktionen und Geräteabläufe, Nutzerqualifikation und vollständige Einsatzfreigabe, Malwareprüfung und Dokumentfreigabe, vollständige PWA, produktive Proxy-Konfiguration und vollständige Backup-/Restore-Verfahren. Nur synthetische Daten verwenden. Der Entwicklungsserver bindet ausschließlich an Loopback; Forwarded-Header werden nicht vertraut.
 
+## Schnelle Erstinventarisierung
+
+[Excel-Vorlage für Geräte und Equipment](docs/vorlagen/Geraete-Ersterfassung.xlsx) mit 100 festen Inventarnummern, Code-39-Etiketten und USB-Scanner-Suche. [Kurzanleitung](docs/erstinventarisierung.md). Im Programm: CSV UTF-8 prüfen, Standorte zuordnen und atomar importieren. Wiederholungen werden übersprungen; bestehende Akten werden nicht überschrieben. Fehlende Grunddaten bleiben ungeklärt, Defekt/Quarantäne erzeugen echte Sperren. Neue Vorlagen mit eigenen Nummern lassen sich im Programm oder mit `bin/inventory device-template --out NEUER-PFAD.xlsx` erzeugen. Verbrauchsmaterialien folgen separat.
+
 ## Entwicklungsumgebung
 
 Go 1.27.2 und GCC (CGO) werden benötigt. Gepinnte Abhängigkeiten einschließlich SQLite und Argon2id liegen in `vendor/`; Builds benötigen keinen Paketabruf.
@@ -282,7 +286,7 @@ Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehö
 
 Die Zustände sind `UNKNOWN`, `NOT_APPLICABLE`, `CURRENT`, `DUE_SOON` und `OVERDUE`. Eine Frist gilt bis einschließlich des fachlichen Tages in `Europe/Berlin`; die Vorwarnschwelle ist ein expliziter Parameter. Fehlendes Basisdatum bleibt ungeklärt. Die Funktion beurteilt keine Gerätesperren und erteilt keine Einsatzfreigabe.
 
-Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 12.
+Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 13.
 
 
 ### Registrierte Geräteakten
