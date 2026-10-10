@@ -20,13 +20,15 @@ type deviceInput struct {
 }
 type deviceRecord struct {
 	deviceInput
-	ID        string              `json:"id"`
-	CreatedBy string              `json:"created_by"`
-	CreatedAt string              `json:"created_at"`
-	Lifecycle string              `json:"lifecycle"`
-	Readiness string              `json:"readiness"`
-	Reasons   []string            `json:"reasons"`
-	Controls  map[string]Deadline `json:"controls"`
+	Version        int                 `json:"version"`
+	CommissionedOn string              `json:"commissioned_on,omitempty"`
+	ID             string              `json:"id"`
+	CreatedBy      string              `json:"created_by"`
+	CreatedAt      string              `json:"created_at"`
+	Lifecycle      string              `json:"lifecycle"`
+	Readiness      string              `json:"readiness"`
+	Reasons        []string            `json:"reasons"`
+	Controls       map[string]Deadline `json:"controls"`
 }
 
 func registeredDevice(input deviceInput, id, actor, created string) deviceRecord {
@@ -100,24 +102,26 @@ func registerDevice(ctx context.Context, db *sql.DB, user, token, key string, in
 	return encoded, nil
 }
 func deviceRoutes(mux *http.ServeMux, a *authService) {
+	deviceControlRoutes(mux, a)
 	mux.HandleFunc("GET /api/v1/devices/{id}/book", func(w http.ResponseWriter, r *http.Request) {
 		user, err := a.session(r)
 		if err != nil {
 			a.sessionError(w, err)
 			return
 		}
-		var snapshot string
-		err = a.db.QueryRowContext(r.Context(), `SELECT e.snapshot_json FROM device_events e JOIN devices d ON d.id=e.device_id JOIN locations l ON l.id=d.location_id WHERE d.id=? AND EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=l.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager','device_manager'))`, r.PathValue("id"), user.ID).Scan(&snapshot)
-		if err == sql.ErrNoRows {
-			sendStockError(w, scopeError())
+		tx, err := a.db.BeginTx(r.Context(), nil)
+		if err != nil {
+			sendStockError(w, err)
 			return
 		}
+		defer tx.Rollback()
+		record, err := readDevice(r.Context(), tx, user.ID, r.PathValue("id"), a.now())
 		if err != nil {
 			sendStockError(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(snapshot))
+		json.NewEncoder(w).Encode(record)
 	})
 
 	mux.HandleFunc("POST /api/v1/devices", func(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +148,13 @@ func deviceRoutes(mux *http.ServeMux, a *authService) {
 			a.sessionError(w, err)
 			return
 		}
-		rows, err := a.db.QueryContext(r.Context(), `SELECT d.id,d.location_id,d.inventory_number,d.name,d.manufacturer,d.model,d.serial_or_lot,d.created_by,d.created_at,d.note FROM devices d JOIN locations l ON l.id=d.location_id WHERE EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=l.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager','device_manager')) ORDER BY d.inventory_number LIMIT 501`, user.ID)
+		tx, err := a.db.BeginTx(r.Context(), nil)
+		if err != nil {
+			sendStockError(w, err)
+			return
+		}
+		defer tx.Rollback()
+		rows, err := tx.QueryContext(r.Context(), `SELECT d.id,d.location_id,d.inventory_number,d.name,d.manufacturer,d.model,d.serial_or_lot,d.created_by,d.created_at,d.note FROM devices d JOIN locations l ON l.id=d.location_id WHERE EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=l.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager','device_manager')) ORDER BY d.inventory_number LIMIT 501`, user.ID)
 		if err != nil {
 			sendStockError(w, err)
 			return
@@ -163,6 +173,13 @@ func deviceRoutes(mux *http.ServeMux, a *authService) {
 		if err = rows.Err(); err != nil {
 			sendStockError(w, err)
 			return
+		}
+		rows.Close()
+		for i := range records {
+			if err = projectDevice(r.Context(), tx, &records[i], a.now()); err != nil {
+				sendStockError(w, err)
+				return
+			}
 		}
 		if len(records) > 500 {
 			w.Header().Set("X-Has-More", "true")

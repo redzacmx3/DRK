@@ -8,7 +8,7 @@ let csrf = '', user = null, locations = [], balances = [], catalog = [], movemen
 const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Entnahme',inventory:'Inventur',reversal:'Gegenbuchung'};
 const stateNames = {available:'Verfügbar',quarantined:'Quarantäne',damaged:'Beschädigt'};
 function signedOut(message) {
- document.querySelector('#devices-list').replaceChildren(); document.querySelector('#devices-status').textContent = '';
+ deviceDraft = null; deviceRecords = []; document.querySelector('#device-basis').textContent = ''; document.querySelector('#device-control-form').hidden = true; document.querySelector('#devices-list').replaceChildren(); document.querySelector('#devices-status').textContent = '';
  csrf = ''; user = null; countDraft = null; checkDraft = null; packDraft = null; scannerReset(); list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
  login.hidden = false; inventory.hidden = true; status.textContent = message;
 }
@@ -119,7 +119,7 @@ async function load() {
   }
   status.textContent = (pending || packPending || identifierPending) ? 'Ein Vorgang ist noch nicht bestätigt. Mit demselben Konto erneut senden.' : `${locations.length} Lagerorte geladen.`;
   await loadStock();
-  if (user) { await loadPacklists(); if (user) await loadScannerData(); }
+  if (user) { await loadPacklists(); if (user) await loadScannerData(); if(user) {await loadDevices();lockDeviceForm();} }
  } catch { status.textContent = 'Daten konnten nicht geladen werden. Verbindung prüfen und erneut laden.'; if (!pending) booking.hidden = true; }
 }
 async function restore() {
@@ -224,7 +224,7 @@ document.querySelector('#reload').addEventListener('click',load);
  document.querySelector('#history-older').addEventListener('click',async () => {historyOffset += 50;await loadHistory();bookingChoices();});
  document.querySelector('#history-newer').addEventListener('click',async () => {historyOffset = Math.max(0,historyOffset-50);await loadHistory();bookingChoices();});
 window.addEventListener('pagehide',stopCamera);
-window.addEventListener('beforeunload',event => {if (pending || packPending || identifierPending) {event.preventDefault();event.returnValue = '';}});
+window.addEventListener('beforeunload',event => {if (pending || packPending || identifierPending || devicePending) {event.preventDefault();event.returnValue = '';}});
 
 
 let packVersions = [], packDraft = null, checkDraft = null, packPending = null, material = null;
@@ -481,20 +481,68 @@ document.querySelector('#camera-start').addEventListener('click',async () => {
 document.addEventListener('visibilitychange',() => {if (document.hidden) stopCamera();});
 restore();
 
- document.querySelector('#devices-refresh').addEventListener('click', async () => {
+
+let deviceRecords = [], deviceDraft = null, devicePending = null;
+const deadlineNames = {UNKNOWN:'ungeklärt',NOT_APPLICABLE:'nachgewiesene Ausnahme',CURRENT:'aktuell',DUE_SOON:'bald fällig',OVERDUE:'überfällig'};
+async function loadDevices() {
  const owner = user?.id; if (!owner) return;
  const message = document.querySelector('#devices-status');
  const entries = document.querySelector('#devices-list'); entries.replaceChildren();
  try {
  const response = await fetch('/api/v1/devices');
+ if (response.status === 401) {signedOut('Bitte erneut anmelden.');return;}
  if (!response.ok) throw new Error('Geräteübersicht konnte nicht geladen werden.');
- const devices = await response.json();
- if (user?.id !== owner) return;
+ const devices = await response.json(); if (user?.id !== owner) return; deviceRecords = devices;
  for (const device of devices) {
  const item = document.createElement('li');
- item.textContent = `${device.inventory_number} · ${device.name} · ${device.manufacturer} / ${device.model} · Serien-/Losnummer ${device.serial_or_lot} · Noch nicht in Betrieb genommen · STK / MTK / Elektrik ungeklärt`;
+ const controls = ['STK','MTK','electrical'].map(kind => {const d=device.controls?.[kind];return `${kind}: ${deadlineNames[d?.state] || 'ungeklärt'}${d?.due_on ? ' bis '+d.due_on : ''}`;}).join(' · ');
+ item.textContent = `${device.inventory_number} · ${device.name} · ${device.manufacturer} / ${device.model} · Serien-/Losnummer ${device.serial_or_lot} · ${device.commissioned_on ? 'Inbetriebnahme '+device.commissioned_on : 'Noch nicht in Betrieb genommen'} · ${controls} · Vollständige Einsatzfreigabe ungeklärt`;
  entries.append(item);
  }
+ if (!devicePending) options(document.querySelector('#device-choice'),devices.filter(device => locations.some(location => location.id === device.location_id && can(location,['device_manager']))).map(device => ({id:device.id,label:device.inventory_number+' · '+device.name})));
+ document.querySelector('#device-control-form').hidden = !devicePending && !document.querySelector('#device-choice').options.length;
  message.textContent = devices.length ? `${devices.length} Geräte angezeigt.${response.headers.get('X-Has-More') === 'true' ? ' Weitere Geräte vorhanden; Übersicht begrenzt.' : ''}` : 'Keine Geräte im freigegebenen Bereich registriert.';
  } catch (error) { if (user?.id === owner) message.textContent = error.message; }
- });
+}
+document.querySelector('#devices-refresh').addEventListener('click',loadDevices);
+for (const kind of ['STK','MTK','electrical']) {
+ const field = document.createElement('fieldset'); const legend = document.createElement('legend');legend.textContent=kind;field.append(legend);
+ for (const [name,title,type,choices] of [
+ ['applicability','Anwendbarkeit','select',[['unknown','Ungeklärt'],['required','Erforderlich'],['exempt','Nachgewiesene Ausnahme']]],
+ ['mode','Berechnung','select',[['','Keine Frist'],['month_end','Monatsende'],['year_end','Jahresende'],['exact_date','Exakter Termin']]],
+ ['interval_months','Intervall in Monaten','number'],['exact_date','Exakter Termin','date'],['earlier_date','Kürzere / Anlassfrist','date'],['earlier_evidence','Nachweis zur kürzeren Frist','text'],['evidence','Nachweis zur Kontrollpflicht','text']
+ ]) {
+ const label=document.createElement('label');label.textContent=title;const control=document.createElement(type==='select'?'select':'input');control.id=`device-${kind}-${name}`;
+ if (type==='select') for(const [value,text] of choices){const option=document.createElement('option');option.value=value;option.textContent=text;control.append(option);}else{control.type=type;if(type==='number'){control.min='1';control.max='120';control.step='1';}if(type==='text')control.maxLength=500;}
+ label.append(control);field.append(label);
+ }
+ document.querySelector('#device-rule-fields').append(field);
+}
+function lockDeviceForm() {
+ const form=document.querySelector('#device-control-form');
+ for(const control of form.elements)control.disabled=Boolean(devicePending);
+ const submit=form.querySelector('button[type=submit]');submit.disabled=devicePending ? devicePending.owner!==user?.id : !deviceDraft;
+ submit.textContent=devicePending?'Nachweis identisch erneut senden':'Nachweis speichern';
+}
+function deviceActionFields(){const rules=document.querySelector('#device-action').value==='rules';document.querySelector('#device-rule-fields').hidden=!rules;document.querySelector('#device-date-field').hidden=rules;document.querySelector('#device-date').required=!rules;}
+document.querySelector('#device-action').addEventListener('change',deviceActionFields);
+document.querySelector('#device-choice').addEventListener('change',()=>{deviceDraft=null;lockDeviceForm();});
+document.querySelector('#device-begin').addEventListener('click',async()=>{
+ if(!user || devicePending)return;const owner=user.id,id=document.querySelector('#device-choice').value;deviceDraft=null;lockDeviceForm();
+ try{const response=await fetch(`/api/v1/devices/${encodeURIComponent(id)}/book`);if(!response.ok)throw new Error('Geräteakte nicht verfügbar.');const record=await response.json();if(user?.id!==owner || document.querySelector('#device-choice').value!==id)return;deviceDraft={id,version:record.version};document.querySelector('#device-basis').textContent=`Geladene Geräteversion ${record.version}. Änderungen erfordern einen neuen Abgleich.`;lockDeviceForm();}catch(error){if(user?.id===owner)document.querySelector('#device-basis').textContent=error.message;}
+});
+document.querySelector('#device-control-form').addEventListener('submit',async event=>{
+ event.preventDefault();if(!user || devicePending && devicePending.owner!==user.id || !devicePending && !deviceDraft)return;
+ if(!devicePending){const action=document.querySelector('#device-action').value;const body={expected_version:deviceDraft.version,evidence:document.querySelector('#device-evidence').value,qualification:document.querySelector('#device-qualification').value,assignment:document.querySelector('#device-assignment').value,note:document.querySelector('#device-note').value};
+ if(action==='commission')body.performed_on=document.querySelector('#device-date').value;
+ else body.rules=['STK','MTK','electrical'].map(kind=>({control_type:kind,applicability:document.querySelector(`#device-${kind}-applicability`).value,mode:document.querySelector(`#device-${kind}-mode`).value,interval_months:Number(document.querySelector(`#device-${kind}-interval_months`).value),exact_date:document.querySelector(`#device-${kind}-exact_date`).value,earlier_date:document.querySelector(`#device-${kind}-earlier_date`).value,earlier_evidence:document.querySelector(`#device-${kind}-earlier_evidence`).value,evidence:document.querySelector(`#device-${kind}-evidence`).value}));
+ devicePending={owner:user.id,path:`/api/v1/devices/${encodeURIComponent(deviceDraft.id)}/${action}`,key:crypto.randomUUID(),body:JSON.stringify(body)};
+ }
+ lockDeviceForm();const saved=devicePending;
+ try{const response=await fetch(saved.path,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':saved.key},body:saved.body});const result=await response.json();if(user?.id!==saved.owner)return;
+ if(response.status===401){signedOut('Bitte erneut anmelden; Gerätenachweis identisch wiederholen.');return;}
+ if(response.status>=500){document.querySelector('#device-basis').textContent='Nachweis nicht bestätigt. Mit demselben Schlüssel erneut senden.';return;}
+ devicePending=null;deviceDraft=null;document.querySelector('#device-basis').textContent=response.ok?'Nachweis gespeichert. Für weitere Änderungen Geräteakte neu laden.':result.message;lockDeviceForm();await loadDevices();
+ }catch{if(user?.id===saved.owner)document.querySelector('#device-basis').textContent='Nachweis nicht bestätigt. Mit demselben Schlüssel erneut senden.';}
+});
+deviceActionFields();

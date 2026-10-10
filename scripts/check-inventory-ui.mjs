@@ -51,7 +51,7 @@ try {
  await call('Page.addScriptToEvaluateOnNewDocument',{source:`
  const realFetch = window.fetch.bind(window);
  window.testBalances = [{batch_id:'batch',location_id:'warehouse',state:'available',quantity:10,usable_quantity:10,version:1,product:'Demo',unit:'Stück',lot:'DEMO',location:'Lager',expires_on:'2030-01-01',blocked:false}];
- window.posted = [];
+ window.posted = []; window.devicePosted=[];window.deviceReplies=new Map();window.loseDeviceReply=false;window.deviceVersion=0;
  window.pack = {id:'pack',location_id:'warehouse',version:1,title:'Material',check_valid_hours:24,created_at:new Date().toISOString(),note:'Synthetic',items:[{product_id:'product',quantity:5,min_remaining_days:30}]};
  window.testIdentifiers = [];window.identifierPosted = [];window.identifierReplies = new Map();window.loseIdentifierReply = false;window.nonInventoryStockPosts = [];
  window.materialBasis = 'a'.repeat(64);window.packPosted = [];window.packReplies = new Map();window.losePackReply = false;
@@ -59,7 +59,7 @@ try {
  window.fetch = async (input,options={}) => {
   const path = typeof input === 'string' ? input : input.url;
   let data;
-  if (path === '/api/v1/me') data = {id:'synthetic-user',username:'test',csrf_token:'synthetic-csrf',rights:[{site_id:'site',role:'material_manager'}]};
+  if (path === '/api/v1/me') data = {id:'synthetic-user',username:'test',csrf_token:'synthetic-csrf',rights:[{site_id:'site',role:'material_manager'},{site_id:'site',role:'device_manager'}]};
   else if (path === '/api/v1/locations') data = [{id:'warehouse',name:'Lager',site:'Demo',operator:'Demo',site_id:'site'}];
   else if (path === '/api/v1/stock/catalog') data = [{id:'batch',product_id:'product',product:'Demo',unit:'Stück',lot:'DEMO'}];
   else if (path === '/api/v1/stock/balances') data = window.testBalances;
@@ -81,7 +81,15 @@ try {
    else if (request.text === '00001175') Object.assign(data,{status:'ambiguous',parsed:{kind:'ambiguous'},warnings:['Format ausdrücklich wählen.']});
   }
   else if (path.startsWith('/api/v1/stock/') && options.method === 'POST' && path !== '/api/v1/stock/inventories') {window.nonInventoryStockPosts.push({path,body:options.body});data = {movement_id:'not-expected'};}
-  else if (path === '/api/v1/devices') data = [{inventory_number:'SYNTH-1',name:'<img src=x onerror=alert(1)>',manufacturer:'Demo',model:'Model',serial_or_lot:'SERIAL'}];
+  else if (path === '/api/v1/devices') data = [{id:'device',location_id:'warehouse',version:window.deviceVersion,inventory_number:'SYNTH-1',name:'<img src=x onerror=alert(1)>',manufacturer:'Demo',model:'Model',serial_or_lot:'SERIAL'}];
+  else if (path === '/api/v1/devices/device/book') data={id:'device',version:window.deviceVersion};
+  else if (path === '/api/v1/devices/device/commission' || path === '/api/v1/devices/device/rules') {
+   const key=options.headers['Idempotency-Key'],request=JSON.parse(options.body);window.devicePosted.push({path,key,body:options.body});
+   if(window.deviceReplies.has(key))return new Response(JSON.stringify(window.deviceReplies.get(key)),{status:200,headers:{'Content-Type':'application/json'}});
+   if(request.expected_version!==window.deviceVersion)return new Response(JSON.stringify({message:'Geräteakte wurde geändert; erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
+   data={id:'device',version:++window.deviceVersion};window.deviceReplies.set(key,data);
+   if(window.loseDeviceReply){window.loseDeviceReply=false;throw new Error('Lost device response');}
+  }
   else if (path.startsWith('/api/v1/packlists?')) data = [window.pack];
   else if (path === '/api/v1/packlists/pack/readiness') data = {scope:'material_only',overall_readiness:'not_assessed',status:'needs_check',data_as_of:new Date().toISOString(),packlist:window.pack,current_version:true,basis_hash:window.materialBasis,reasons:['Physischer Prüfnachweis fehlt.'],items:[{product:'Demo',unit:'Stück',quantity:5,physical_quantity:10,usable_quantity:10,shortfall:0,min_remaining_days:30,unknown_quantity:0}],last_check:null};
   else if (path === '/api/v1/packlists/pack/checks' && !options.method) data = [];
@@ -192,9 +200,33 @@ try {
  assert.equal(await evaluate("document.querySelector('#devices-list').textContent.includes('ungeklärt')"),true);
  assert.equal(await evaluate("document.querySelector('#devices-list').textContent.includes('<img src=x onerror=alert(1)>')"),true);
  assert.equal(await evaluate("document.querySelector('#devices-list img') === null"),true);
+ assert.equal(await evaluate("document.querySelector('#device-control-form button[type=submit]').disabled"),true);
+ await evaluate("document.querySelector('#device-begin').click()");
+ await until("document.querySelector('#device-basis').textContent.includes('Geräteversion 0')");
+ await evaluate("document.querySelector('#device-date').value='2020-03-15';document.querySelector('#device-evidence').value='protocol';document.querySelector('#device-qualification').value='qualification';document.querySelector('#device-assignment').value='assignment';document.querySelector('#device-note').value='synthetic proof';window.loseDeviceReply=true;document.querySelector('#device-control-form').requestSubmit()");
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#device-date').disabled"),true);
+ await evaluate("document.querySelector('#device-control-form').requestSubmit()");
+ await until('window.devicePosted.length === 2');
+ assert.deepEqual(await evaluate('window.devicePosted[0]'),await evaluate('window.devicePosted[1]'));
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
+ assert.equal(await evaluate("document.querySelector('#device-control-form button[type=submit]').disabled"),true);
+ await evaluate("document.querySelector('#device-begin').click()");
+ await until("document.querySelector('#device-basis').textContent.includes('Geräteversion 1')");
+ await evaluate("window.deviceVersion=2;document.querySelector('#devices-refresh').click()");
+ await until("document.querySelector('#devices-status').textContent.includes('1 Geräte')");
+ await evaluate("document.querySelector('#device-control-form').requestSubmit()");
+ await until("document.querySelector('#device-basis').textContent.includes('Geräteakte wurde geändert')");
+ assert.equal(await evaluate('JSON.parse(window.devicePosted[2].body).expected_version'),1);
+ await evaluate("document.querySelector('#device-begin').click()");
+ await until("document.querySelector('#device-basis').textContent.includes('Geräteversion 2')");
+ await evaluate("document.querySelector('#device-action').value='rules';document.querySelector('#device-action').dispatchEvent(new Event('change'));document.querySelector('#device-STK-applicability').value='required';document.querySelector('#device-STK-mode').value='month_end';document.querySelector('#device-STK-interval_months').value='24';document.querySelector('#device-STK-evidence').value='STK product rule';document.querySelector('#device-MTK-applicability').value='required';document.querySelector('#device-MTK-mode').value='year_end';document.querySelector('#device-MTK-interval_months').value='24';document.querySelector('#device-MTK-evidence').value='MTK product rule';document.querySelector('#device-electrical-applicability').value='exempt';document.querySelector('#device-electrical-evidence').value='assessed exemption';document.querySelector('#device-control-form').requestSubmit()");
+ await until('window.devicePosted.length === 4');
+ assert.deepEqual(await evaluate('({path:window.devicePosted[3].path,version:JSON.parse(window.devicePosted[3].body).expected_version,types:JSON.parse(window.devicePosted[3].body).rules.map(r=>r.control_type)})'),{path:'/api/v1/devices/device/rules',version:2,types:['STK','MTK','electrical']});
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
  await evaluate("signedOut('Test logout')");
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');
