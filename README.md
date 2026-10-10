@@ -282,4 +282,13 @@ Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehö
 
 Die Zustände sind `UNKNOWN`, `NOT_APPLICABLE`, `CURRENT`, `DUE_SOON` und `OVERDUE`. Eine Frist gilt bis einschließlich des fachlichen Tages in `Europe/Berlin`; die Vorwarnschwelle ist ein expliziter Parameter. Fehlendes Basisdatum bleibt ungeklärt. Die Funktion beurteilt keine Gerätesperren und erteilt keine Einsatzfreigabe.
 
-Dies ist die getestete Berechnungsgrundlage, noch keine gespeicherte Geräteakte oder Geräte-API. Regelverwaltung, Prüfnachweise, Geräteberechtigungen, Sperren und Oberfläche folgen als eigener Integrationsschritt. Datenbankschema und Compose-Betrieb bleiben bei Version 6.
+Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; die persistente Regelverwaltung und die Anbindung von Prüfungen an die Fristenengine folgen. Datenbankschema: Version 7.
+
+
+### Registrierte Geräteakten
+
+Geräteverantwortliche (`device_manager`) können über `POST /api/v1/devices` Geräte im zugewiesenen Bereich registrieren. Pflichtfelder: `location_id`, `inventory_number`, `name`, `manufacturer`, `model`, `serial_or_lot`, `note`. Mutationen benötigen gültige Session, exakten HTTPS-Origin, CSRF und einen Idempotenzschlüssel. Inventarnummern sind im derzeit gemeinsamen Betreiberbestand eindeutig; Serien-/Losnummern dürfen mehrfach vorkommen. Eine Rollenänderung über `set-sites` widerruft Sessions; die CLI ersetzt weiterhin sämtliche Zuweisungen dieses Kontos.
+
+`GET /api/v1/devices` liefert bis zu 500 bereichsbezogene Geräte (`X-Has-More` bei weiteren Einträgen); `GET /api/v1/devices/{id}/book` liefert den unveränderlichen Registrierungsnachweis. Viewer, Helfer, Materialwarte und Geräteverantwortliche lesen innerhalb ihrer Bereiche. Die Oberfläche zeigt eine lesende Übersicht; Anlage erfolgt derzeit über die API. Registrierung, Actor, Snapshot, Outbox und Wiederholantwort werden in einer Transaktion gespeichert. Der Idempotenzschlüsselraum wird mit den anderen Modulen geteilt.
+
+Eine Registrierung ist keine Inbetriebnahme: `lifecycle=NOT_COMMISSIONED`, `readiness=not_assessed`, STK/MTK/elektrische Kontrolle jeweils `UNKNOWN`. Gerätekontrollregeln, Einweisungen, Prüfungen, Sperren/Freigaben, Dokumentanhänge, Änderungsereignisse und die vollständige Medizinproduktebuchführung sind noch offen. Die Rolle allein bestätigt keine Qualifikation. Geräte bleiben aus der bisherigen Material-Sollbewertung ausgeschlossen.

@@ -69,7 +69,7 @@ func run() error {
 	origin := flags.String("origin", "https://localhost:8080", "exact HTTPS browser origin")
 	out := flags.String("out", "", "new SQLite backup destination")
 	username := flags.String("username", "", "account username")
-	role := flags.String("role", "viewer", "viewer, helper or material_manager")
+	role := flags.String("role", "viewer", "viewer, helper, material_manager or device_manager")
 	name := flags.String("name", "", "product name")
 	unit := flags.String("unit", "", "explicit base unit")
 	product := flags.String("product", "", "product UUID")

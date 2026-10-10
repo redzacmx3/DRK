@@ -81,6 +81,7 @@ try {
    else if (request.text === '00001175') Object.assign(data,{status:'ambiguous',parsed:{kind:'ambiguous'},warnings:['Format ausdrücklich wählen.']});
   }
   else if (path.startsWith('/api/v1/stock/') && options.method === 'POST' && path !== '/api/v1/stock/inventories') {window.nonInventoryStockPosts.push({path,body:options.body});data = {movement_id:'not-expected'};}
+  else if (path === '/api/v1/devices') data = [{inventory_number:'SYNTH-1',name:'<img src=x onerror=alert(1)>',manufacturer:'Demo',model:'Model',serial_or_lot:'SERIAL'}];
   else if (path.startsWith('/api/v1/packlists?')) data = [window.pack];
   else if (path === '/api/v1/packlists/pack/readiness') data = {scope:'material_only',overall_readiness:'not_assessed',status:'needs_check',data_as_of:new Date().toISOString(),packlist:window.pack,current_version:true,basis_hash:window.materialBasis,reasons:['Physischer Prüfnachweis fehlt.'],items:[{product:'Demo',unit:'Stück',quantity:5,physical_quantity:10,usable_quantity:10,shortfall:0,min_remaining_days:30,unknown_quantity:0}],last_check:null};
   else if (path === '/api/v1/packlists/pack/checks' && !options.method) data = [];
@@ -186,7 +187,14 @@ try {
  await until("document.querySelector('#scan-status').textContent.includes('Unbekanntes Format')");
  assert.equal(await evaluate('location.href'),beforeURL);
  assert.equal(await evaluate('window.nonInventoryStockPosts.length'),1);
- console.log('Browser UI passed: frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ await evaluate("document.querySelector('#devices-refresh').click()");
+ await until("document.querySelector('#devices-status').textContent.includes('1 Geräte')");
+ assert.equal(await evaluate("document.querySelector('#devices-list').textContent.includes('ungeklärt')"),true);
+ assert.equal(await evaluate("document.querySelector('#devices-list').textContent.includes('<img src=x onerror=alert(1)>')"),true);
+ assert.equal(await evaluate("document.querySelector('#devices-list img') === null"),true);
+ await evaluate("signedOut('Test logout')");
+ assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
+ console.log('Browser UI passed: scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');

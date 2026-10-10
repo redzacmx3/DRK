@@ -1,0 +1,12 @@
+ALTER TABLE role_assignments RENAME TO old_device_roles;
+CREATE TABLE role_assignments(user_id TEXT NOT NULL REFERENCES users(id),site_id TEXT NOT NULL REFERENCES sites(id),role TEXT NOT NULL CHECK(role IN ('viewer','helper','material_manager','device_manager')),PRIMARY KEY(user_id,site_id,role));
+INSERT INTO role_assignments SELECT * FROM old_device_roles;
+DROP TABLE old_device_roles;
+CREATE TABLE devices(id TEXT PRIMARY KEY,location_id TEXT NOT NULL REFERENCES locations(id),inventory_number TEXT NOT NULL,name TEXT NOT NULL,manufacturer TEXT NOT NULL,model TEXT NOT NULL,serial_or_lot TEXT NOT NULL,created_by TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL,note TEXT NOT NULL,UNIQUE(inventory_number));
+CREATE TABLE device_events(id TEXT PRIMARY KEY,device_id TEXT NOT NULL REFERENCES devices(id),actor_id TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL,snapshot_json TEXT NOT NULL);
+CREATE TABLE device_outbox(event_id TEXT PRIMARY KEY REFERENCES device_events(id),published_at TEXT);
+CREATE TABLE device_requests(user_id TEXT NOT NULL REFERENCES users(id),key TEXT NOT NULL,request_hash TEXT NOT NULL,event_id TEXT NOT NULL REFERENCES device_events(id),response_json TEXT NOT NULL,PRIMARY KEY(user_id,key));
+CREATE TRIGGER devices_no_update BEFORE UPDATE ON devices BEGIN SELECT RAISE(ABORT,'immutable device registration'); END;
+CREATE TRIGGER devices_no_delete BEFORE DELETE ON devices BEGIN SELECT RAISE(ABORT,'immutable device registration'); END;
+CREATE TRIGGER device_events_no_update BEFORE UPDATE ON device_events BEGIN SELECT RAISE(ABORT,'immutable device event'); END;
+CREATE TRIGGER device_events_no_delete BEFORE DELETE ON device_events BEGIN SELECT RAISE(ABORT,'immutable device event'); END;

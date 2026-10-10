@@ -73,7 +73,7 @@ func CreateViewer(db *sql.DB, username, password, site string) error {
 	return CreateUser(db, username, password, site, "viewer")
 }
 func validRole(role string) bool {
-	return role == "viewer" || role == "helper" || role == "material_manager"
+	return role == "device_manager" || role == "viewer" || role == "helper" || role == "material_manager"
 }
 func CreateUser(db *sql.DB, username, password, site, role string) error {
 	if !validRole(role) {

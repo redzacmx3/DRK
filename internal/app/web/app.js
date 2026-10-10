@@ -8,6 +8,7 @@ let csrf = '', user = null, locations = [], balances = [], catalog = [], movemen
 const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Entnahme',inventory:'Inventur',reversal:'Gegenbuchung'};
 const stateNames = {available:'Verfügbar',quarantined:'Quarantäne',damaged:'Beschädigt'};
 function signedOut(message) {
+ document.querySelector('#devices-list').replaceChildren(); document.querySelector('#devices-status').textContent = '';
  csrf = ''; user = null; countDraft = null; checkDraft = null; packDraft = null; scannerReset(); list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
  login.hidden = false; inventory.hidden = true; status.textContent = message;
 }
@@ -479,3 +480,21 @@ document.querySelector('#camera-start').addEventListener('click',async () => {
 });
 document.addEventListener('visibilitychange',() => {if (document.hidden) stopCamera();});
 restore();
+
+ document.querySelector('#devices-refresh').addEventListener('click', async () => {
+ const owner = user?.id; if (!owner) return;
+ const message = document.querySelector('#devices-status');
+ const entries = document.querySelector('#devices-list'); entries.replaceChildren();
+ try {
+ const response = await fetch('/api/v1/devices');
+ if (!response.ok) throw new Error('Geräteübersicht konnte nicht geladen werden.');
+ const devices = await response.json();
+ if (user?.id !== owner) return;
+ for (const device of devices) {
+ const item = document.createElement('li');
+ item.textContent = `${device.inventory_number} · ${device.name} · ${device.manufacturer} / ${device.model} · Serien-/Losnummer ${device.serial_or_lot} · Noch nicht in Betrieb genommen · STK / MTK / Elektrik ungeklärt`;
+ entries.append(item);
+ }
+ message.textContent = devices.length ? `${devices.length} Geräte angezeigt.${response.headers.get('X-Has-More') === 'true' ? ' Weitere Geräte vorhanden; Übersicht begrenzt.' : ''}` : 'Keine Geräte im freigegebenen Bereich registriert.';
+ } catch (error) { if (user?.id === owner) message.textContent = error.message; }
+ });
