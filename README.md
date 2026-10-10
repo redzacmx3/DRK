@@ -4,9 +4,9 @@ Administrative Verwaltung von Medizinprodukten, Sanitätsmaterial und mobilen Pa
 
 ## Implementierter Entwicklungsstand
 
-Modularer Go-Dienst mit eingebetteter HTML/JS-Oberfläche, SQLite und expliziten Migrationen. Synthetische Betreiber, Betriebsstätte und Lagerorte. HTTPS-Anmeldung, widerrufbare Sessions und Rechte je Betriebsstätte. Die Oberfläche zeigt Lagerorte und Materialbestand im zugewiesenen Bereich und bietet Wareneingang, Umlagerung und Entnahme.
+Modularer Go-Dienst mit eingebetteter HTML/JS-Oberfläche, SQLite und expliziten Migrationen. Synthetische Betreiber, Betriebsstätte und Lagerorte. HTTPS-Anmeldung, widerrufbare Sessions und Rechte je Betriebsstätte. Die Oberfläche zeigt Lagerorte und Materialbestand im zugewiesenen Bereich und bietet Wareneingang, Umlagerung, Entnahme, Gegenbuchung und Inventur. Das Bewegungsjournal zeigt frühere Einträge und deren Korrekturbezüge.
 
-Noch offen: Inventur/Gegenbuchung, weitere Rollen/Aktionen, Geräteakte, vollständige PWA, Dokumentenspeicher, produktive Proxy-Konfiguration und vollständige Backup-/Restore-Verfahren. Nur synthetische Daten verwenden. Der Entwicklungsserver bindet ausschließlich an Loopback; Forwarded-Header werden nicht vertraut.
+Noch offen: weitere Rollen/Aktionen, Geräteakte, vollständige PWA, Dokumentenspeicher, produktive Proxy-Konfiguration und vollständige Backup-/Restore-Verfahren. Nur synthetische Daten verwenden. Der Entwicklungsserver bindet ausschließlich an Loopback; Forwarded-Header werden nicht vertraut.
 
 ## Entwicklungsumgebung
 
@@ -82,6 +82,8 @@ Bereichsänderung und Kontosperre widerrufen vorhandene Sessions atomar. `--role
 | `helper` | Zugewiesene Betriebsstätten | Nein | Ja |
 | `material_manager` | Zugewiesene Betriebsstätten | Ja | Ja |
 
+Inventur und Gegenbuchung sind ausschließlich für `material_manager` erlaubt.
+
 ```sh
 bin/inventory set-sites --db var/inventory.db --username viewer \
   --site 00000000-0000-4000-8000-000000000002 --role material_manager
@@ -107,6 +109,9 @@ Passwörter: Argon2id mit zufälligem Salt, 64 MiB, drei Iterationen, Parallelit
 | `POST /api/v1/stock/receipts` | Wareneingang für Materialwarte |
 | `POST /api/v1/stock/transfers` | Umlagerung; Materialwart-Rechte an Quelle und Ziel erforderlich |
 | `POST /api/v1/stock/consumptions` | Entnahme für Helfer/Materialwarte |
+| `POST /api/v1/stock/inventories` | Physische Zählung, Basisversion und Differenz |
+| `POST /api/v1/stock/movements/{id}/reversal` | Vollständige Gegenbuchung mit Originalbezug |
+| `GET /api/v1/stock/movements` | Bereichsbezogenes Journal; limit 1–100, offset 0–100000, X-Has-More |
 
 Anmeldung ist auf zehn Versuche pro Minute je direkter Client-IP und zwei gleichzeitige Passwortprüfungen begrenzt. Der Limiter ist pro Prozess und wird beim Neustart zurückgesetzt; verteilter Missbrauchsschutz und produktive Proxy-Auswertung sind noch offen. Keine dauerhafte Browserablage von Sitzungs- oder CSRF-Token durch die Oberfläche.
 
@@ -137,7 +142,36 @@ Physische Menge und nutzbare Menge sind getrennt: gesperrte, abgelaufene, besch�
 
 Die Oberfläche behält bei einer unbestätigten Antwort dieselbe Nutzlast und denselben Schlüssel für Wiederholungen im Arbeitsspeicher. Bis zur Klärung nicht neu laden; es gibt noch keinen dauerhaften Offline-Entwurf. Nach bestätigter Buchung werden aktuelle Mengen/Versionen neu geladen. Lesende Antworten enthalten einen UTC-Datenstand; die Anzeige verwendet Europe/Berlin. Die Bestandsanzeige ist auf 500 Zeilen begrenzt.
 
-Journal- und Audit-Einträge sind über Anwendung und SQLite-Trigger unveränderlich. Eine Gegenbuchung/Inventur-Oberfläche fehlt noch; keine historischen Einträge manuell ändern. Outbox-Ereignisse werden gespeichert, aber noch nicht von einem Benachrichtigungsworker zugestellt. Artikel/Chargen sind gemeinsame Stammdaten der einzigen Betreiberinstallation; Standortbestände und Buchungen sind bereichsbezogen geschützt.
+Journal- und Audit-Einträge sind über Anwendung und SQLite-Trigger unveränderlich. Korrekturen erfolgen durch neue Einträge; keine historischen Einträge manuell ändern. Outbox-Ereignisse werden gespeichert, aber noch nicht von einem Benachrichtigungsworker zugestellt. Artikel/Chargen sind gemeinsame Stammdaten der einzigen Betreiberinstallation; Standortbestände und Buchungen sind bereichsbezogen geschützt.
+
+## Gegenbuchung und Inventur
+
+Eine Gegenbuchung kehrt alle Bewegungszeilen eines Originals einmalig um. Grund und aktuelle Versionen **aller** betroffenen Bestände sind erforderlich. Sie kann scheitern, wenn die ursprünglich eingegangene Ware zwischenzeitlich entnommen/umgelagert wurde. Gegenbuchungen selbst sowie Zählungen ohne Differenz werden nicht erneut gegengebucht; eine erneute fachliche Korrektur erhält einen neuen Inventurnachweis. Auch gesperrte Mengen können administrativ korrigiert werden; dabei werden keine Sperren aufgehoben.
+
+```json
+{"expected_versions":[{"location_id":"LOCATION_UUID","state":"available","version":3}],"note":"Doppelten Wareneingang korrigieren"}
+```
+
+In der Oberfläche zuerst Inventur wählen, Charge/Ort/Zustand festlegen und **Zählung beginnen**. Der Basisstand wird dann eingefroren; ein Neuladen ändert diese Version nicht. Gezählt wird ausdrücklich die physische Menge in diesem Zustand, einschließlich Null. Danach Grund und Zählmenge bestätigen. Hat sich der Bestand zwischenzeitlich geändert, wird die Buchung mit 409 abgelehnt und eine neue Zählung verlangt.
+
+```json
+{"batch_id":"BATCH_UUID","location_id":"LOCATION_UUID","state":"available","expected_version":3,"counted_quantity":7,"note":"Physisch sieben Stück gezählt"}
+```
+
+Für einen noch nicht vorhandenen Bestand ist die Basisversion 0. Jeder Zählnachweis speichert Basisversion, vorherige Menge, Zählmenge, Akteur und Zeit; die Differenz wird atomar gebucht. Auch ohne Differenz entstehen Nachweis, Audit, Outbox und Idempotenzantwort, aber keine künstliche Mengenbewegung. Die Bestandsversion erhöht sich zur Abgrenzung der Zählung. Positive ungeklärte/gesperrte Mehrmengen müssen in Quarantäne erfasst werden; Quarantäne oder Beschädigung werden durch Zählungen nicht aufgehoben.
+
+Das Journal bleibt unverändert. `reversed_by` wird aus ergänzenden Gegenbuchungen berechnet. Journal und Gegenbuchung prüfen alle betroffenen Betriebsstätten; ein Transfer in einen fremden Bereich wird im Journal nur bei Leserechten für beide Bereiche angezeigt. Die Oberfläche zeigt 50 Einträge je Seite und erlaubt das Blättern.
+
+Migration 4 erweitert das Bewegungsjournal durch den dokumentierten SQLite-Tabellenumbau. Dabei wird die Fremdschlüsselprüfung auf einer eigenen Migrationsverbindung kurzzeitig deaktiviert, vor Commit geprüft und vor Rückgabe wieder aktiviert. IDs, bestehende Bewegungszeilen, Audit, Outbox und Idempotenzantworten bleiben erhalten. Vorher wie oben einen konsistenten Snapshot erstellen und laufende Dienste für das Upgrade stoppen.
+
+Optionaler Browser-Regressionscheck (Node.js 22+ und Chromium, keine npm-Abhängigkeiten):
+
+```sh
+node scripts/check-inventory-ui.mjs
+# Abweichendes Chromium über CHROMIUM_BIN angeben.
+```
+
+Dieser Check prüft die Oberfläche mit simulierter API: ausdrücklichen Zählstart, eingefrorene Basis trotz Neuladen, erneute Zählung nach Konflikt und Nullzählung. Die Go-Tests prüfen die echte SQLite-Transaktion, Rechte, Migration und konkurrierende Korrekturen. Der Browsercheck ersetzt keinen HTTPS-/Compose-Funktionstest.
 
 ## Docker Compose (Linux-Entwicklung)
 
@@ -168,4 +202,4 @@ In dieser Cloud bei einem schreibgeschützten Standard-Docker-Verzeichnis `DOCKE
 
 ## Nächste Umsetzung
 
-Als Nächstes Gegenbuchung und Inventur ergänzen, danach Packlisten/Einsatzbereitschaft und Scanner umsetzen. Vor Pilotfreigabe die [Blueprint-Abnahmekriterien](docs/blueprint-v2.md) erfüllen.
+Als Nächstes Packlisten/Einsatzbereitschaft und Scanner umsetzen. Vor Pilotfreigabe die [Blueprint-Abnahmekriterien](docs/blueprint-v2.md) erfüllen.

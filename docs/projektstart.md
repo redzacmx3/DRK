@@ -2,9 +2,9 @@
 
 ## Stand des ersten Meilensteins
 
-Implementiert: Go-Dienst, eingebettete HTML/JS-Oberfläche, explizite SQLite-Migrationen v1/v2, synthetische Betreiber-/Betriebsstätten-/Lagerortdaten und lesende Lagerort-API. HTTPS-Anmeldung mit Argon2id, widerrufbaren Sessions und Viewer-Rechten je Betriebsstätte schützt die Lagerortliste und direkte Objektzugriffe. Lokale CLI für Kontoanlage, Bereichsänderung, Kontosperre und Artikel-/Chargenanlage. Materialfluss mit Wareneingang, atomarer Umlagerung und Entnahme, Quellversionen, Idempotenz, Bewegungsjournal/Audit und Outbox ist umgesetzt. Die Oberfläche zeigt physische/nutzbare Mengen und erlaubt Buchungen je Rolle. SQLite-Treiber: mattn/go-sqlite3 mit CGO. Die Readiness prüft das Schema und Datenbankzugriff. Dockerfile und Compose-Entwicklungskonfiguration sind vorhanden.
+Implementiert: Go-Dienst, eingebettete HTML/JS-Oberfläche, explizite SQLite-Migrationen v1–v4, synthetische Betreiber-/Betriebsstätten-/Lagerortdaten und lesende Lagerort-API. HTTPS-Anmeldung mit Argon2id, widerrufbaren Sessions und Viewer-Rechten je Betriebsstätte schützt die Lagerortliste und direkte Objektzugriffe. Lokale CLI für Kontoanlage, Bereichsänderung, Kontosperre und Artikel-/Chargenanlage. Materialfluss mit Wareneingang, atomarer Umlagerung und Entnahme, Quellversionen, Idempotenz, Bewegungsjournal/Audit und Outbox ist umgesetzt. Die Oberfläche zeigt physische/nutzbare Mengen und erlaubt Buchungen je Rolle. Vollständige Gegenbuchungen und versionierte Inventuren mit Pflichtbegründung, Nullzählung und unveränderlichem Journal sind ergänzt. SQLite-Treiber: mattn/go-sqlite3 mit CGO. Die Readiness prüft das Schema und Datenbankzugriff. Dockerfile und Compose-Entwicklungskonfiguration sind vorhanden.
 
-Offen: Inventur/Gegenbuchung, weitere Rollen und Fachrechte, Packlisten/Scanner, PWA-Funktionen, Dokumente und vollständige Backup/Restore-Abnahme. Ein SQLite-Snapshot vor Migrationen ist über die CLI möglich. Die aktuelle Oberfläche ist nur für synthetische Entwicklungsdaten vorgesehen.
+Offen: weitere Rollen und Fachrechte, Packlisten/Scanner, PWA-Funktionen, Dokumente und vollständige Backup/Restore-Abnahme. Ein SQLite-Snapshot vor Migrationen ist über die CLI möglich. Die aktuelle Oberfläche ist nur für synthetische Entwicklungsdaten vorgesehen.
 
 ## Weitere Umsetzung
 

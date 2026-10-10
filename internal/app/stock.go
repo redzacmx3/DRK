@@ -132,13 +132,8 @@ func bookStock(ctx context.Context, db *sql.DB, user, tokenHash, key, kind strin
 		return nil, err
 	}
 	defer tx.Rollback()
-	var active bool
-	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.id=? AND u.active=1 AND s.token_hash=? AND s.created_at>? AND s.last_seen>?)`, user, tokenHash, now.Add(-absoluteLifetime).Unix(), now.Add(-idleLifetime).Unix()).Scan(&active)
-	if err != nil {
+	if err = activeStockSession(ctx, tx, user, tokenHash, now); err != nil {
 		return nil, err
-	}
-	if !active {
-		return nil, errUnauthenticated
 	}
 	for _, location := range []string{input.From, input.To} {
 		if location != "" {
@@ -209,7 +204,7 @@ func bookStock(ctx context.Context, db *sql.DB, user, tokenHash, key, kind strin
 		}
 		return s
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO stock_movements VALUES(?,?,?,?,?,?,?,?,?,?)`, id, kind, user, input.BatchID, nullable(input.From), nullable(input.To), input.Quantity, state, stamp, input.Note); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO stock_movements(id,kind,user_id,batch_id,from_location_id,to_location_id,quantity,state,created_at,note) VALUES(?,?,?,?,?,?,?,?,?,?)`, id, kind, user, input.BatchID, nullable(input.From), nullable(input.To), input.Quantity, state, stamp, input.Note); err != nil {
 		return nil, err
 	}
 	result := movementResult{ID: id, Kind: kind, Quantity: input.Quantity, Balances: []balanceResult{}}

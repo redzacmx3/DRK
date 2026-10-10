@@ -27,8 +27,31 @@ func Open(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-func Migrate(db *sql.DB) error {
-	tx, err := db.Begin()
+func Migrate(db *sql.DB) (migrationErr error) {
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err = conn.ExecContext(ctx, `PRAGMA foreign_keys=OFF`); err != nil {
+		return err
+	}
+	defer func() {
+		if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys=ON`); err != nil {
+			if migrationErr == nil {
+				migrationErr = err
+			}
+			return
+		}
+		var enabled int
+		if err := conn.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&enabled); err != nil || enabled != 1 {
+			if migrationErr == nil {
+				migrationErr = fmt.Errorf("foreign key enforcement could not be restored")
+			}
+		}
+	}()
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -40,11 +63,11 @@ func Migrate(db *sql.DB) error {
 	if err = tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 3 {
+	if version > 4 {
 		return fmt.Errorf("unsupported schema version %d", version)
 	}
-	for next := version + 1; next <= 3; next++ {
-		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_auth.sql", 3: "migrations/003_stock.sql"}[next]
+	for next := version + 1; next <= 4; next++ {
+		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_auth.sql", 3: "migrations/003_stock.sql", 4: "migrations/004_corrections.sql"}[next]
 		script, err := assets.ReadFile(name)
 		if err != nil {
 			return err
@@ -106,7 +129,7 @@ func Ready(ctx context.Context, db *sql.DB) error {
 	if err := db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version != 3 {
+	if version != 4 {
 		return fmt.Errorf("schema migration required")
 	}
 	var count int
@@ -132,6 +155,7 @@ func HandlerWithOrigin(db *sql.DB, origin string) http.Handler {
 	mux := http.NewServeMux()
 	auth.routes(mux)
 	stockRoutes(mux, auth)
+	correctionRoutes(mux, auth)
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
 		if Ready(r.Context(), db) != nil {
