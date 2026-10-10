@@ -11,6 +11,7 @@ import (
 )
 
 type deviceControlInput struct {
+	MaintenanceKind  string            `json:"maintenance_kind,omitempty"`
 	MasterData       *deviceMasterData `json:"master_data,omitempty"`
 	Details          *deviceDetails    `json:"details,omitempty"`
 	Instructor       string            `json:"instructor,omitempty"`
@@ -63,6 +64,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 		return err
 	}
 	defer rows.Close()
+	record.Maintenances = nil
 	record.Instructions = []instructionProof{}
 	record.ActiveBlocks = []deviceBlock{}
 	record.EffectiveRules = map[string]DeadlineRule{}
@@ -124,6 +126,23 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 			}
 		} else if action == "defect" {
 			record.ActiveBlocks = append(record.ActiveBlocks, deviceBlock{eventID, input.BlockReason, "", version, input.Note})
+		} else if action == "maintenance" {
+			var proof struct {
+				Document *documentRecord `json:"document,omitempty"`
+			}
+			if err = json.Unmarshal([]byte(payload), &proof); err != nil {
+				return err
+			}
+			maintenance := maintenanceProof{EventID: eventID, Version: version, Kind: input.MaintenanceKind, PerformedOn: input.PerformedOn, Executor: input.Examiner, Measure: input.Method, Result: input.Result, Evidence: input.Evidence, DocumentID: input.DocumentID}
+			if proof.Document != nil {
+				maintenance.DocumentSHA256 = proof.Document.SHA256
+			}
+			record.Maintenances = append(record.Maintenances, maintenance)
+			if input.Result == "failed" {
+				record.ActiveBlocks = append(record.ActiveBlocks, deviceBlock{eventID, "defect", "", version, "Instandhaltung fehlgeschlagen: " + input.Note})
+			} else if input.Result == "follow_up_required" {
+				record.ActiveBlocks = append(record.ActiveBlocks, deviceBlock{eventID, "quarantine", "", version, "Nacharbeit aus Instandhaltung erforderlich: " + input.Note})
+			}
 		} else if action == "instruction" {
 			var proof struct {
 				Document documentRecord `json:"document"`
@@ -223,6 +242,14 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 	if action != "details" && input.Details != nil {
 		return bad("Grunddaten separat erfassen.")
 	}
+	if action != "maintenance" && input.MaintenanceKind != "" {
+		return bad("Instandhaltungsangaben separat erfassen.")
+	}
+	if action == "maintenance" {
+		if err := validateMaintenance(input, now); err != nil {
+			return nil, err
+		}
+	}
 	var beforeMasterData *deviceMasterData
 	if action != "master_data" && input.MasterData != nil {
 		return bad("Stammdaten separat erfassen.")
@@ -242,10 +269,10 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		}
 		before := currentDeviceDetails(record)
 		beforeDetails = &before
-		identityReview = (before.Manufacturer != input.Details.Manufacturer || before.Model != input.Details.Model || before.SerialOrLot != input.Details.SerialOrLot) && (record.CommissionedOn != "" || len(record.Instructions) > 0 || len(record.InspectionDates) > 0)
+		identityReview = (before.Manufacturer != input.Details.Manufacturer || before.Model != input.Details.Model || before.SerialOrLot != input.Details.SerialOrLot) && (record.CommissionedOn != "" || len(record.Instructions) > 0 || len(record.InspectionDates) > 0 || len(record.Maintenances) > 0)
 	}
 	version := record.Version + 1
-	if action != "instruction" && (input.Instructor != "" || input.Trainee != "" || input.InstructionScope != "" || input.TransferEvidence != "" || input.DocumentVersion != "" || input.DocumentID != "") {
+	if action != "instruction" && (input.Instructor != "" || input.Trainee != "" || input.InstructionScope != "" || input.TransferEvidence != "" || input.DocumentVersion != "" || (input.DocumentID != "" && action != "maintenance")) {
 		return bad("Einweisungsangaben separat erfassen.")
 	}
 
@@ -313,7 +340,7 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		if err = validateDeviceAction(ctx, tx, user, action, &input, record, now); err != nil {
 			return nil, err
 		}
-	} else if action != "details" && action != "master_data" {
+	} else if action != "details" && action != "master_data" && action != "maintenance" {
 		return bad("Unbekannter Vorgang.")
 	}
 
@@ -326,9 +353,12 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		calculated[rule.ControlType] = deadline
 	}
 	var document *documentRecord
-	if action == "instruction" {
+	if action == "instruction" || (action == "maintenance" && input.DocumentID != "") {
 		document = &documentRecord{}
 		if err = tx.QueryRowContext(ctx, `SELECT id,device_id,filename,media_type,size,sha256,created_by,created_at,note,status FROM device_documents WHERE id=? AND device_id=?`, input.DocumentID, id).Scan(&document.ID, &document.DeviceID, &document.Filename, &document.MediaType, &document.Size, &document.SHA256, &document.CreatedBy, &document.CreatedAt, &document.Note, &document.Status); err != nil {
+			if err == sql.ErrNoRows {
+				return bad("Anhang gehört nicht zu dieser Geräteakte.")
+			}
 			return nil, err
 		}
 	}
@@ -405,8 +435,8 @@ func deviceControlRoutes(mux *http.ServeMux, a *authService) {
 		json.NewEncoder(w).Encode(events)
 	})
 
-	for _, action := range []string{"commission", "rules", "inspection", "defect", "release", "instruction", "details", "master_data"} {
-		route := map[string]string{"inspection": "inspections", "defect": "defects", "release": "releases", "instruction": "instructions", "master_data": "master-data"}[action]
+	for _, action := range []string{"commission", "rules", "inspection", "defect", "release", "instruction", "details", "master_data", "maintenance"} {
+		route := map[string]string{"inspection": "inspections", "defect": "defects", "release": "releases", "instruction": "instructions", "master_data": "master-data", "maintenance": "maintenance"}[action]
 		if route == "" {
 			route = action
 		}

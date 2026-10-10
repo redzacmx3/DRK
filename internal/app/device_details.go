@@ -34,5 +34,5 @@ func validateDeviceDetails(input deviceControlInput, record deviceRecord) error 
 }
 
 func hasTechnicalControlFields(input deviceControlInput) bool {
-	return input.PerformedOn != "" || input.ControlType != "" || input.Result != "" || input.Examiner != "" || input.Method != "" || input.NextDueOn != "" || input.BlockReason != "" || input.BlockID != "" || len(input.Rules) > 0 || input.Instructor != "" || input.Trainee != "" || input.InstructionScope != "" || input.TransferEvidence != "" || input.DocumentVersion != "" || input.DocumentID != "" || input.Qualification != "" || input.Assignment != ""
+	return input.MaintenanceKind != "" || input.PerformedOn != "" || input.ControlType != "" || input.Result != "" || input.Examiner != "" || input.Method != "" || input.NextDueOn != "" || input.BlockReason != "" || input.BlockID != "" || len(input.Rules) > 0 || input.Instructor != "" || input.Trainee != "" || input.InstructionScope != "" || input.TransferEvidence != "" || input.DocumentVersion != "" || input.DocumentID != "" || input.Qualification != "" || input.Assignment != ""
 }

@@ -113,11 +113,12 @@ try {
   }
   else if (path === '/api/v1/devices/device/book') data={id:'device',version:window.deviceVersion,active_blocks:window.deviceBlocks,master_data:window.deviceMasterData,...window.deviceDetails};
   else if(path==='/api/v1/devices/device/events')data=window.deviceHistory;
-  else if (path === '/api/v1/devices/device/master-data' || path === '/api/v1/devices/device/details' || path === '/api/v1/devices/device/commission' || path === '/api/v1/devices/device/rules' || path === '/api/v1/devices/device/inspections' || path === '/api/v1/devices/device/defects' || path === '/api/v1/devices/device/releases' || path === '/api/v1/devices/device/instructions') {
+  else if (path === '/api/v1/devices/device/maintenance' || path === '/api/v1/devices/device/master-data' || path === '/api/v1/devices/device/details' || path === '/api/v1/devices/device/commission' || path === '/api/v1/devices/device/rules' || path === '/api/v1/devices/device/inspections' || path === '/api/v1/devices/device/defects' || path === '/api/v1/devices/device/releases' || path === '/api/v1/devices/device/instructions') {
    const key=options.headers['Idempotency-Key'],request=JSON.parse(options.body);window.devicePosted.push({path,key,body:options.body});
    if(window.deviceReplies.has(key))return new Response(JSON.stringify(window.deviceReplies.get(key)),{status:200,headers:{'Content-Type':'application/json'}});
    if(request.expected_version!==window.deviceVersion)return new Response(JSON.stringify({message:'Geräteakte wurde geändert; erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
    if(path.endsWith('/details')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'details',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:{...request,before_details:window.deviceDetails,identity_review:true}});window.deviceDetails={...request.details};}
+   if(path.endsWith('/maintenance')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'maintenance',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:request});}
    if(path.endsWith('/master-data')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'master_data',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:{...request,before_master_data:window.deviceMasterData}});window.deviceMasterData={...request.master_data};}
    data={id:'device',version:++window.deviceVersion};window.deviceReplies.set(key,data);
    if(window.loseDeviceReply){window.loseDeviceReply=false;throw new Error('Lost device response');}
@@ -343,6 +344,16 @@ try {
  assert.equal(await evaluate("document.querySelector('#device-history img')===null"),true);
  await evaluate("document.querySelector('#device-begin').click()");
  await until("document.querySelector('#master-actor-name').value==='Synthetic Maker'");
+ await evaluate("document.querySelector('#device-action').value='maintenance';document.querySelector('#device-action').dispatchEvent(new Event('change'));document.querySelector('#device-date').value='2024-02-01';document.querySelector('#maintenance-kind').value='repair';document.querySelector('#maintenance-executor').value='Synthetic company';document.querySelector('#maintenance-measure').value='<svg onload=alert(1)>';document.querySelector('#maintenance-result').value='completed';document.querySelector('#maintenance-document').value='document';document.querySelector('#device-qualification').value='Synthetic qualification';document.querySelector('#device-assignment').value='Synthetic assignment';window.loseDeviceReply=true;document.querySelector('#device-control-form').requestSubmit()");
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#maintenance-result').disabled"),true);
+ assert.equal(await evaluate("document.querySelector('#maintenance-document').disabled"),true);
+ await evaluate("document.querySelector('#device-control-form').requestSubmit()");
+ await until('window.devicePosted.length === 14');
+ assert.deepEqual(await evaluate('window.devicePosted[12]'),await evaluate('window.devicePosted[13]'));
+ assert.deepEqual(await evaluate("({path:window.devicePosted[13].path,kind:JSON.parse(window.devicePosted[13].body).maintenance_kind,doc:JSON.parse(window.devicePosted[13].body).document_id})"),{path:'/api/v1/devices/device/maintenance',kind:'repair',doc:'document'});
+ await until("document.querySelector('#device-history').textContent.includes('Synthetic company')");
+ assert.equal(await evaluate("document.querySelector('#device-history svg')===null"),true);
  assert.equal(await evaluate("document.querySelector('#device-import').hidden"),false);
  assert.equal(await evaluate("document.querySelector('#device-import-commit').disabled"),true);
  await evaluate("const intakeTransfer=new DataTransfer();intakeTransfer.items.add(new File(['Inventarnummer;Bezeichnung;Standort;Seriennummer\\nCSV-UI-1;Equipment;Offline Lager;000123\\n'],'intake.csv',{type:'text/csv'}));document.querySelector('#device-import-file').files=intakeTransfer.files;document.querySelector('#device-import-file').dispatchEvent(new Event('change'));document.querySelector('#device-import-form').requestSubmit()");

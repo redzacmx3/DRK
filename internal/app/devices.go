@@ -37,6 +37,7 @@ type instructionProof struct {
 	DocumentStatus  string `json:"document_status"`
 }
 type deviceRecord struct {
+	Maintenances []maintenanceProof `json:"maintenances,omitempty"`
 	MasterData   *deviceMasterData  `json:"master_data,omitempty"`
 	Intake       *deviceIntake      `json:"intake,omitempty"`
 	Instructions []instructionProof `json:"instructions"`

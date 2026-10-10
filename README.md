@@ -292,7 +292,7 @@ Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehö
 
 Die Zustände sind `UNKNOWN`, `NOT_APPLICABLE`, `CURRENT`, `DUE_SOON` und `OVERDUE`. Eine Frist gilt bis einschließlich des fachlichen Tages in `Europe/Berlin`; die Vorwarnschwelle ist ein expliziter Parameter. Fehlendes Basisdatum bleibt ungeklärt. Die Funktion beurteilt keine Gerätesperren und erteilt keine Einsatzfreigabe.
 
-Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 16.
+Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 17.
 
 
 ### Registrierte Geräteakten
@@ -384,7 +384,7 @@ Jedes Gerät in der Übersicht bietet „Geräteakte mit Historie exportieren“
 
 Alle Geräte-Leserollen dürfen Akten innerhalb ihres Bereichs exportieren. Fremde oder unbekannte IDs ergeben dieselbe 404-Antwort. Anhänge in Quarantäne werden nicht als Dateien verpackt: Metadaten, SHA-256 und ihre gebundenen Nachweisreferenzen bleiben sichtbar; der gesonderte Prüfdownload bleibt Geräteverantwortlichen vorbehalten. SHA-256 ermöglicht Konsistenzprüfungen, ist keine Signatur oder unabhängige Herkunftsbestätigung. Personenangaben aus Einweisungen bleiben Teil der geschützten Akte; eine heruntergeladene Kopie unterliegt anschließend der Verantwortung des Empfängers.
 
-Dieser Export enthält vollständig die gespeicherten Fachdaten **dieser Geräteakte**, einschließlich Historien über die 500 Einträge der Bildschirmansicht hinaus. Er bestätigt keine vollständige rechtliche Dokumentation: bisher nicht strukturierte Pflichtangaben und Abläufe werden im Export ausdrücklich als Lücken benannt. Keine automatische Einsatzfreigabe, keine Aufhebung von Sperren oder Quarantäne. Grenze je Historienbereich: 2000 Einträge, insgesamt 8 MiB unkomprimierte Exportdateien, zehn Sekunden Erzeugungszeit. Die zwei gemeinsamen Exportplätze gelten auch für CSV. Bei Überschreitung wird das gesamte Archiv abgelehnt; keine stille Kürzung. Dieser Export erfordert keine eigene Schemaänderung; aktueller Gesamtstand: Version 16.
+Dieser Export enthält vollständig die gespeicherten Fachdaten **dieser Geräteakte**, einschließlich Historien über die 500 Einträge der Bildschirmansicht hinaus. Er bestätigt keine vollständige rechtliche Dokumentation: bisher nicht strukturierte Pflichtangaben und Abläufe werden im Export ausdrücklich als Lücken benannt. Keine automatische Einsatzfreigabe, keine Aufhebung von Sperren oder Quarantäne. Grenze je Historienbereich: 2000 Einträge, insgesamt 8 MiB unkomprimierte Exportdateien, zehn Sekunden Erzeugungszeit. Die zwei gemeinsamen Exportplätze gelten auch für CSV. Bei Überschreitung wird das gesamte Archiv abgelehnt; keine stille Kürzung. Dieser Export erfordert keine eigene Schemaänderung; aktueller Gesamtstand: Version 17.
 
 ### Bestandsverzeichnis-Stammdaten (Schema 16)
 
@@ -393,3 +393,13 @@ Dieser Export enthält vollständig die gespeicherten Fachdaten **dieser Geräte
 `POST /api/v1/devices/{id}/master-data` benötigt `expected_version`, `evidence`, `note` und `master_data` mit `asset_type`, `acquisition_year` (Textjahr oder leer), `actor_role`, `actor_name`, `actor_address`, `operational_assignment`. Es ersetzt diese sechs Felder gemeinsam aus der geladenen Geräteversion. Bestehende Daten daher vorher laden; leere Werte können ausdrücklich frühere Angaben entfernen und bleiben nachvollziehbar. Separate Identifikationsänderungen bleiben im bisherigen Grunddatenablauf. Gemeinsame Geräteversion/Outbox/Wiederholschutz, Bereichsrechte und atomare Fehlerbehandlung gelten weiterhin. Ein unveränderter CSV-Wiederimport überschreibt diese Ergänzungen nicht.
 
 Keine automatische Inbetriebnahme, Kontrollpflichtbestätigung oder Einsatzfreigabe. Ein Stammdatenereignis verändert die Geräte-Prüfbasis und veraltet bisherige physische Geräteprüfungen; Material-Prüfbasis bleibt unabhängig. Neue Anschriften allein erzeugen keine technische Quarantänesperre und heben vorhandene Sperren nicht auf. Altakten ohne Ergänzung und ältere Wiederholantworten bleiben unverändert. Schema-15-Installationen vor dem Update sichern und ausdrücklich auf Schema 16 migrieren; der einfache Docker-Start migriert bestehende Datenbanken nicht automatisch.
+
+### Instandhaltungsnachweise (Schema 17)
+
+Geräteverantwortliche dokumentieren in der Geräteakte ausgeführte Instandhaltung, Wartung oder Reparatur mit Datum, ausführender Person/Firma, Maßnahme und ausdrücklich gewähltem Ergebnis. `POST /api/v1/devices/{id}/maintenance` benötigt `expected_version`, `maintenance_kind` (`maintenance`, `servicing`, `repair`), `performed_on`, `examiner` (Ausführender), `method` (Maßnahme), `result` (`completed`, `follow_up_required`, `failed`) sowie `evidence`, `qualification`, `assignment`, `note`. Auch vorbereitende Maßnahmen vor der Inbetriebnahme können dokumentiert werden; zukünftige Termine sind keine ausgeführten Nachweise.
+
+Ein optionales `document_id` muss zu dieser Geräteakte gehören; ID, Metadaten und SHA-256 werden fest gebunden. Anhänge bleiben in Quarantäne. Geräteversion, Akteur, Zeitpunkt, Outbox und exakte Wiederholantwort werden atomar gespeichert. Die Geräteakte und ihr ZIP-Archiv enthalten die Historie und Nachweise; der CSV-Überblick nennt deren Anzahl.
+
+`failed` erzeugt eine eigene Defektsperre, `follow_up_required` eine eigene Quarantänesperre. `completed` hebt keine Sperre auf, bestätigt keine Kontrollpflicht und setzt keine STK-/MTK-/elektrische Frist neu. Jede Sperre benötigt eine ausdrückliche separate Freigabe. Ein neuer Nachweis veraltet physische Geräteprüfungen; Materialprüfungen bleiben unabhängig. Identifikationsänderungen nach einem Instandhaltungsnachweis erzeugen technische Quarantäne. Bestehende Akten ohne solche Einträge behalten ihre bisherigen Prüfbasiswerte.
+
+Bestehende Installationen vor dem Update sichern und ausdrücklich auf Schema 17 migrieren. Der einfache Docker-Start migriert vorhandene Datenbanken weiterhin nicht automatisch. Eine Nachweisreferenz ist noch keine unabhängige Prüfung von Qualifikation, Dokumentinhalt oder rechtlicher Vollständigkeit.
