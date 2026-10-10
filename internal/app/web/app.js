@@ -9,7 +9,7 @@ const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Ent
 const stateNames = {available:'Verfügbar',quarantined:'Quarantäne',damaged:'Beschädigt'};
 function signedOut(message) {
  deviceDraft = null; deviceRecords = []; document.querySelector('#document-file').value=''; document.querySelector('#document-list').replaceChildren(); document.querySelector('#document-status').textContent=''; document.querySelector('#document-upload-form').hidden=true; document.querySelector('#device-basis').textContent = ''; document.querySelector('#device-control-form').hidden = true; document.querySelector('#devices-list').replaceChildren(); document.querySelector('#devices-status').textContent = '';
- csrf = ''; user = null; countDraft = null; checkDraft = null; packDraft = null; scannerReset(); list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
+ csrf = ''; user = null; deviceCheckDraft = null; packAssessment = null; document.querySelector('#physical-device-results').replaceChildren();document.querySelector('#device-proof-history').replaceChildren();document.querySelector('#last-device-proof').textContent='';document.querySelector('#physical-device-check').hidden=true; countDraft = null; checkDraft = null; packDraft = null; scannerReset(); list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
  document.querySelector('#assessment-status').textContent='';document.querySelector('#assessment-reasons').replaceChildren();document.querySelector('#pack-devices').replaceChildren();
  login.hidden = false; inventory.hidden = true; status.textContent = message;
 }
@@ -228,6 +228,7 @@ window.addEventListener('pagehide',stopCamera);
 window.addEventListener('beforeunload',event => {if (pending || packPending || identifierPending || devicePending || documentPending) {event.preventDefault();event.returnValue = '';}});
 
 
+let deviceCheckDraft = null, packAssessment = null;
 let packVersions = [], packDraft = null, checkDraft = null, packPending = null, material = null;
 const materialNames = {ready:'Materialbestand erfüllt · physisch geprüft',needs_check:'Physische Prüfung erforderlich',shortfall:'Nutzbarer Sollbestand unterschritten',unknown:'Kritische Materialdaten ungeklärt',physical_failed:'Physische Abweichung festgestellt',obsolete:'Sollversion ersetzt'};
 function productChoices() {
@@ -239,6 +240,7 @@ function packControls() {
  const chosen = packVersions.find(pack => pack.id === document.querySelector('#pack-choice').value);
  const target = locations.find(location => location.id === chosen?.location_id);
  document.querySelector('#pack-editor').hidden = !manager && !packPending;
+ deviceCheckControls(target);
  document.querySelector('#material-check').hidden = packPending?.kind !== 'check' && (!target || !can(target,['helper','material_manager']) || !material?.current_version);
  for (const form of [document.querySelector('#pack-editor'),document.querySelector('#material-check')]) for (const control of form.elements) control.disabled = Boolean(packPending);
  document.querySelector('#pack-choice').disabled = Boolean(packPending);
@@ -264,7 +266,7 @@ function addPackItem(item = {}) {
  const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Sollposition entfernen'; remove.addEventListener('click',() => row.remove());row.append(remove);document.querySelector('#pack-items').append(row);
 }
 async function loadMaterial() {
- material = null; document.querySelector('#readiness-status').textContent = 'Materialbewertung wird geladen …'; const id = document.querySelector('#pack-choice').value;
+ material = null; packAssessment = null; document.querySelector('#readiness-status').textContent = 'Materialbewertung wird geladen …'; const id = document.querySelector('#pack-choice').value;
  document.querySelector('#assessment-status').textContent='';document.querySelector('#assessment-reasons').replaceChildren();document.querySelector('#pack-rows').replaceChildren();document.querySelector('#readiness-reasons').replaceChildren();document.querySelector('#proof-history').replaceChildren();document.querySelector('#last-proof').textContent = '';
  if (!id) {document.querySelector('#readiness-status').textContent = 'Noch keine Sollpackliste vorhanden.';packControls();return false;}
  try {
@@ -272,8 +274,8 @@ async function loadMaterial() {
   if (response.status === 401 || proofResponse.status === 401) {signedOut('Bitte erneut anmelden.');return false;}
   if (!response.ok || !proofResponse.ok) throw new Error('unavailable');
   if(!assessmentResponse.ok)throw new Error('assessment');const assessment=await assessmentResponse.json();
- const result = await response.json();if (document.querySelector('#pack-choice').value !== id) return false;material = result;
- const assessmentNames={blocked:'Sollanforderungen nicht erfüllt',unknown:'Geräte-/Zubehörbewertung ungeklärt',needs_device_check:'Physische Geräte-/Funktionsprüfung fehlt',obsolete:'Sollversion veraltet'};
+ const result = await response.json();if (document.querySelector('#pack-choice').value !== id) return false;material = result;packAssessment = assessment;await loadDeviceProofHistory(id);if(!user||document.querySelector("#pack-choice").value!==id)return false;
+ const assessmentNames={blocked:'Sollanforderungen nicht erfüllt',unknown:'Geräte-/Zubehörbewertung ungeklärt',needs_device_check:'Physische Geräte-/Funktionsprüfung fehlt',physically_checked:'Physische Geräte-/Zubehörprüfung dokumentiert',obsolete:'Sollversion veraltet'};
  document.querySelector('#assessment-status').textContent=`${assessmentNames[assessment.status] || 'Bewertung ungeklärt'} · Vollständige Einsatzfreigabe nicht bewertet`;
  for(const reason of assessment.reasons){const li=document.createElement('li');li.textContent=reason;document.querySelector('#assessment-reasons').append(li);}
   document.querySelector('#readiness-status').textContent = `${materialNames[result.status]} · Datenstand ${new Date(result.data_as_of).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})}`;
@@ -296,7 +298,7 @@ async function loadPacklists() {
   await loadMaterial(); return true;
  } catch {material = null;document.querySelector('#pack-status').textContent = 'Sollpacklisten nicht verfügbar.';packControls();return false;}
 }
-document.querySelector('#pack-choice').addEventListener('change',() => {checkDraft = null;loadMaterial();});
+document.querySelector('#pack-choice').addEventListener('change',() => {checkDraft = null;deviceCheckDraft = null;loadMaterial();});
 document.querySelector('#pack-refresh').addEventListener('click',loadPacklists);
 document.querySelector('#pack-edit-start').addEventListener('click',async () => {
  if (!user || packPending) return;packDraft = null;if (!await loadPacklists() || !user || packPending) return;
@@ -321,6 +323,11 @@ async function sendPackMutation(kind) {
    const items = [...document.querySelectorAll('#pack-items fieldset')].map(row => ({product_id:row.querySelector('.pack-product').value,quantity:row.querySelector('.pack-quantity').valueAsNumber,min_remaining_days:row.querySelector('.pack-days').valueAsNumber}));
    if (!items.length || new Set(items.map(item => item.product_id)).size !== items.length) {status.textContent = 'Mindestens eine eindeutige Sollposition angeben.';return;}
    data = {location_id:packDraft.location,expected_version:packDraft.version,title:document.querySelector('#pack-title').value,check_valid_hours:document.querySelector('#pack-hours').valueAsNumber,note:document.querySelector('#pack-note').value,items,devices:[...document.querySelectorAll('#pack-devices > fieldset')].map(row=>({device_id:row.querySelector('.pack-device-id').value,accessories:[...row.querySelectorAll('.pack-accessory')].map(accessory=>({product_id:accessory.querySelector('.accessory-product').value,quantity:accessory.querySelector('.accessory-quantity').valueAsNumber}))}))};path = '/api/v1/packlists';
+  } else if (kind === 'device') {
+   if (!deviceCheckDraft || deviceCheckDraft.owner !== user.id || deviceCheckDraft.id !== document.querySelector('#pack-choice').value) return;
+   const rows=[...document.querySelectorAll('#physical-device-results fieldset')];
+   if(rows.some(row=>[...row.querySelectorAll('select')].some(select=>!['passed','failed'].includes(select.value)))){status.textContent='Alle Geräteergebnisse ausdrücklich auswählen.';return;}
+   data={basis_hash:deviceCheckDraft.basis,results:rows.map(row=>({device_id:row.dataset.deviceId,present:row.querySelector('.device-present').value==='passed',functional:row.querySelector('.device-functional').value==='passed',accessories_complete:row.querySelector('.device-accessories').value==='passed'})),note:document.querySelector('#physical-device-note').value};path=`/api/v1/packlists/${deviceCheckDraft.id}/device-checks`;
   } else {
    if (!checkDraft || checkDraft.owner !== user.id || checkDraft.id !== document.querySelector('#pack-choice').value) return;
    if (!['passed','failed'].includes(document.querySelector('#check-result').value)) {status.textContent = 'Prüfergebnis ausdrücklich auswählen.';return;}
@@ -328,12 +335,12 @@ async function sendPackMutation(kind) {
   }
   packPending = {owner:user.id,kind,path,data,key:crypto.randomUUID(),uncertain:false};
  }
- packControls();document.querySelector(`#${kind === 'publish' ? 'pack-editor' : 'material-check'} button[type=submit]`).disabled = true;
+ packControls();document.querySelector(`#${kind === 'publish' ? 'pack-editor' : kind === 'device' ? 'physical-device-check' : 'material-check'} button[type=submit]`).disabled = true;
  try {
   const response = await fetch(packPending.path,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':packPending.key},body:JSON.stringify(packPending.data)});const result = await response.json();
   if (response.status === 401) {packPending.uncertain = true;signedOut('Mit demselben Konto anmelden und offenen Packlistenvorgang erneut senden.');return;}
   if (response.status >= 500 || !response.ok && packPending.uncertain) throw new Error('uncertain');
-  packPending = null;packDraft = null;checkDraft = null;
+  packPending = null;packDraft = null;checkDraft = null;deviceCheckDraft = null;
   await loadPacklists();if (response.ok && kind === 'publish') {document.querySelector('#pack-choice').value = result.id;await loadMaterial();}
   status.textContent = response.ok ? 'Packlistenvorgang bestätigt.' : result.message || 'Vorgang abgelehnt. Neu laden und erneut prüfen.';
  } catch {if (packPending) packPending.uncertain = true;status.textContent = 'Vorgang nicht bestätigt. Erneut senden verwendet denselben Datenstand und Schlüssel. Diese Seite bis zur Klärung nicht neu laden.';}
@@ -626,3 +633,31 @@ function addPackDevice(requirement={}){
  document.querySelector('#pack-devices').append(row);for(const accessory of requirement.accessories || [])addAccessory(accessory);
 }
 document.querySelector('#pack-add-device').addEventListener('click',()=>{if(packDraft && !packPending && document.querySelectorAll('#pack-devices > fieldset').length<25)addPackDevice();});
+
+function deviceCheckControls(target) {
+ const form=document.querySelector('#physical-device-check');
+ form.hidden=packPending?.kind!=='device'&&(!target||!can(target,['helper','material_manager'])||!material?.current_version||!packAssessment?.devices?.length);
+ for(const control of form.elements)control.disabled=Boolean(packPending)||!deviceCheckDraft;
+ document.querySelector('#physical-device-start').disabled=Boolean(packPending)||!material?.current_version||!packAssessment?.devices?.length;
+ const submit=form.querySelector('button[type=submit]');submit.disabled=packPending?packPending.kind!=='device'||packPending.owner!==user?.id:!deviceCheckDraft;
+ submit.textContent=packPending?.kind==='device'?'Geräteprüfnachweis erneut senden':'Geräteprüfnachweis speichern';
+ document.querySelector('#physical-device-basis').textContent=deviceCheckDraft?'Geräteprüfung begonnen. Änderungen erfordern eine neue Prüfung.':'Vor der Prüfung ausdrücklich beginnen.';
+ const proof=packAssessment?.last_device_check;document.querySelector('#last-device-proof').textContent=proof?`Letzte Geräteprüfung: ${proof.username} · ${new Date(proof.created_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})} · ${proof.current?'aktuell':'veraltet'} · ${proof.physical_passed?'Keine Abweichung':'Abweichung'} · ${proof.note}`:'';
+}
+async function loadDeviceProofHistory(id){
+ const list=document.querySelector('#device-proof-history');list.replaceChildren();
+ const response=await fetch(`/api/v1/packlists/${id}/device-checks`,{cache:'no-store'});if(!response.ok)throw new Error('device-proof-history');
+ const proofs=await response.json();if(document.querySelector('#pack-choice').value!==id)return;
+ for(const proof of proofs){const li=document.createElement('li');li.textContent=`${new Date(proof.created_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})} · ${proof.username} · ${proof.current?'aktuell':'veraltet'} · ${proof.physical_passed?'Keine Abweichung':'Abweichung'} · ${proof.note}`;list.append(li);for(const result of proof.results||[]){const detail=document.createElement('li');detail.textContent=`${result.device_id}: Anwesenheit ${result.present?'bestätigt':'Abweichung'}, Funktion ${result.functional?'bestätigt':'Abweichung'}, Zubehör ${result.accessories_complete?'vollständig':'unvollständig'}`;list.append(detail);}}
+ if(response.headers.get('X-Has-More')==='true'){const li=document.createElement('li');li.textContent='Anzeige auf die letzten 50 Geräteprüfungen begrenzt.';list.append(li);}
+}
+document.querySelector('#physical-device-start').addEventListener('click',async()=>{
+ if(!user||packPending)return;deviceCheckDraft=null;if(!await loadMaterial()||!user||packPending||!material.current_version||!packAssessment.devices.length)return;
+ deviceCheckDraft={owner:user.id,id:material.packlist.id,basis:packAssessment.device_basis_hash};document.querySelector('#physical-device-note').value='';
+ const list=document.querySelector('#physical-device-results');list.replaceChildren();
+ for(const item of packAssessment.devices){const row=document.createElement('fieldset');row.dataset.deviceId=item.requirement.device_id;const legend=document.createElement('legend');legend.textContent=`${item.device.inventory_number} · ${item.device.name}`;row.append(legend);
+ const accessories=document.createElement('p');accessories.textContent='Zubehör-Soll: '+(item.requirement.accessories||[]).map(a=>`${productChoices().find(p=>p.id===a.product_id)?.label||a.product_id}: ${a.quantity}`).join(', ');row.append(accessories);
+ for(const [labelText,cls] of [['Am Sollort vorhanden','device-present'],['Funktion geprüft','device-functional'],['Zugeordnetes Zubehör vollständig','device-accessories']]){const label=document.createElement('label');label.textContent=labelText;const select=document.createElement('select');select.className=cls;select.required=true;for(const [value,text]of [['','Ausdrücklich auswählen'],['passed','Ja, geprüft'],['failed','Nein / Abweichung']]){const option=document.createElement('option');option.value=value;option.textContent=text;select.append(option);}label.append(select);row.append(label);}list.append(row);
+ }packControls();
+});
+document.querySelector('#physical-device-check').addEventListener('submit',event=>{event.preventDefault();sendPackMutation('device');});

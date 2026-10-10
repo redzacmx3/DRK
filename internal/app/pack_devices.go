@@ -24,6 +24,8 @@ type deviceAssessment struct {
 	Reasons     []string     `json:"reasons"`
 }
 type packAssessment struct {
+	Basis    string             `json:"device_basis_hash"`
+	Check    *deviceCheckProof  `json:"last_device_check"`
 	Scope    string             `json:"scope"`
 	Status   string             `json:"status"`
 	Overall  string             `json:"overall_readiness"`
@@ -105,7 +107,7 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 	if err != nil {
 		return packAssessment{}, err
 	}
-	result := packAssessment{Scope: "material_and_devices", Status: "needs_device_check", Overall: "not_assessed", AsOf: now.UTC().Format(time.RFC3339Nano), Material: material, Devices: []deviceAssessment{}, Reasons: []string{"Vollständige Geräte-/Funktionsprüfung und Einsatzfreigabe noch nicht bewertet."}}
+	result := packAssessment{Scope: "material_and_devices", Status: "needs_device_check", Overall: "not_assessed", AsOf: now.UTC().Format(time.RFC3339Nano), Material: material, Devices: []deviceAssessment{}, Reasons: []string{"Vollständige Einsatzfreigabe einschließlich Nutzerqualifikation noch nicht bewertet."}}
 	if material.Status == "shortfall" || material.Status == "physical_failed" {
 		result.Status = "blocked"
 	}
@@ -187,10 +189,59 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 		} else if assessed.Status == "unknown" && result.Status != "blocked" {
 			result.Status = "unknown"
 		}
-		for _, reason := range assessed.Reasons {
-			result.Reasons = append(result.Reasons, record.InventoryNumber+": "+reason)
-		}
 		result.Devices = append(result.Devices, assessed)
+	}
+	basis, _, err := physicalDeviceBasis(ctx, tx, user, p, now)
+	if err != nil {
+		return result, err
+	}
+	result.Basis = basis
+	proof, err := loadDeviceCheck(ctx, tx, p, basis, material.CurrentVersion, now)
+	if err != nil {
+		return result, err
+	}
+	result.Check = proof
+	if proof != nil {
+		if !proof.Current {
+			result.Reasons = append(result.Reasons, "Physischer Gerätenachweis veraltet; erneut prüfen.")
+		} else if !proof.Passed {
+			result.Status = "blocked"
+			for i, physical := range proof.Results {
+				device := &result.Devices[i]
+				device.Reasons[0] = "Physische Geräteprüfung aktuell dokumentiert."
+				if !*physical.Present || !*physical.Functional || !*physical.AccessoriesComplete {
+					device.Status = "blocked"
+					if !*physical.Present {
+						device.Reasons = append(device.Reasons, "Gerät am Sollort fehlt.")
+					}
+					if !*physical.Functional {
+						device.Reasons = append(device.Reasons, "Funktionsprüfung hat eine Abweichung festgestellt.")
+					}
+					if !*physical.AccessoriesComplete {
+						device.Reasons = append(device.Reasons, "Zugeordnetes Zubehör unvollständig.")
+					}
+				} else if device.Status == "needs_physical_check" {
+					device.Status = "physically_checked"
+				}
+			}
+			result.Reasons = append(result.Reasons, "Physische Geräteprüfung hat eine Abweichung festgestellt.")
+		} else {
+			result.Reasons = append(result.Reasons, "Physische Geräte-/Zubehörprüfung aktuell dokumentiert; technische Sperren und Nutzerqualifikation bleiben gesondert zu bewerten.")
+			for i := range result.Devices {
+				result.Devices[i].Reasons[0] = "Physische Anwesenheit, Funktion und Zubehör aktuell bestätigt."
+				if result.Devices[i].Status == "needs_physical_check" {
+					result.Devices[i].Status = "physically_checked"
+				}
+			}
+			if result.Status == "needs_device_check" {
+				result.Status = "physically_checked"
+			}
+		}
+	}
+	for _, device := range result.Devices {
+		for _, reason := range device.Reasons {
+			result.Reasons = append(result.Reasons, device.Device.InventoryNumber+": "+reason)
+		}
 	}
 	if !material.CurrentVersion {
 		result.Status = "obsolete"
@@ -198,6 +249,7 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 	return result, nil
 }
 func packAssessmentRoutes(mux *http.ServeMux, a *authService) {
+	packDeviceCheckRoutes(mux, a)
 	mux.HandleFunc("GET /api/v1/packlists/{id}/assessment", func(w http.ResponseWriter, r *http.Request) {
 		user, err := a.session(r)
 		if err != nil {

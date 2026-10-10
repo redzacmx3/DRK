@@ -6,7 +6,7 @@ Administrative Verwaltung von Medizinprodukten, Sanitätsmaterial und mobilen Pa
 
 Modularer Go-Dienst mit eingebetteter HTML/JS-Oberfläche, SQLite und expliziten Migrationen. Synthetische Betreiber, Betriebsstätte und Lagerorte. HTTPS-Anmeldung, widerrufbare Sessions und Rechte je Betriebsstätte. Die Oberfläche zeigt Lagerorte und Materialbestand im zugewiesenen Bereich und bietet Wareneingang, Umlagerung, Entnahme, Gegenbuchung und Inventur. Das Bewegungsjournal zeigt frühere Einträge und deren Korrekturbezüge.
 
-Noch offen: weitere Rollen/Aktionen, Geräteakte, vollständige PWA, Dokumentenspeicher, produktive Proxy-Konfiguration und vollständige Backup-/Restore-Verfahren. Nur synthetische Daten verwenden. Der Entwicklungsserver bindet ausschließlich an Loopback; Forwarded-Header werden nicht vertraut.
+Geräteakten mit Kontrollen, Sperren, Einweisungen und Anhängen in Quarantäne sind vorhanden. Sollpacklisten erfassen Geräte und Zubehör sowie getrennte physische Material- und Geräteprüfnachweise. Noch offen: weitere Rollen/Aktionen und Geräteabläufe, Nutzerqualifikation und vollständige Einsatzfreigabe, Malwareprüfung und Dokumentfreigabe, vollständige PWA, produktive Proxy-Konfiguration und vollständige Backup-/Restore-Verfahren. Nur synthetische Daten verwenden. Der Entwicklungsserver bindet ausschließlich an Loopback; Forwarded-Header werden nicht vertraut.
 
 ## Entwicklungsumgebung
 
@@ -282,7 +282,7 @@ Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehö
 
 Die Zustände sind `UNKNOWN`, `NOT_APPLICABLE`, `CURRENT`, `DUE_SOON` und `OVERDUE`. Eine Frist gilt bis einschließlich des fachlichen Tages in `Europe/Berlin`; die Vorwarnschwelle ist ein expliziter Parameter. Fehlendes Basisdatum bleibt ungeklärt. Die Funktion beurteilt keine Gerätesperren und erteilt keine Einsatzfreigabe.
 
-Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 11.
+Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 12.
 
 
 ### Registrierte Geräteakten
@@ -344,3 +344,12 @@ Schema 11 ergänzt unveränderliche Geräteanforderungen je Sollpackliste. `POST
 Der bestehende `/readiness`- und `/checks`-Ablauf bleibt ausdrücklich `material_only`. Eine Defektmeldung oder Geräteprüfung verändert den Material-Prüfhash nicht. Der neue Assessment-Endpunkt beurteilt den aktuellen Gerätestand zusätzlich, auch wenn Material bereits `ready` ist. Leere Geräteanforderungen bestätigen keine Ausnahme, sondern nennen fehlende Geräte-Sollkonfiguration. `overall_readiness` bleibt in jedem Fall `not_assessed`: die physische Anwesenheits-/Zubehör-/Funktionsprüfung und vollständige Einweisungs-/Nutzerbewertung fehlen noch. Eine ausdrücklich geschlossene Sperre allein ersetzt diese Prüfungen nicht.
 
 Bestehende Sollversionen und ihre Material-Prüfhashes bleiben bei der Migration unverändert; ohne Gerätepositionen wird kein neues Feld in ihre kanonische Datenbasis aufgenommen. Neue Geräteanforderungen werden mit der neuen Sollversion atomar samt Audit/Outbox und Wiederholantwort veröffentlicht.
+
+
+### Physische Geräteprüfung in Sollpacklisten
+
+Schema 12 speichert unveränderliche Geräteprüfnachweise, Akteur, Zeitpunkt, Prüfnotiz, Ergebnisse und Datenbasis atomar mit eigener Outbox und exakter Wiederholantwort. `GET /api/v1/packlists/{id}/assessment` liefert `device_basis_hash` und `last_device_check`; `GET .../device-checks` liefert die letzten 50 Nachweise (weitere Einträge: `X-Has-More`). Die Oberfläche zeigt aktuelle/veraltete Nachweise und Historie.
+
+`POST /api/v1/packlists/{id}/device-checks` benötigt `basis_hash`, `note`, sowie genau einen `results`-Eintrag pro Sollgerät mit `device_id` und den ausdrücklichen booleschen Ergebnissen `present`, `functional`, `accessories_complete`. Helper und Materialverantwortliche dürfen innerhalb ihres Bereichs operative Sicht-/Funktionsprüfungen dokumentieren; dies ersetzt keine STK/MTK, fachliche Kontrollberechtigung oder Einweisung. Auch ohne Zubehör-Soll muss dessen Anwendbarkeit bei der Prüfung ausdrücklich bestätigt werden. CSRF, Sitzung, Bereich und gemeinsamer Benutzer-/Idempotenzschlüsselraum werden geprüft. Verlorene Antworten lassen sich mit identischem Schlüssel und Inhalt wiederholen; bei geänderter Basis muss neu geprüft werden.
+
+Die Datenbasis umfasst Sollversion, Materialbasis mit relevanten Bestandsversionen, Berliner Tagesdatum sowie Geräteakten einschließlich Versionsstand, Fristen, Sperren und Einweisungen. Bestands-/Geräteänderungen, Tageswechsel, ersetzte Sollversion oder Ablauf der konfigurierten Prüfgültigkeit machen den Nachweis veraltet. Ein aktueller negativer Nachweis blockiert die Bewertung und nennt fehlendes Gerät, Funktionsabweichung oder unvollständiges Zubehör. Ein aktueller positiver Nachweis kann `physically_checked` ergeben; bestehende digitale Sperren, überfällige Kontrollen und ungeklärte Daten bleiben wirksam. Die Materialprüfung bleibt separat. `overall_readiness` bleibt stets `not_assessed`: Nutzerqualifikation, Anwendbarkeit rechtlicher Pflichten und vollständige Einsatzfreigabe sind weiterhin offen. Diese operative Prüfung ist kein Nachweis einer gesetzlichen Funktionsprüfung nach § 11 MPBetreibV.

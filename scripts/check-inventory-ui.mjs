@@ -98,14 +98,15 @@ try {
    if(window.loseDeviceReply){window.loseDeviceReply=false;throw new Error('Lost device response');}
   }
   else if (path.startsWith('/api/v1/packlists?')) data = [window.pack];
-  else if (path === '/api/v1/packlists/pack/assessment') data={status:'blocked',overall_readiness:'not_assessed',reasons:['SYNTH-1: Aktive Sperre: recall'],devices:[]};
+  else if (path === '/api/v1/packlists/pack/assessment') data={status:'blocked',overall_readiness:'not_assessed',reasons:['SYNTH-1: Aktive Sperre: recall'],device_basis_hash:window.devicePhysicalBasis||'d'.repeat(64),devices:[{requirement:{device_id:'device',accessories:[{product_id:'product',quantity:2}]},device:{inventory_number:'SYNTH-1',name:'Demo'}}]};
   else if (path === '/api/v1/packlists/pack/readiness') data = {scope:'material_only',overall_readiness:'not_assessed',status:'needs_check',data_as_of:new Date().toISOString(),packlist:window.pack,current_version:true,basis_hash:window.materialBasis,reasons:['Physischer Prüfnachweis fehlt.'],items:[{product:'Demo',unit:'Stück',quantity:5,physical_quantity:10,usable_quantity:10,shortfall:0,min_remaining_days:30,unknown_quantity:0}],last_check:null};
+  else if (path === '/api/v1/packlists/pack/device-checks' && !options.method) data=[];
   else if (path === '/api/v1/packlists/pack/checks' && !options.method) data = [];
-  else if (path === '/api/v1/packlists' || path === '/api/v1/packlists/pack/checks') {
+  else if (path === '/api/v1/packlists' || path === '/api/v1/packlists/pack/checks' || path === '/api/v1/packlists/pack/device-checks') {
    const request = JSON.parse(options.body),key = options.headers['Idempotency-Key'];window.packPosted.push({path,request,key});
    if (window.packReplies.has(key)) return new Response(JSON.stringify(window.packReplies.get(key)),{status:201,headers:{'Content-Type':'application/json'}});
-   if (path.endsWith('/checks') && request.basis_hash !== window.materialBasis || path === '/api/v1/packlists' && request.expected_version !== window.pack.version) return new Response(JSON.stringify({message:'Datenstand geändert; erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
-   data = path.endsWith('/checks') ? {id:'proof'} : window.pack;
+   if (path.endsWith('/device-checks') && request.basis_hash !== (window.devicePhysicalBasis||'d'.repeat(64)) || path.endsWith('/checks') && request.basis_hash !== window.materialBasis || path === '/api/v1/packlists' && request.expected_version !== window.pack.version) return new Response(JSON.stringify({message:'Datenstand geändert; erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
+   data = path.endsWith('/checks') || path.endsWith('/device-checks') ? {id:'proof'} : window.pack;
    window.packReplies.set(key,data);
    if (window.losePackReply) {window.losePackReply=false;throw new Error('Simulated lost response');}
   }
@@ -174,6 +175,24 @@ try {
  assert.equal(await evaluate("document.querySelector('#assessment-reasons').textContent.includes('recall')"),true);
  await until("document.querySelector('#status').textContent.includes('Datenstand geändert')");
  assert.equal(await evaluate("document.querySelector('#pack-editor button[type=submit]').disabled"),true);
+ await evaluate("document.querySelector('#physical-device-start').click()");
+ await until("document.querySelectorAll('#physical-device-results select').length===3 && !document.querySelector('.device-present').disabled");
+ assert.deepEqual(await evaluate("[...document.querySelectorAll('#physical-device-results select')].map(s=>s.value)"),['','','']);
+ await evaluate("window.devicePhysicalBasis='e'.repeat(64);document.querySelector('#pack-refresh').click()");
+ await until("packAssessment.device_basis_hash==='e'.repeat(64)");
+ await evaluate("for(const s of document.querySelectorAll('#physical-device-results select'))s.value='passed';document.querySelector('#physical-device-note').value='Physisch am Gerät geprüft';document.querySelector('#physical-device-check').requestSubmit()");
+ await until('window.packPosted.length===5');
+ assert.equal(await evaluate('window.packPosted[4].request.basis_hash'),'d'.repeat(64));
+ await until("document.querySelector('#status').textContent.includes('Datenstand geändert')");
+ await evaluate("document.querySelector('#physical-device-start').click()");
+ await until("document.querySelectorAll('#physical-device-results select').length===3 && !document.querySelector('.device-present').disabled");
+ await evaluate("window.losePackReply=true;for(const s of document.querySelectorAll('#physical-device-results select'))s.value='passed';document.querySelector('.device-functional').value='failed';document.querySelector('#physical-device-note').value='Funktion fehlt';document.querySelector('#physical-device-check').requestSubmit()");
+ await until("document.querySelector('#status').textContent.includes('Vorgang nicht bestätigt')");
+ await evaluate("document.querySelector('#physical-device-check').requestSubmit()");
+ await until('window.packPosted.length===7');
+ assert.deepEqual(await evaluate('window.packPosted[5]'),await evaluate('window.packPosted[6]'));
+ assert.deepEqual(await evaluate('window.packPosted[6].request.results'),[{device_id:'device',present:true,functional:false,accessories_complete:true}]);
+ await until("document.querySelector('#status').textContent.includes('Packlistenvorgang bestätigt')");
  await evaluate("document.querySelector('#scan-text').value='4006381333931';document.querySelector('#scan-form').requestSubmit()");
  await until("document.querySelector('#scan-status').textContent.includes('noch nicht zugeordnet')");
  assert.equal(await evaluate("document.querySelector('#identifier-quantity').value"),'');
@@ -267,7 +286,7 @@ try {
  await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
  await evaluate("signedOut('Test logout')");
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');
