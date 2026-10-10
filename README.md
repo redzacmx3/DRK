@@ -275,3 +275,11 @@ In dieser Cloud bei einem schreibgeschützten Standard-Docker-Verzeichnis `DOCKE
 ## Nächste Umsetzung
 
 Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehörbewertung und Packlistenalternativen bleiben offen. Vor Pilotfreigabe die [Blueprint-Abnahmekriterien](docs/blueprint-v2.md) erfüllen.
+
+### Grundlage der Gerätefristen
+
+`internal/app/deadlines.go` berechnet einzelne Kontrollfristen anhand ausdrücklich bestätigter, versionierter Regeln mit Nachweisreferenz. Unterstützt werden Monatsende nach Intervall, Jahresende nach ganzjährigem Intervall und exakte Termine. STK-Regeln verwenden Monatsende und höchstens 24 Monate; kürzere oder anlassbezogene Termine können mit eigener Nachweisreferenz eingetragen werden, verlängern aber niemals die berechnete Grenze. Produktbezogene Anwendbarkeit und Ausnahmen werden nicht aus Gerätenamen abgeleitet.
+
+Die Zustände sind `UNKNOWN`, `NOT_APPLICABLE`, `CURRENT`, `DUE_SOON` und `OVERDUE`. Eine Frist gilt bis einschließlich des fachlichen Tages in `Europe/Berlin`; die Vorwarnschwelle ist ein expliziter Parameter. Fehlendes Basisdatum bleibt ungeklärt. Die Funktion beurteilt keine Gerätesperren und erteilt keine Einsatzfreigabe.
+
+Dies ist die getestete Berechnungsgrundlage, noch keine gespeicherte Geräteakte oder Geräte-API. Regelverwaltung, Prüfnachweise, Geräteberechtigungen, Sperren und Oberfläche folgen als eigener Integrationsschritt. Datenbankschema und Compose-Betrieb bleiben bei Version 6.

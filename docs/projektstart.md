@@ -29,3 +29,9 @@ Danach folgen Geräteakte, Fristen, vollständige Geräte-/Zubehörpacklisten, e
 ## Vor Pilotbetrieb zu klären
 
 Betreiber und Betriebsstätten, Produktumfang und Pflichtbewertungen, qualifizierte Zuständigkeiten, Kontrollregeln, Datenschutz/Aufbewahrung und betrieblicher Ersatzprozess. Diese Angaben blockieren den Start mit synthetischen Daten nicht.
+
+## Gerätefristen: Berechnungsgrundlage
+
+Die Fristenengine ist mit Kalender-, Schaltjahr-, Berlin-Tageswechsel-, Ausnahme-, Anlass- und STK-Höchstfristtests ergänzt. Sie speichert im Ergebnis Regelversion, Basisdatum, Nachweisreferenz und berechneten Termin. Ungeklärte Anwendbarkeit oder fehlende Basis bleiben `UNKNOWN`; nachgewiesene Ausnahmen sind ausdrücklich `NOT_APPLICABLE`. Eine gültige Kontrollfrist hebt keine Gerätesperre auf.
+
+Nächster Integrationsschritt: persistente Geräteakten, bereichsbezogene Geräteverantwortliche, versionierte Regeln und unveränderliche Prüfnachweise; anschließend Sperren und Oberfläche. Noch keine Geräte-API und keine vollständige Geräte-Einsatzbewertung. Keine Schemaänderung in diesem Schritt.
