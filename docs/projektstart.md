@@ -102,3 +102,7 @@ Versionierte Ergänzung/Korrektur von Bezeichnung, Hersteller, Modell und Serien
 ## Lesender Geräteübersichts-Export
 
 Geschützter CSV-Download aus einem konsistenten Datenbank-Snapshot mit aktuellem Grunddatenstand, Version, Betriebsstätten-/Betreiberbezug, Fristen, Sperren und Anzahl der Einweisungsnachweise. Oberfläche enthält einen direkten Downloadlink. Formelähnliche Zellen und numerische Identifikationsnummern erhalten Textschutz. Keine Migration; begrenzter Überblick, kein vollständiger Medizinproduktebuch-Export oder Einsatzfreigabenachweis. Weiterer Schritt: vollständiger lesbarer Gerätebuch-Export mit Fachhistorie und Nachweismanifest.
+
+## Geräteaktenarchiv mit Nachweismanifest
+
+ZIP-Export pro Gerät mit offline lesbarer/druckbarer HTML-Akte, vollständigen strukturierten Fachdaten und SHA-256-Manifest. Registrierung, Geräteereignisse in Versionsfolge, aktuelle Regeln/Fristen/Sperren/Einweisungen, gerätebezogene Importherkunft und Anhangsmetadaten/-ereignisse stammen aus demselben Datenbankstand. Quarantäne-Dateien bleiben ausgeschlossen; weder technische Freigabe noch bestätigte rechtliche Vollständigkeit. Grenzen führen zum Abbruch statt zu einer gekürzten Historie. Nächste fachliche Schritte: fehlende Bestandsverzeichnisangaben und versionierte Instandhaltungsnachweise.

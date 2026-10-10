@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,6 +30,15 @@ func csvIdentifier(value string) string {
 	return "'" + value
 }
 
+func sendExportError(w http.ResponseWriter, err error) {
+	var problem *stockError
+	if errors.As(err, &problem) {
+		apiError(w, problem.Status, problem.Code, problem.Message)
+		return
+	}
+	apiError(w, 503, "export_unavailable", "Export nicht erstellt; später erneut herunterladen.")
+}
+
 func deviceExportRoutes(mux *http.ServeMux, a *authService) {
 	mux.HandleFunc("GET /api/v1/devices/export.csv", func(w http.ResponseWriter, r *http.Request) {
 		user, err := a.session(r)
@@ -47,14 +57,14 @@ func deviceExportRoutes(mux *http.ServeMux, a *authService) {
 		defer cancel()
 		tx, err := a.db.BeginTx(ctx, nil)
 		if err != nil {
-			sendStockError(w, err)
+			sendExportError(w, err)
 			return
 		}
 		defer tx.Rollback()
 		now := a.now()
 		rows, err := tx.QueryContext(ctx, `SELECT d.id,d.location_id,d.inventory_number,d.name,d.manufacturer,d.model,d.serial_or_lot,d.created_by,d.created_at,d.note,o.name,s.name,l.name FROM devices d JOIN locations l ON l.id=d.location_id JOIN sites s ON s.id=l.site_id JOIN operators o ON o.id=s.operator_id WHERE EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=l.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager','device_manager')) ORDER BY d.inventory_number,d.id LIMIT 1001`, user.ID)
 		if err != nil {
-			sendStockError(w, err)
+			sendExportError(w, err)
 			return
 		}
 		type entry struct {
@@ -68,7 +78,7 @@ func deviceExportRoutes(mux *http.ServeMux, a *authService) {
 			var e entry
 			if err = rows.Scan(&id, &in.LocationID, &in.InventoryNumber, &in.Name, &in.Manufacturer, &in.Model, &in.SerialOrLot, &actor, &created, &in.Note, &e.operator, &e.site, &e.location); err != nil {
 				rows.Close()
-				sendStockError(w, err)
+				sendExportError(w, err)
 				return
 			}
 			e.record = registeredDevice(in, id, actor, created)
@@ -77,7 +87,7 @@ func deviceExportRoutes(mux *http.ServeMux, a *authService) {
 		err = rows.Err()
 		rows.Close()
 		if err != nil {
-			sendStockError(w, err)
+			sendExportError(w, err)
 			return
 		}
 		if len(entries) > 1000 {
@@ -94,7 +104,7 @@ func deviceExportRoutes(mux *http.ServeMux, a *authService) {
 			e := &entries[i]
 			d := &e.record
 			if err = projectDevice(ctx, tx, d, now); err != nil {
-				sendStockError(w, err)
+				sendExportError(w, err)
 				return
 			}
 			blocks := []string{}
@@ -114,11 +124,11 @@ func deviceExportRoutes(mux *http.ServeMux, a *authService) {
 		}
 		writer.Flush()
 		if err = writer.Error(); err != nil {
-			sendStockError(w, err)
+			sendExportError(w, err)
 			return
 		}
 		if err = ctx.Err(); err != nil {
-			sendStockError(w, err)
+			sendExportError(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")

@@ -130,6 +130,7 @@ func registerDevice(ctx context.Context, db *sql.DB, user, token, key string, in
 }
 func deviceRoutes(mux *http.ServeMux, a *authService) {
 	deviceExportRoutes(mux, a)
+	deviceBookExportRoutes(mux, a)
 	deviceControlRoutes(mux, a)
 	deviceImportRoutes(mux, a)
 	mux.HandleFunc("GET /api/v1/devices/{id}/book", func(w http.ResponseWriter, r *http.Request) {

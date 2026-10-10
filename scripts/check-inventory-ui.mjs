@@ -251,6 +251,8 @@ try {
  assert.equal(await evaluate('window.nonInventoryStockPosts.length'),1);
  await evaluate("document.querySelector('#devices-refresh').click()");
  await until("document.querySelector('#devices-status').textContent.includes('1 Geräte')");
+ assert.equal(await evaluate("document.querySelector('#devices-list a').getAttribute('href')"),'/api/v1/devices/device/export.zip');
+ assert.equal(await evaluate("document.querySelector('#devices-list a').download"),'geraeteakte.zip');
  assert.equal(await evaluate("document.querySelector('#devices-list').textContent.includes('ungeklärt')"),true);
  assert.equal(await evaluate("document.querySelector('#devices-list').textContent.includes('<img src=x onerror=alert(1)>')"),true);
  assert.equal(await evaluate("document.querySelector('#devices-list img') === null"),true);

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Geräteakte {{.Device.InventoryNumber}}</title>
+<style>body{font-family:Arial,sans-serif;max-width:1000px;margin:2rem auto;padding:1rem;line-height:1.5}td,th{border:1px solid #bbb;padding:.4rem;text-align:left}table{border-collapse:collapse;width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f5f5;padding:1rem}h2{border-bottom:1px solid #bbb}@media print{body{margin:0;max-width:none}article{break-inside:avoid}}</style>
+</head>
+<body>
+<h1>Geräteakte: {{.Device.InventoryNumber}}</h1>
+<p>Datenstand UTC: {{.GeneratedAt}} · Geräteversion {{.Device.Version}}</p>
+<p>Betreiber: {{.Operator}} · Betriebsstätte: {{.Site}} · Lagerort: {{.Location}}</p>
+<h2>Aktuelle Identifikation</h2>
+<table>
+<tr>
+<th>Bezeichnung</th>
+<td>{{.Device.Name}}</td>
+</tr>
+<tr>
+<th>Hersteller</th>
+<td>{{.Device.Manufacturer}}</td>
+</tr>
+<tr>
+<th>Modell</th>
+<td>{{.Device.Model}}</td>
+</tr>
+<tr>
+<th>Serien-/Losnummer</th>
+<td>{{.Device.SerialOrLot}}</td>
+</tr>
+<tr>
+<th>Inbetriebnahme</th>
+<td>{{.Device.CommissionedOn}}</td>
+</tr>
+<tr>
+<th>Lebenszyklus</th>
+<td>{{.Device.Lifecycle}}</td>
+</tr>
+</table>
+<h2>Einordnung und Datenlücken</h2>
+<ul>{{range .Warnings}}<li>{{.}}</li>{{end}}</ul>
+<h2>Kontrollfristen</h2>
+<table>
+<tr>
+<th>Art</th>
+<th>Status</th>
+<th>Frist</th>
+<th>Basisdatum</th>
+<th>Regelversion</th>
+<th>Nachweis</th>
+</tr>{{range $kind,$rule:=.Device.Controls}}<tr>
+<td>{{$kind}}</td>
+<td>{{$rule.State}}</td>
+<td>{{$rule.DueOn}}</td>
+<td>{{$rule.BasisDate}}</td>
+<td>{{$rule.RuleVersion}}</td>
+<td>{{$rule.Evidence}}</td>
+</tr>{{end}}</table>
+<h2>Aktive Sperren</h2>{{range .Device.ActiveBlocks}}<p>{{.Reason}} · {{.ID}} · {{.Note}}</p>{{else}}<p>Keine aktive Sperre erfasst.</p>{{end}}<h2>Einweisungsnachweise</h2>{{range .Device.Instructions}}<p>{{.PerformedOn}} · {{.Instructor}} → {{.Trainee}} · {{.Scope}} · Dokument {{.DocumentID}} · Unterlagenversion {{.DocumentVersion}}</p>{{else}}<p>Keine Einweisungsnachweise erfasst.</p>{{end}}<h2>Vollständiger aktueller Aktenstand</h2>
+<pre>{{proof .Device}}</pre>{{if .IntakeProvenance}}<h2>Herkunft der Erstinventarisierung</h2>
+<pre>{{proof .IntakeProvenance}}</pre>{{end}}<h2>Unveränderte Registrierung</h2>{{range .Registration}}<article>
+<h3>{{action .Action}}</h3>
+<p>Ereignis {{.ID}} · {{.CreatedAt}} · Akteur-ID {{.ActorID}}</p>
+<table>{{range fields .Proof}}<tr>
+<th>{{.Label}}</th>
+<td>
+<pre>{{.Value}}</pre>
+</td>
+</tr>{{end}}</table>
+</article>{{end}}<h2>Fachhistorie in Versionsfolge</h2>{{range .Controls}}<article>
+<h3>Version {{.Version}}: {{action .Action}}</h3>
+<p>Ereignis {{.ID}} · {{.CreatedAt}} · Akteur-ID {{.ActorID}}</p>
+<table>{{range fields .Proof}}<tr>
+<th>{{.Label}}</th>
+<td>
+<pre>{{.Value}}</pre>
+</td>
+</tr>{{end}}</table>
+</article>{{else}}<p>Keine Fachereignisse erfasst.</p>{{end}}<h2>Anhangsmanifest</h2>
+<p>Dateiinhalte sind nicht enthalten. Quarantäne wird durch den Export nicht aufgehoben.</p>{{range .Documents}}<article>
+<h3>{{.Filename}}</h3>
+<p>ID {{.ID}} · {{.MediaType}} · {{.Size}} Bytes · {{.Status}}</p>
+<p>SHA-256: {{.SHA256}}</p>
+<p>{{.CreatedAt}} · Akteur-ID {{.CreatedBy}} · {{.Note}}</p>
+</article>{{else}}<p>Keine Anhänge erfasst.</p>{{end}}<h2>Anhangshistorie</h2>{{range .DocumentEvents}}<article>
+<p>Ereignis {{.ID}} · {{.CreatedAt}} · Akteur-ID {{.ActorID}}</p>
+<table>{{range fields .Proof}}<tr>
+<th>{{.Label}}</th>
+<td>
+<pre>{{.Value}}</pre>
+</td>
+</tr>{{end}}</table>
+</article>{{else}}<p>Keine Anhangsereignisse erfasst.</p>{{end}}</body>
+</html>
