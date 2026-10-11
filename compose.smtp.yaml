@@ -1,0 +1,8 @@
+# Optional overlay for compose.yaml, compose.local.yaml or compose.nas.yaml.
+# SMTP remains disabled unless this overlay/configuration is explicitly selected.
+services:
+  inventory:
+    environment:
+      DRK_SMTP_CONFIG: /run/smtp/config.json
+    volumes:
+      - ${DRK_SMTP_DIR:?Set the directory containing config.json and secret files}:/run/smtp:ro

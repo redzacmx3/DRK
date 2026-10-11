@@ -60,7 +60,7 @@ func run() error {
 	}
 
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: inventory init|device-template|stock-template|backup|migrate|remind-devices|seed-demo|create-product|create-batch|create-user|set-sites|disable-user|serve --db PATH [--listen 127.0.0.1:8080]")
+		return fmt.Errorf("usage: inventory init|device-template|stock-template|backup|migrate|remind-devices|deliver-reminders|retry-reminder-mail|seed-demo|create-product|create-batch|create-user|set-sites|disable-user|serve --db PATH [--listen 127.0.0.1:8080]")
 	}
 	flags := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
 	path := flags.String("db", "inventory.db", "SQLite path")
@@ -78,6 +78,9 @@ func run() error {
 	expires := flags.String("expires-on", "", "exact expiry day YYYY-MM-DD, empty if unknown")
 	site := flags.String("site", "", "viewer site UUID (comma-separated for set-sites)")
 	addr := flags.String("listen", "127.0.0.1:8080", "listen IP address")
+	smtpPath := flags.String("smtp-config", os.Getenv("DRK_SMTP_CONFIG"), "explicit SMTP configuration file; empty disables mail")
+	deliveryID := flags.String("delivery", "", "mail delivery ID for manual retry")
+	duplicateRisk := flags.Bool("accept-duplicate-risk", false, "allow retry after uncertain SMTP acceptance")
 	reminderDays := flags.String("reminder-days", "60,30,7", "device reminder thresholds in days")
 	reminders := flags.Bool("device-reminders", true, "run hourly local device reminders")
 	allowNetwork := flags.Bool("allow-network-listen", false, "allow an explicit non-loopback HTTPS listener behind a protected network")
@@ -132,6 +135,20 @@ func run() error {
 			return err
 		}
 	}
+	var smtpConfig *app.SMTPConfig
+	if os.Args[1] == "serve" || os.Args[1] == "deliver-reminders" {
+		var err error
+		smtpConfig, err = app.LoadSMTPConfig(*smtpPath)
+		if err != nil {
+			return err
+		}
+		if os.Args[1] == "deliver-reminders" && smtpConfig == nil {
+			return fmt.Errorf("--smtp-config required for explicit mail dispatch")
+		}
+		if os.Args[1] == "serve" && smtpConfig != nil && !*reminders {
+			return fmt.Errorf("SMTP delivery requires device reminders enabled")
+		}
+	}
 	freshDatabase := false
 	if os.Args[1] == "init" {
 		_, statErr := os.Stat(*path)
@@ -169,6 +186,16 @@ func run() error {
 		}
 		_, err := db.Exec(`VACUUM INTO ?`, *out)
 		return err
+	case "retry-reminder-mail":
+		if err := app.Ready(context.Background(), db); err != nil {
+			return err
+		}
+		return app.RetryReminderMail(context.Background(), db, *deliveryID, *duplicateRisk, time.Now())
+	case "deliver-reminders":
+		if err := app.Ready(context.Background(), db); err != nil {
+			return err
+		}
+		return app.DispatchReminderMail(context.Background(), db, smtpConfig, smtpConfig, time.Now)
 	case "remind-devices":
 		if err := app.Ready(context.Background(), db); err != nil {
 			return err
@@ -203,6 +230,9 @@ func run() error {
 		if err := app.Ready(context.Background(), db); err != nil {
 			return fmt.Errorf("run migrate first: %w", err)
 		}
+		if err := app.ValidateSMTPRecipients(context.Background(), db, smtpConfig); err != nil {
+			return err
+		}
 		srv := &http.Server{Addr: *addr, Handler: app.HandlerWithTransport(db, *origin, *localHTTP), TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -215,7 +245,16 @@ func run() error {
 		} else {
 			close(workerDone)
 		}
-		defer func() { stop(); <-workerDone }()
+		mailDone := make(chan struct{})
+		if smtpConfig != nil {
+			go func() {
+				defer close(mailDone)
+				app.RunReminderMailWorker(ctx, db, smtpConfig, func(error) { log.Print("Reminder mail job failed; inspect delivery status") })
+			}()
+		} else {
+			close(mailDone)
+		}
+		defer func() { stop(); <-workerDone; <-mailDone }()
 		go func() {
 			<-ctx.Done()
 			shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)

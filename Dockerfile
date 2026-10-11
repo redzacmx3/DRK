@@ -7,6 +7,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=1 go build -mod=
 
 FROM debian:bookworm-slim
 RUN mkdir -p /data && chown 1000:1000 /data
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/inventory /app/inventory
 USER 1000:1000
 WORKDIR /app
