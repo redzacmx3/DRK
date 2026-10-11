@@ -12,6 +12,7 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
+	EventVersion  int    `json:"event_version,omitempty"`
 	Kind          string `json:"kind"`
 	Applicability string `json:"applicability"`
 	Reason        string `json:"reason"`
@@ -40,6 +41,7 @@ type productDutyEvent struct {
 	DocumentSHA256 string           `json:"document_sha256,omitempty"`
 }
 type productDutyAssessment struct {
+	Checks        []productDutyCheck `json:"checks,omitempty"`
 	Version       int                `json:"version"`
 	DeviceVersion int                `json:"device_version"`
 	Status        string             `json:"status"`
@@ -125,6 +127,10 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 			return result, nil
 		}
 	}
+	result.Checks, err = checkProductDutyProofs(ctx, tx, record, last.Input.Rules)
+	if err != nil {
+		return result, err
+	}
 	result.Status = "reviewed"
 	result.Reasons = append(result.Reasons, "Anwendbarkeit und Nachweisreferenzen fachlich dokumentiert; Erfüllung der besonderen Pflichten und Einsatzfreigabe noch gesondert abzunehmen.")
 	return result, nil
@@ -203,6 +209,9 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			if !known || seen[rule.Kind] || !validReason(rule.Reason) || (rule.Applicability != "required" && rule.Applicability != "exempt" && rule.Applicability != "unknown") || (rule.Applicability == "required" && !validReason(rule.Evidence)) || (rule.Evidence != "" && !validReason(rule.Evidence)) {
 				return nil, adminInvalid("Jeden Pflichtbereich genau einmal mit Anwendbarkeit, Begründung und bei erforderlichen Pflichten einer Nachweisreferenz erfassen.")
 			}
+			if err := validateProductDutyReference(rule, record); err != nil {
+				return nil, err
+			}
 			seen[rule.Kind] = true
 		}
 		var status string
@@ -271,9 +280,10 @@ func productDutyRoutes(mux *http.ServeMux, a *authService) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(struct {
-			Assessment productDutyAssessment `json:"assessment"`
-			Manager    bool                  `json:"manager"`
-		}{result, manager})
+			Assessment  productDutyAssessment `json:"assessment"`
+			Manager     bool                  `json:"manager"`
+			Maintenance []maintenanceProof    `json:"maintenance"`
+		}{result, manager, record.Maintenances})
 	})
 	mux.HandleFunc("POST /api/v1/devices/{id}/product-duties", func(w http.ResponseWriter, r *http.Request) {
 		actor, ok := writeAuthorized(a, w, r)

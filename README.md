@@ -508,3 +508,5 @@ Personenbezogener Zugang zur passenden freigegebenen Gebrauchsanweisung lässt s
 ## Besondere Produktpflichten (Schema 28)
 
 Geräteverantwortliche können die Anwendbarkeit von acht besonderen Pflichtbereichen anhand einer freigegebenen Produktunterlage fachlich dokumentieren und widerrufen. Bewertungen sind versioniert, befristet und an Geräteidentifikation sowie Standort gebunden. Ereignisse sind in Geräteaktenarchiven enthalten; die Packlistenbewertung zeigt den Prüfstand. Nachweisreferenzen und Anwendbarkeit ersetzen noch keine Erfüllungsabnahme oder vollständige Einsatzfreigabe. [Bedienung, API und Grenzen](docs/produktpflichten.md).
+
+Herstellerwartung kann jetzt ausdrücklich mit einer Wartung derselben Geräteakte verknüpft werden. Die Vorprüfung erkennt fehlende, zurückgezogene, richtiggestellte und überholte Nachweise sowie offene Sperren; Auflösung ist noch keine fachliche Abnahme. Der aktuelle Prüfbericht erscheint in Oberfläche, Packlistenbewertung und Aktenexport. Diese Ergänzung bleibt auf Schema 28.

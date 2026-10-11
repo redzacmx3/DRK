@@ -32,21 +32,22 @@ type bookIntakeProvenance struct {
 }
 
 type deviceBookExport struct {
-	IntakeProvenance *bookIntakeProvenance `json:"intake_provenance,omitempty"`
-	FormatVersion    int                   `json:"format_version"`
-	GeneratedAt      string                `json:"generated_at"`
-	Operator         string                `json:"operator"`
-	Site             string                `json:"site"`
-	Location         string                `json:"location"`
-	Device           deviceRecord          `json:"device"`
-	Registration     []bookExportEvent     `json:"registration_events"`
-	Controls         []bookExportEvent     `json:"control_events"`
-	Documents        []documentRecord      `json:"documents"`
-	ProductDuties    []bookExportEvent     `json:"product_duty_events"`
-	ManualAccess     []bookExportEvent     `json:"manual_access_events"`
-	DocumentReviews  []bookExportEvent     `json:"document_reviews"`
-	DocumentEvents   []bookExportEvent     `json:"document_events"`
-	Warnings         []string              `json:"warnings"`
+	IntakeProvenance  *bookIntakeProvenance  `json:"intake_provenance,omitempty"`
+	FormatVersion     int                    `json:"format_version"`
+	GeneratedAt       string                 `json:"generated_at"`
+	Operator          string                 `json:"operator"`
+	Site              string                 `json:"site"`
+	Location          string                 `json:"location"`
+	Device            deviceRecord           `json:"device"`
+	Registration      []bookExportEvent      `json:"registration_events"`
+	Controls          []bookExportEvent      `json:"control_events"`
+	Documents         []documentRecord       `json:"documents"`
+	ProductDutyReview *productDutyAssessment `json:"product_duty_assessment,omitempty"`
+	ProductDuties     []bookExportEvent      `json:"product_duty_events"`
+	ManualAccess      []bookExportEvent      `json:"manual_access_events"`
+	DocumentReviews   []bookExportEvent      `json:"document_reviews"`
+	DocumentEvents    []bookExportEvent      `json:"document_events"`
+	Warnings          []string               `json:"warnings"`
 }
 
 type limitedExportBuffer struct {
@@ -254,6 +255,13 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 			sendExportError(w, err)
 			return
 		}
+		dutyReview, err := assessProductDuty(ctx, tx, user.ID, book.Device, a.now())
+		if err != nil {
+			sendExportError(w, err)
+			return
+		}
+		dutyReview.Events = nil
+		book.ProductDutyReview = &dutyReview
 		book.DocumentReviews, err = bookEvents(ctx, tx, `SELECT e.id,e.version,e.action,e.actor_id,e.created_at,e.payload_json FROM document_reviews e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=? ORDER BY e.created_at,e.id`, id)
 		if err != nil {
 			sendExportError(w, err)

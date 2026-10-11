@@ -15,7 +15,7 @@ func dutyProof(document documentRecord) productDutyInput {
 	yes := true
 	in := productDutyInput{Action: "review", DocumentID: document.ID, ValidUntil: time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339), Reviewed: &yes, Evidence: "Synthetic <img> product source", Qualification: "Synthetic reviewer qualification", Assignment: "Synthetic operator assignment", Note: "Synthetic assessment"}
 	for _, kind := range productDutyKinds {
-		in.Rules = append(in.Rules, productDutyRule{kind, "exempt", "Synthetic confirmed exception", ""})
+		in.Rules = append(in.Rules, productDutyRule{Kind: kind, Applicability: "exempt", Reason: "Synthetic confirmed exception"})
 	}
 	return in
 }

@@ -106,8 +106,15 @@ func consolidateEvidence(result packAssessment) operatingEvidence {
 	add("manual_access", manual, "Befristeter Zugang zur passenden freigegebenen Gebrauchsanweisung für diese Person am Geräteort.")
 	duties := "unknown"
 	for _, device := range result.Devices {
-		if device.ProductDuties != nil && device.ProductDuties.Status == "blocked" {
-			duties = "blocked"
+		if device.ProductDuties != nil {
+			if device.ProductDuties.Status == "blocked" {
+				duties = "blocked"
+			}
+			for _, check := range device.ProductDuties.Checks {
+				if check.Status == "blocked" {
+					duties = "blocked"
+				}
+			}
 		}
 	}
 	add("product_duties", duties, "Anwendbarkeit besonderer Produktpflichten und Nachweisreferenzen dokumentieren; ihre Erfüllung und vollständige Einsatzfreigabe bleiben gesondert abzunehmen.")
