@@ -75,7 +75,7 @@ func TestProductDutyMaintenanceReferenceResolutionAndInvalidation(t *testing.T) 
 	changed := record
 	changed.Maintenances = append([]maintenanceProof{}, record.Maintenances...)
 	changed.Maintenances[0].DocumentSHA256 = "changed"
-	checks, err := checkProductDutyProofs(context.Background(), tx, changed, in.Rules)
+	checks, err := checkProductDutyProofs(context.Background(), tx, changed, in.Rules, "")
 	tx.Rollback()
 	if err != nil {
 		t.Fatal(err)

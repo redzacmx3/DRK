@@ -27,7 +27,7 @@ func validateProductDutyReference(rule productDutyRule, record deviceRecord) err
 	}
 	return adminInvalid("Wartungsereignis aus derselben Geräteakte ausdrücklich auswählen; eine Reparatur ist kein Wartungsnachweis.")
 }
-func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord, rules []productDutyRule) ([]productDutyCheck, error) {
+func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord, rules []productDutyRule, functionSHA string) ([]productDutyCheck, error) {
 	checks := make([]productDutyCheck, 0, len(rules))
 	for _, rule := range rules {
 		check := productDutyCheck{Kind: rule.Kind, Status: "unknown", EventVersion: rule.EventVersion, Reason: "Automatische Nachweisauflösung für diesen Pflichtbereich noch nicht umgesetzt; fachliche Abnahme offen."}
@@ -96,7 +96,12 @@ func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord
 			if err != nil {
 				return nil, err
 			}
-			check.Reason = "Inbetriebnahme und Einweisung separat auflösen; besondere Funktionsprüfung am Betriebsort, fachliche Eignung und Endanwenderanforderungen bleiben abzunehmen."
+			functional, err := checkDutyFunction(ctx, tx, record, rule.FunctionCheck, functionSHA)
+			if err != nil {
+				return nil, err
+			}
+			details = append(details, functional)
+			check.Reason = "Inbetriebnahme, Einweisung und besondere Funktionsprüfung separat vorgeprüft; fachliche Eignung und Endanwenderanforderungen bleiben abzunehmen."
 			for _, detail := range details {
 				if detail.Status == "blocked" {
 					check.Status = "blocked"

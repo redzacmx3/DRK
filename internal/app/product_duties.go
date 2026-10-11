@@ -12,15 +12,16 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
-	CommissionVersion    int    `json:"commission_version,omitempty"`
-	InstructionVersion   int    `json:"instruction_version,omitempty"`
-	DesignatedUserID     string `json:"designated_user_id,omitempty"`
-	DesignatedAssignment string `json:"designated_assignment,omitempty"`
-	EventVersion         int    `json:"event_version,omitempty"`
-	Kind                 string `json:"kind"`
-	Applicability        string `json:"applicability"`
-	Reason               string `json:"reason"`
-	Evidence             string `json:"evidence"`
+	FunctionCheck        *dutyFunctionProof `json:"function_check,omitempty"`
+	CommissionVersion    int                `json:"commission_version,omitempty"`
+	InstructionVersion   int                `json:"instruction_version,omitempty"`
+	DesignatedUserID     string             `json:"designated_user_id,omitempty"`
+	DesignatedAssignment string             `json:"designated_assignment,omitempty"`
+	EventVersion         int                `json:"event_version,omitempty"`
+	Kind                 string             `json:"kind"`
+	Applicability        string             `json:"applicability"`
+	Reason               string             `json:"reason"`
+	Evidence             string             `json:"evidence"`
 }
 type productDutyInput struct {
 	ExpectedVersion       int               `json:"expected_version"`
@@ -36,13 +37,14 @@ type productDutyInput struct {
 	Note                  string            `json:"note"`
 }
 type productDutyEvent struct {
-	ID             string           `json:"id"`
-	Version        int              `json:"version"`
-	ActorID        string           `json:"actor_id"`
-	CreatedAt      string           `json:"created_at"`
-	Input          productDutyInput `json:"input"`
-	Identity       string           `json:"identity_basis"`
-	DocumentSHA256 string           `json:"document_sha256,omitempty"`
+	FunctionDocumentSHA256 string           `json:"function_document_sha256,omitempty"`
+	ID                     string           `json:"id"`
+	Version                int              `json:"version"`
+	ActorID                string           `json:"actor_id"`
+	CreatedAt              string           `json:"created_at"`
+	Input                  productDutyInput `json:"input"`
+	Identity               string           `json:"identity_basis"`
+	DocumentSHA256         string           `json:"document_sha256,omitempty"`
 }
 type productDutyAssessment struct {
 	Checks        []productDutyCheck `json:"checks,omitempty"`
@@ -131,7 +133,7 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 			return result, nil
 		}
 	}
-	result.Checks, err = checkProductDutyProofs(ctx, tx, record, last.Input.Rules)
+	result.Checks, err = checkProductDutyProofs(ctx, tx, record, last.Input.Rules, last.FunctionDocumentSHA256)
 	if err != nil {
 		return result, err
 	}
@@ -219,6 +221,13 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			if err := validateAnnex1Reference(ctx, tx, rule, record); err != nil {
 				return nil, err
 			}
+			sha, err := validateDutyFunction(ctx, tx, rule, record, now)
+			if err != nil {
+				return nil, err
+			}
+			if sha != "" {
+				event.FunctionDocumentSHA256 = sha
+			}
 			seen[rule.Kind] = true
 		}
 		var status string
@@ -297,13 +306,14 @@ func productDutyRoutes(mux *http.ServeMux, a *authService) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(struct {
+			LocationID   string                 `json:"location_id"`
 			Assessment   productDutyAssessment  `json:"assessment"`
 			Manager      bool                   `json:"manager"`
 			Maintenance  []maintenanceProof     `json:"maintenance"`
 			Commissions  []dutyCommissionChoice `json:"commissions"`
 			Instructions []instructionProof     `json:"instructions"`
 			People       []dutyPersonChoice     `json:"people"`
-		}{result, manager, record.Maintenances, commissions, record.Instructions, people})
+		}{record.LocationID, result, manager, record.Maintenances, commissions, record.Instructions, people})
 	})
 	mux.HandleFunc("POST /api/v1/devices/{id}/product-duties", func(w http.ResponseWriter, r *http.Request) {
 		actor, ok := writeAuthorized(a, w, r)
