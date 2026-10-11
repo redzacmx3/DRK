@@ -18,12 +18,13 @@ type packDevice struct {
 	Accessories []packAccessory `json:"accessories"`
 }
 type deviceAssessment struct {
-	ManualAccess *manualAccessSummary `json:"manual_access,omitempty"`
-	UserUsage    *usageSummary        `json:"user_usage,omitempty"`
-	Requirement  packDevice           `json:"requirement"`
-	Device       deviceRecord         `json:"device"`
-	Status       string               `json:"status"`
-	Reasons      []string             `json:"reasons"`
+	ProductDuties *productDutyAssessment `json:"product_duties,omitempty"`
+	ManualAccess  *manualAccessSummary   `json:"manual_access,omitempty"`
+	UserUsage     *usageSummary          `json:"user_usage,omitempty"`
+	Requirement   packDevice             `json:"requirement"`
+	Device        deviceRecord           `json:"device"`
+	Status        string                 `json:"status"`
+	Reasons       []string               `json:"reasons"`
 }
 type packAssessment struct {
 	Evidence operatingEvidence  `json:"operating_evidence"`
@@ -264,6 +265,13 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 		if err != nil {
 			return result, err
 		}
+		duties, err := assessProductDuty(ctx, tx, user, result.Devices[i].Device, now)
+		if err != nil {
+			return result, err
+		}
+		// History is available in the dedicated endpoint and archive, not each pack response.
+		duties.Events = nil
+		result.Devices[i].ProductDuties = &duties
 		result.Devices[i].ManualAccess = &manualAccessSummary{access.UserID, access.Version, access.Status, access.Reasons}
 		for _, reason := range access.Reasons {
 			result.Reasons = append(result.Reasons, result.Devices[i].Device.InventoryNumber+" · Gebrauchsanweisung: "+reason)

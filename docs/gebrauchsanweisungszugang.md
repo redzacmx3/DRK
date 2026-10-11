@@ -23,7 +23,7 @@ Die Packlistenbewertung ergänzt `operating_evidence` mit sechs getrennten Kompo
 | Gerätekontrollen | Inbetriebnahme, ausdrücklich bewertete Kontrollpflichten, Fristen, Sperren, Außerbetriebnahme und offene Meldebewertung |
 | Personenqualifikation | Konkrete Einweisungszuordnung und gültige erforderliche Qualifikationen des angemeldeten Kontos |
 | Gebrauchsanweisungszugang | Aktuelle personengebundene Zugangsbestätigung für jedes Sollgerät |
-| Besondere Produktpflichten | Noch ungeklärt: deren strukturierte Anwendbarkeit und fachliche Abnahme fehlen |
+| Besondere Produktpflichten | Anwendbarkeit strukturiert dokumentierbar; Erfüllungsabnahme weiter offen, Widerruf blockiert |
 
 `met` bedeutet ausschließlich, dass die erfasste Teilvoraussetzung erfüllt ist. `unknown`, `needs_check` und `blocked` bleiben getrennt sichtbar. Die gemeinsame Bewertung lautet `blocked` bei einem bekannten Hindernis, ansonsten `incomplete`; alte Sollversionen heißen `obsolete`. Sie vergibt noch keine Gesamtfreigabe. Fehlende besondere Produktpflichten werden nicht aus allgemeinen Qualifikationscodes, App-Rollen oder einer bloßen Zugangsbestätigung abgeleitet.
 
@@ -37,4 +37,6 @@ Schreiben benötigt `device_manager` an der aktuellen Betriebsstätte des Gerät
 
 Nach unklarer Antwort identischen Inhalt mit demselben Schlüssel wiederholen; aktuelle Rechte werden vor Wiederholantworten geprüft. Nach Versionskonflikt neu laden und abgleichen. Entwürfe liegen nur im Tab-Arbeitsspeicher; nach Neuladen zuerst den tatsächlichen Stand prüfen. Bis zu 2000 Zugangsereignisse je Gerät; weitere Änderungen werden vollständig abgewiesen. Sicherungen umfassen unveränderliche Ereignisse, Outbox und Wiederholantworten.
 
-Vor Upgrade ein neues konsistentes Backup erzeugen und ausdrücklich auf Schema 27 migrieren. Bestehende Unterlagen, Bestände und physische Prüfnachweise bleiben erhalten. Reale Zugangsprüfung am Einsatzort und besondere Produktpflichten müssen vor produktiver Freigabe fachlich abgenommen werden.
+Vor Upgrade ein neues konsistentes Backup erzeugen und ausdrücklich auf Schema 28 migrieren. Bestehende Unterlagen, Bestände und physische Prüfnachweise bleiben erhalten. Reale Zugangsprüfung am Einsatzort und besondere Produktpflichten müssen vor produktiver Freigabe fachlich abgenommen werden.
+
+Die Anwendbarkeit besonderer Produktpflichten und Nachweisreferenzen kann inzwischen [strukturiert dokumentiert](produktpflichten.md) werden. Ihre abschließende Erfüllungsabnahme steht weiter aus.

@@ -61,10 +61,14 @@ try {
  window.adminPosted=[];window.adminReplies=new Map();window.loseAdminReply=false;window.adminState={objects:[{id:"operator",kind:"operator",name:"<img src=x>",parent_id:"",version:1,rights:[]},{id:"site",kind:"site",name:"Demo",parent_id:"operator",version:1,rights:[]},{id:"warehouse",kind:"location",name:"Lager",parent_id:"site",version:1,rights:[]},{id:"other-user",kind:"user",name:"Andere Person",parent_id:"",version:2,active:true,administrator:false,rights:[]}],events:[],more_events:false};
  window.recallPosted=[];window.recallReplies=new Map();window.loseRecallReply=false;window.testRecalls=[];window.recallTargets=[{key:"batch/warehouse/available",id:"batch",name:"<svg onload=alert(1)>",identity:"TEST",location_id:"warehouse",location:"Lager",site_id:"site",state:"available",quantity:10,version:1,basis_hash:"f".repeat(64),completed:false}];
  window.usagePosted=[];window.manualVersion=0;window.manualEvents=[];window.manualPosted=[];window.manualReplies=new Map();window.loseManualReply=false;window.usageReplies=new Map();window.usageVersion=0;window.usageEvents=[];window.loseUsageReply=false;window.usageManager=true;
+ window.dutyPosted=[];window.dutyReplies=new Map();window.dutyEvents=[];window.dutyVersion=0;window.loseDutyReply=false;window.staleDuty=false;
  window.fetch = async (input,options={}) => {
   const path = typeof input === 'string' ? input : input.url;
   let data;
   if (path === '/api/v1/me') data = {id:'synthetic-user',username:'test',administrator:true,csrf_token:'synthetic-csrf',rights:[{site_id:'site',role:'material_manager'},{site_id:'site',role:'device_manager'}]};
+  else if(path.includes('/product-duties')){
+   if(options.method==='POST'){const posted={key:options.headers['Idempotency-Key'],body:options.body};window.dutyPosted.push(posted);if(window.dutyReplies.has(posted.key))data=window.dutyReplies.get(posted.key);else{if(window.staleDuty){window.staleDuty=false;return new Response(JSON.stringify({message:'Produktpflichten geändert'}),{status:409});}const body=JSON.parse(posted.body);window.dutyVersion++;data={id:'duty-'+window.dutyVersion,version:window.dutyVersion,actor_id:'synthetic-user',input:body};window.dutyEvents.unshift(data);window.dutyReplies.set(posted.key,data);if(window.loseDutyReply){window.loseDutyReply=false;throw Error('Lost duty reply');}}}else{data={manager:window.usageManager,assessment:{version:window.dutyVersion,device_version:window.deviceVersion,status:'unknown',reasons:['<img src=x> duty reference'],events:window.dutyEvents,overall_readiness:'not_assessed'}};if(window.holdDuties){window.holdDuties=false;await new Promise(resolve=>window.releaseDuties=resolve);}}
+  }
   else if(path.includes('/manual-access')){
    if(options.method==='POST'){const body=JSON.parse(options.body),key=options.headers['Idempotency-Key'];window.manualPosted.push({key,body:options.body});if(window.manualReplies.has(key))data=window.manualReplies.get(key);else{if(window.staleManual||body.expected_version!==window.manualVersion){window.staleManual=false;return new Response(JSON.stringify({message:'Zugangsnachweis geändert'}),{status:409,headers:{'Content-Type':'application/json'}});}window.manualVersion++;data={id:'manual-'+window.manualVersion,version:window.manualVersion,actor_id:'synthetic-user',input:body};window.manualEvents.unshift(data);window.manualReplies.set(key,data);if(window.loseManualReply){window.loseManualReply=false;throw Error('Lost manual reply');}}}else{data={manager:window.usageManager,assessment:{user_id:'synthetic-user',version:window.manualVersion,device_version:window.deviceVersion,status:window.manualEvents.length?(window.manualEvents[0].input.action==='confirm'?'confirmed':'blocked'):'unknown',reasons:['<img src=x> manual access'],events:window.manualEvents,overall_readiness:'not_assessed'}};if(window.holdManual){window.holdManual=false;await new Promise(resolve=>window.releaseManual=resolve);}}
   }
@@ -665,12 +669,38 @@ try {
  await until("document.querySelector('#admin-status').textContent.includes('gespeichert')");
  assert.deepEqual(await evaluate('window.adminPosted[3]'),await evaluate('window.adminPosted[4]'));
  assert.equal(await evaluate("Object.values(localStorage).some(v=>v.includes('synthetic-new-password'))"),false);
+ await evaluate("window.usageManager=true;document.querySelector('#duty-load').click()");
+ await until("!document.querySelector('#duty-form').hidden");
+ assert.equal(await evaluate("document.querySelector('#duty-assessment img')===null"),true);
+ await evaluate("document.querySelector('#duty-document').value='document';document.querySelector('#duty-until').value=new Date(Date.now()+86400000).toISOString().slice(0,16);for(const kind of Object.keys(dutyKinds)){document.querySelector('#duty-'+kind).value='exempt';document.querySelector('#duty-'+kind+'-reason').value='<img src=x> synthetic exception';}for(const id of ['evidence','qualification','assignment','note'])document.querySelector('#duty-'+id).value='Synthetic duty '+id;dutyFields();document.querySelector('#duty-form').requestSubmit()");
+ assert.equal(await evaluate('window.dutyPosted.length'),0);
+ await evaluate("document.querySelector('#duty-reviewed').checked=true;window.loseDutyReply=true;document.querySelector('#duty-form').requestSubmit()");
+ await until("document.querySelector('#duty-status').textContent.includes('nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#duty-device').disabled"),true);
+ await evaluate("document.querySelector('#duty-submit').click()");
+ await until("document.querySelector('#duty-status').textContent.includes('gespeichert')");
+ assert.deepEqual(await evaluate('window.dutyPosted[0]'),await evaluate('window.dutyPosted[1]'));
+ assert.equal(await evaluate('JSON.parse(window.dutyPosted[0].body).rules.length'),8);
+ assert.equal(await evaluate('JSON.parse(window.dutyPosted[0].body).expected_device_version===window.deviceVersion'),true);
+ assert.equal(await evaluate("document.querySelector('#duty-events img')===null"),true);
+ await evaluate("document.querySelector('#duty-action').value='revoke';for(const id of ['evidence','qualification','assignment','note'])document.querySelector('#duty-'+id).value='Synthetic revocation '+id;dutyFields();window.staleDuty=true;document.querySelector('#duty-form').requestSubmit()");
+ await until("document.querySelector('#duty-status').textContent.includes('Produktpflichten geändert')");
+ assert.equal(await evaluate("document.querySelector('#duty-form').hidden"),true);
+ assert.equal(await evaluate("JSON.parse(window.dutyPosted[2].body).rules===undefined"),true);
+ await evaluate("window.usageManager=false;document.querySelector('#duty-load').click()");
+ await until("dutyState && !dutyState.manager");
+ assert.equal(await evaluate("document.querySelector('#duty-form').hidden"),true);
+ await evaluate("window.holdDuties=true;window.lateDuties=loadDuties();void 0");
+ await until('typeof window.releaseDuties==="function"');
  await evaluate("window.holdAdmin=true;window.lateAdmin=loadAdministration();void 0");
  await until('typeof window.releaseAdmin==="function"');
  await evaluate("signedOut('Test logout')");
  await evaluate("window.releaseAdmin();window.lateAdmin");
  await evaluate("window.releaseRecall();window.lateRecall");
  await evaluate("window.releaseUsage();window.lateUsage");
+ await evaluate("window.releaseDuties();window.lateDuties");
+ assert.equal(await evaluate("document.querySelector('#duty-assessment').textContent"),'');
+ assert.equal(await evaluate("document.querySelector('#duty-events').textContent"),'');
  await evaluate("window.releaseManual();window.lateManual");
  assert.equal(await evaluate("document.querySelector('#manual-access-assessment').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#manual-access-events').textContent"),'');
@@ -687,7 +717,7 @@ try {
  assert.equal(await evaluate("document.querySelector('#attention-list').children.length"),0);
  assert.equal(await evaluate("document.querySelector('#attention-counts').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: manual access explicit confirmation, frozen exact retry, version conflicts, combined components, scoped read-only display and late logout response; document scan/release versioning, frozen exact retry, safe review history and stale conflict; concrete user requirements, frozen exact retry, stale evidence version, safe text, read-only user view and logout clearing; recall preview/frozen activation and measures, exact retries, stale version, safe text and logout clearing; administration scope display, safe text, frozen exact retry, explicit rights, stale version, password clearing and late response after logout; SMTP status and uncertainty, safe text, failure clearing and late mail response after logout; automatic reminder status, stale worker warning, safe text, error clearing and late response after logout; scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: product duties explicit confirmation, eight rule areas, frozen retry, stale conflict, escaped history, read-only display and late logout response; manual access explicit confirmation, frozen exact retry, version conflicts, combined components, scoped read-only display and late logout response; document scan/release versioning, frozen exact retry, safe review history and stale conflict; concrete user requirements, frozen exact retry, stale evidence version, safe text, read-only user view and logout clearing; recall preview/frozen activation and measures, exact retries, stale version, safe text and logout clearing; administration scope display, safe text, frozen exact retry, explicit rights, stale version, password clearing and late response after logout; SMTP status and uncertainty, safe text, failure clearing and late mail response after logout; automatic reminder status, stale worker warning, safe text, error clearing and late response after logout; scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');

@@ -1,7 +1,7 @@
 package app
 
 // A component is a recorded prerequisite, not a legal or medical release.
-// Product-specific duties remain explicitly unknown until separately implemented.
+// Product-duty reviews document applicability; final acceptance remains separate.
 type evidenceComponent struct {
 	Kind   string `json:"kind"`
 	Status string `json:"status"`
@@ -104,7 +104,13 @@ func consolidateEvidence(result packAssessment) operatingEvidence {
 	add("device_controls", technical, "Inbetriebnahme, bestätigte Kontrollpflichten, Fristen, Sperren und offene Meldebewertungen.")
 	add("user_qualification", usage, "Ausdrückliche Einweisungszuordnung und gültige Qualifikationsnachweise des angemeldeten Kontos.")
 	add("manual_access", manual, "Befristeter Zugang zur passenden freigegebenen Gebrauchsanweisung für diese Person am Geräteort.")
-	add("product_duties", "unknown", "Besondere produktspezifische Pflichten und deren fachliche Abnahme noch nicht strukturiert bestätigt; vollständige Einsatzfreigabe offen.")
+	duties := "unknown"
+	for _, device := range result.Devices {
+		if device.ProductDuties != nil && device.ProductDuties.Status == "blocked" {
+			duties = "blocked"
+		}
+	}
+	add("product_duties", duties, "Anwendbarkeit besonderer Produktpflichten und Nachweisreferenzen dokumentieren; ihre Erfüllung und vollständige Einsatzfreigabe bleiben gesondert abzunehmen.")
 	if !result.Material.CurrentVersion {
 		evidence.Status = "obsolete"
 	}

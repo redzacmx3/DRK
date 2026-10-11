@@ -134,7 +134,7 @@ Go-Tests und ein Docker-Test mit echtem Traefik 3.6 prüfen die ausdrücklich ak
 
 ## Kontrollerinnerungen
 
-Der vorhandene Container erzeugt automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist optional per SMTP-Overlay verfügbar, siehe [SMTP-Anleitung](smtp-erinnerungen.md). Bestehende Datenbanken vor Update sichern und ausdrücklich auf Schema 27 migrieren; Volumes erhalten.
+Der vorhandene Container erzeugt automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist optional per SMTP-Overlay verfügbar, siehe [SMTP-Anleitung](smtp-erinnerungen.md). Bestehende Datenbanken vor Update sichern und ausdrücklich auf Schema 28 migrieren; Volumes erhalten.
 
 ## Organisatorische Verwaltung
 

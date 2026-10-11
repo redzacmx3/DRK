@@ -22,3 +22,5 @@ Vor Updates ein neues konsistentes Backup erstellen und notwendige Schemaänderu
 Dokumentprüfung und Freigabe: [Bedienung und Scannerbetrieb](dokumentpruefung.md).
 
 Gebrauchsanweisungszugang und gemeinsame Voraussetzungen: [Bedienung und Grenzen](gebrauchsanweisungszugang.md).
+
+Besondere Produktpflichten: [Bedienung und Grenzen](produktpflichten.md).
