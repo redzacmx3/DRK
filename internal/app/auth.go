@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -139,6 +140,9 @@ func DisableUser(db *sql.DB, username string) error {
 	defer tx.Rollback()
 	var id string
 	if err = tx.QueryRow(`SELECT id FROM users WHERE username=?`, username).Scan(&id); err != nil {
+		return err
+	}
+	if err = protectAdministrator(context.Background(), tx, id, false, ""); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(`UPDATE users SET active=0 WHERE id=?`, id); err != nil {
@@ -377,13 +381,20 @@ func (a *authService) routes(mux *http.ServeMux) {
 			a.sessionError(w, err)
 			return
 		}
+		rows.Close()
 		cookie, _ := r.Cookie(a.cookieName())
+		var administrator bool
+		if err = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM administrators WHERE user_id=?)`, user.ID).Scan(&administrator); err != nil {
+			a.sessionError(w, err)
+			return
+		}
 		json.NewEncoder(w).Encode(struct {
-			ID       string  `json:"id"`
-			Username string  `json:"username"`
-			CSRF     string  `json:"csrf_token"`
-			Rights   []right `json:"rights"`
-		}{user.ID, user.Username, digest("csrf:" + cookie.Value), rights})
+			ID            string  `json:"id"`
+			Username      string  `json:"username"`
+			CSRF          string  `json:"csrf_token"`
+			Rights        []right `json:"rights"`
+			Administrator bool    `json:"administrator"`
+		}{user.ID, user.Username, digest("csrf:" + cookie.Value), rights, administrator})
 	})
 	mux.HandleFunc("POST /api/v1/auth/logout", func(w http.ResponseWriter, r *http.Request) {
 		if !a.sameOrigin(w, r) {

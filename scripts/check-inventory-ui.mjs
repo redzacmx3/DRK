@@ -58,10 +58,19 @@ try {
  window.testIdentifiers = [];window.identifierPosted = [];window.identifierReplies = new Map();window.loseIdentifierReply = false;window.nonInventoryStockPosts = [];
  window.materialBasis = 'a'.repeat(64);window.packPosted = [];window.packReplies = new Map();window.losePackReply = false;
 
+ window.adminPosted=[];window.adminReplies=new Map();window.loseAdminReply=false;window.adminState={objects:[{id:"operator",kind:"operator",name:"<img src=x>",parent_id:"",version:1,rights:[]},{id:"site",kind:"site",name:"Demo",parent_id:"operator",version:1,rights:[]},{id:"warehouse",kind:"location",name:"Lager",parent_id:"site",version:1,rights:[]},{id:"other-user",kind:"user",name:"Andere Person",parent_id:"",version:2,active:true,administrator:false,rights:[]}],events:[],more_events:false};
  window.fetch = async (input,options={}) => {
   const path = typeof input === 'string' ? input : input.url;
   let data;
-  if (path === '/api/v1/me') data = {id:'synthetic-user',username:'test',csrf_token:'synthetic-csrf',rights:[{site_id:'site',role:'material_manager'},{site_id:'site',role:'device_manager'}]};
+  if (path === '/api/v1/me') data = {id:'synthetic-user',username:'test',administrator:true,csrf_token:'synthetic-csrf',rights:[{site_id:'site',role:'material_manager'},{site_id:'site',role:'device_manager'}]};
+  else if(path==='/api/v1/admin') {data=window.adminState;if(window.holdAdmin){window.holdAdmin=false;await new Promise(resolve=>window.releaseAdmin=resolve);}}
+  else if(path==='/api/v1/admin/changes') {
+   const posted={body:options.body,key:options.headers['Idempotency-Key']};window.adminPosted.push(posted);
+   if(window.staleAdmin){window.staleAdmin=false;return new Response(JSON.stringify({message:'Verwaltung geändert'}),{status:409});}
+   if(window.adminReplies.has(posted.key))data=window.adminReplies.get(posted.key);
+   else{const body=JSON.parse(posted.body);data={id:body.id||'new-admin-object',kind:body.action.split('_')[1],version:3,event_id:'admin-event',session_revoked:false};window.adminReplies.set(posted.key,data);}
+   if(window.loseAdminReply){window.loseAdminReply=false;throw new Error('Synthetic lost administrative response');}
+  }
   else if (path === '/api/v1/devices/reminder-mail') {
    data=[{id:'delivery',device_id:'device',inventory_number:'TEST',name:'<svg onload=alert(1)>',control_type:'STK',due_on:'2026-10-10',message_id:'<synthetic@drk-inventory.invalid>',state:'uncertain',attempts:1,created_at:'2026-10-11T08:00:00Z',last_attempt_at:'2026-10-11T08:00:00Z',next_attempt_at:'2026-10-11T08:01:00Z'}];
    if(window.holdMail){window.holdMail=false;await new Promise(resolve=>window.releaseMail=resolve);}
@@ -525,7 +534,32 @@ try {
  assert.equal(await evaluate("JSON.parse(window.stockIntakePosted[2].body).csv.includes('000123')"),true);
  await evaluate('window.holdMail=true;void loadDeviceAttention()');
  await until('typeof window.releaseMail === "function"');
+ await until("!document.querySelector('#administration').hidden&&document.querySelector('#admin-overview').textContent.includes('Betreiber')");
+ assert.equal(await evaluate("document.querySelector('#admin-overview img')===null"),true);
+ await evaluate("document.querySelector('#admin-name').value='Neuer Betreiber';document.querySelector('#admin-note').value='Ersteinrichtung';window.loseAdminReply=true;document.querySelector('#admin-form').requestSubmit()");
+ await until("document.querySelector('#admin-status').textContent.includes('nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#admin-action').disabled"),true);
+ await evaluate("document.querySelector('#admin-submit').click()");
+ await until("document.querySelector('#admin-status').textContent.includes('gespeichert')");
+ assert.deepEqual(await evaluate('window.adminPosted[0]'),await evaluate('window.adminPosted[1]'));
+ await evaluate("document.querySelector('#admin-action').value='update_user';document.querySelector('#admin-action').dispatchEvent(new Event('change'));document.querySelector('#admin-note').value='Rechte aktualisieren';document.querySelector('#admin-rights input[data-role=helper]').checked=true;window.staleAdmin=true;document.querySelector('#admin-form').requestSubmit()");
+ await until("document.querySelector('#admin-status').textContent.includes('Verwaltung geändert')");
+ assert.equal(await evaluate('window.adminPosted.length'),3);
+ assert.deepEqual(await evaluate('JSON.parse(window.adminPosted[2].body).rights'),[{site_id:'site',role:'helper'}]);
+ assert.equal(await evaluate('JSON.parse(window.adminPosted[2].body).expected_version'),2);
+ await evaluate("document.querySelector('#admin-action').value='reset_password';document.querySelector('#admin-action').dispatchEvent(new Event('change'));document.querySelector('#admin-password').value='synthetic-new-password';document.querySelector('#admin-note').value='Passwortwechsel';window.loseAdminReply=true;document.querySelector('#admin-form').requestSubmit()");
+ await until("document.querySelector('#admin-status').textContent.includes('nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#admin-password').value"),'');
+ await evaluate("document.querySelector('#admin-submit').click()");
+ await until("document.querySelector('#admin-status').textContent.includes('gespeichert')");
+ assert.deepEqual(await evaluate('window.adminPosted[3]'),await evaluate('window.adminPosted[4]'));
+ assert.equal(await evaluate("Object.values(localStorage).some(v=>v.includes('synthetic-new-password'))"),false);
+ await evaluate("window.holdAdmin=true;window.lateAdmin=loadAdministration();void 0");
+ await until('typeof window.releaseAdmin==="function"');
  await evaluate("signedOut('Test logout')");
+ await evaluate("window.releaseAdmin();window.lateAdmin");
+ assert.equal(await evaluate("document.querySelector('#admin-overview').textContent"),'');
+ assert.equal(await evaluate("document.querySelector('#administration').hidden"),true);
  assert.equal(await evaluate("document.querySelector('#reminder-mail-list').children.length"),0);
  await evaluate('window.releaseMail()');
  await evaluate('new Promise(resolve=>setTimeout(resolve,50))');
@@ -535,7 +569,7 @@ try {
  assert.equal(await evaluate("document.querySelector('#attention-list').children.length"),0);
  assert.equal(await evaluate("document.querySelector('#attention-counts').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: SMTP status and uncertainty, safe text, failure clearing and late mail response after logout; automatic reminder status, stale worker warning, safe text, error clearing and late response after logout; scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: administration scope display, safe text, frozen exact retry, explicit rights, stale version, password clearing and late response after logout; SMTP status and uncertainty, safe text, failure clearing and late mail response after logout; automatic reminder status, stale worker warning, safe text, error clearing and late response after logout; scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');

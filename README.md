@@ -4,6 +4,8 @@ Einfacher HTTP/HTTPS-Teststart: [Docker-Schnellstart](docs/schnellstart-docker.m
 
 Administrative Verwaltung von Medizinprodukten, Sanitätsmaterial und mobilen Packlisten. Fachliche Grundlage: [Architektur-Blueprint v2](docs/blueprint-v2.md). Seine rechtlichen Quellen wurden beim Umgebungsetup nicht erneut geprüft.
 
+Aktueller Gesamtstand und offene Punkte: [Stand und Roadmap](docs/stand-und-roadmap.md). Historische Prüfungen: [Entwicklungshistorie](docs/entwicklungshistorie.md).
+
 ## Implementierter Entwicklungsstand
 
 Modularer Go-Dienst mit eingebetteter HTML/JS-Oberfläche, SQLite und expliziten Migrationen. Synthetische Betreiber, Betriebsstätte und Lagerorte. HTTPS-Anmeldung, widerrufbare Sessions und Rechte je Betriebsstätte. Die Oberfläche zeigt Lagerorte und Materialbestand im zugewiesenen Bereich und bietet Wareneingang, Umlagerung, Entnahme, Gegenbuchung und Inventur. Das Bewegungsjournal zeigt frühere Einträge und deren Korrekturbezüge.
@@ -16,7 +18,7 @@ Geräteakten mit Kontrollen, Sperren, Einweisungen und Anhängen in Quarantäne 
 
 ## NAS und Dockhand
 
-Für den Ugreen DXP2800: [Installationsanleitung](docs/nas-dockhand.md), [NAS-Compose-Datei](compose.nas.yaml) und [Traefik-Beispiel](deploy/traefik-nas.example.yaml). Das Image wird aus dem GitHub-Checkout auf dem NAS gebaut. Browser und Backend verwenden HTTPS; Zugriff vom VPS erfolgt über Tailscale. Getestete NAS-Konfiguration für synthetische Testdaten, kein abgeschlossener produktiver Betrieb.
+Für den Ugreen DXP2800: [Installationsanleitung](docs/nas-dockhand.md), [NAS-Compose-Datei](compose.nas.yaml) und [Traefik-Beispiel](deploy/traefik-nas.example.yaml). Das Image wird aus dem GitHub-Checkout auf dem NAS gebaut. Browser und Backend verwenden HTTPS; Zugriff vom VPS erfolgt über Tailscale. Compose-Konfiguration in der Cloud geprüft; tatsächlicher NAS-Betrieb und produktive Abnahme stehen noch aus.
 
 ## Entwicklungsumgebung
 
@@ -99,7 +101,7 @@ bin/inventory set-sites --db var/inventory.db --username viewer \
   --site 00000000-0000-4000-8000-000000000002 --role material_manager
 ```
 
-`create-user` unterstützt ebenfalls `--role`. Keine Web-Administration und keine automatische fachliche Qualifikation durch diese Rollen.
+`create-user` unterstützt ebenfalls `--role`. Die [Web-Verwaltung](docs/administration.md) nutzt ein separates Administratorrecht; Fachrollen bedeuten keine automatische fachliche Qualifikation.
 
 ## Sessions und API
 
@@ -136,7 +138,7 @@ bin/inventory create-batch --db var/inventory.db --product PRODUCT_UUID \
   --lot DEMO-CHARGE --expires-on 2028-12-31
 ```
 
-Verfallsdaten werden derzeit als exakter Tag oder als unbekannt erfasst. Ohne `--expires-on` bleibt das Datum ungeklärt. Packungsumrechnung, Hersteller-Barcodes und Scanner sind noch nicht implementiert; Mengen werden ganzzahlig in der ausdrücklich festgelegten Basiseinheit gebucht.
+Verfallsdaten werden derzeit als exakter Tag oder als unbekannt erfasst. Ohne `--expires-on` bleibt das Datum ungeklärt. Packungsumrechnung und Codeauflösung sind im Scannerabschnitt beschrieben; Mengen werden ganzzahlig in der ausdrücklich festgelegten Basiseinheit gebucht.
 
 Jede Stock-POST-Operation verlangt Session, exakten Origin, `X-CSRF-Token` und einen `Idempotency-Key` (16–100 ASCII-Buchstaben/Ziffern/Unterstriche/Bindestriche). Beispielkörper:
 
@@ -284,7 +286,7 @@ In dieser Cloud bei einem schreibgeschützten Standard-Docker-Verzeichnis `DOCKE
 
 ## Nächste Umsetzung
 
-Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehörbewertung und Packlistenalternativen bleiben offen. Vor Pilotfreigabe die [Blueprint-Abnahmekriterien](docs/blueprint-v2.md) erfüllen.
+Aktuelle Prioritäten stehen in [Stand und Roadmap](docs/stand-und-roadmap.md). Geräteakten, Fristen und Geräte-/Zubehörchecks sind implementiert; vollständige Einsatzfreigabe und Packlistenalternativen bleiben offen. Vor Pilotfreigabe die Blueprint-Abnahmekriterien erfüllen.
 
 ### Grundlage der Gerätefristen
 
@@ -292,16 +294,16 @@ Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehö
 
 Die Zustände sind `UNKNOWN`, `NOT_APPLICABLE`, `CURRENT`, `DUE_SOON` und `OVERDUE`. Eine Frist gilt bis einschließlich des fachlichen Tages in `Europe/Berlin`; die Vorwarnschwelle ist ein expliziter Parameter. Fehlendes Basisdatum bleibt ungeklärt. Die Funktion beurteilt keine Gerätesperren und erteilt keine Einsatzfreigabe.
 
-Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 22.
+Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Wiederkehrende Prüfungen und Instandhaltungsnachweise sind integriert. Datenbankschema: Version 22.
 
 
 ### Registrierte Geräteakten
 
 Geräteverantwortliche (`device_manager`) können über `POST /api/v1/devices` Geräte im zugewiesenen Bereich registrieren. Pflichtfelder: `location_id`, `inventory_number`, `name`, `manufacturer`, `model`, `serial_or_lot`, `note`. Mutationen benötigen gültige Session, exakten HTTPS-Origin, CSRF und einen Idempotenzschlüssel. Inventarnummern sind im derzeit gemeinsamen Betreiberbestand eindeutig; Serien-/Losnummern dürfen mehrfach vorkommen. Eine Rollenänderung über `set-sites` widerruft Sessions; die CLI ersetzt weiterhin sämtliche Zuweisungen dieses Kontos.
 
-`GET /api/v1/devices` liefert bis zu 500 bereichsbezogene Geräte (`X-Has-More` bei weiteren Einträgen); `GET /api/v1/devices/{id}/book` liefert die aktuelle Geräteakte einschließlich berechneter Fristen. Viewer, Helfer, Materialwarte und Geräteverantwortliche lesen innerhalb ihrer Bereiche. Die Oberfläche zeigt eine Geräteübersicht und erfasst Inbetriebnahme-/Kontrollregeln; die erstmalige Geräteanlage erfolgt derzeit über die API. Registrierung, Actor, Snapshot, Outbox und Wiederholantwort werden in einer Transaktion gespeichert. Der Idempotenzschlüsselraum wird mit den anderen Modulen geteilt.
+`GET /api/v1/devices` liefert bis zu 500 bereichsbezogene Geräte (`X-Has-More` bei weiteren Einträgen); `GET /api/v1/devices/{id}/book` liefert die aktuelle Geräteakte einschließlich berechneter Fristen. Viewer, Helfer, Materialwarte und Geräteverantwortliche lesen innerhalb ihrer Bereiche. Die Oberfläche zeigt eine Geräteübersicht und erfasst Inbetriebnahme-/Kontrollregeln; die erstmalige Geräteanlage erfolgt über CSV-Import oder API. Registrierung, Actor, Snapshot, Outbox und Wiederholantwort werden in einer Transaktion gespeichert. Der Idempotenzschlüsselraum wird mit den anderen Modulen geteilt.
 
-Eine neue Registrierung ist keine Inbetriebnahme: `lifecycle=NOT_COMMISSIONED`, `readiness=not_assessed`, STK/MTK/elektrische Kontrolle jeweils `UNKNOWN`. Einweisungen und begrenzte Dokumentanhänge sind umgesetzt; Dokumentprüfung/Freigabe, Korrekturen und vollständige Medizinproduktebuchführung bleiben offen. Wiederkehrende Prüfungen und einzelne Sperren/Freigaben sind unten beschrieben. Die Rolle allein bestätigt keine Qualifikation. Geräte bleiben aus der bisherigen Material-Sollbewertung ausgeschlossen.
+Eine neue Registrierung ist keine Inbetriebnahme: `lifecycle=NOT_COMMISSIONED`, `readiness=not_assessed`, STK/MTK/elektrische Kontrolle jeweils `UNKNOWN`. Einweisungen und begrenzte Dokumentanhänge sind umgesetzt; Dokumentprüfung/Freigabe und vollständige fachliche Abnahme bleiben offen; ergänzende Richtigstellungen sind implementiert. Wiederkehrende Prüfungen und einzelne Sperren/Freigaben sind unten beschrieben. Die Rolle allein bestätigt keine Qualifikation. Geräte werden getrennt von der Material-Sollbewertung berücksichtigt.
 
 
 ### Inbetriebnahme und versionierte Kontrollregeln
@@ -312,7 +314,7 @@ Schema 8 ergänzt `POST /api/v1/devices/{id}/commission` und `POST /api/v1/devic
 
 Der Server speichert Regelstand, Basis und berechnetes Ergebnis unveränderlich im Ereignis. `GET /api/v1/devices/{id}/events` liefert die letzten 500 Kontrollereignisse mit Actor, Zeit, Referenzen und ursprünglichem Berechnungsergebnis (`X-Has-More` bei weiteren Ereignissen). Die aktuelle Geräteakte berechnet zeitabhängige Zustände bei jedem Lesen neu, ohne Nachtjob. Alte Regelstände und Wiederholantworten bleiben erhalten. Änderungen mit veralteter Geräteversion liefern 409; Ereignis, Outbox und Idempotenzantwort entstehen atomar.
 
-Die Oberfläche verlangt vor der Bearbeitung das Laden der Geräteakte und hält diese Basis fest. Unbestätigte Antworten werden mit identischem Inhalt/Schlüssel wiederholt, auch nach erneuter Anmeldung mit demselben Konto. Diese Entwürfe liegen nur im Arbeitsspeicher; kein Offline- oder Wiederanlaufversprechen nach Schließen der Seite. Eine vollständige Einsatzfreigabe bleibt offen. Einzelne Sperren können inzwischen ausdrücklich geschlossen werden; automatische Ausnahmen aus Gerätenamen und Benachrichtigungszustellung gibt es weiterhin nicht.
+Die Oberfläche verlangt vor der Bearbeitung das Laden der Geräteakte und hält diese Basis fest. Unbestätigte Antworten werden mit identischem Inhalt/Schlüssel wiederholt, auch nach erneuter Anmeldung mit demselben Konto. Diese Entwürfe liegen nur im Arbeitsspeicher; kein Offline- oder Wiederanlaufversprechen nach Schließen der Seite. Eine vollständige Einsatzfreigabe bleibt offen. Einzelne Sperren können inzwischen ausdrücklich geschlossen werden; Ausnahmen werden nicht aus Gerätenamen abgeleitet. Kontrollerinnerungen und optionale SMTP-Zustellung sind inzwischen implementiert.
 
 
 ### Wiederkehrende Prüfungen und unabhängige Sperren
@@ -477,6 +479,10 @@ SMTP-Annahme ist keine Bestätigung der Postfachzustellung. Temporäre Fehler we
 
 `GET /api/v1/devices/reminder-mail` und die Oberfläche zeigen die letzten 200 Zustellungen im berechtigten Bereich, Status, Versuche und Message-ID, ohne Empfängeradressen oder Zugangsdaten auszugeben. Weitere Einträge werden ausdrücklich angekündigt. Der Status bleibt auch nach Außerbetriebnahme sichtbar. Wiederaufnahme erfolgt über die lokale CLI; bei unklarer Annahme ist nach externer Prüfung eine ausdrückliche Bestätigung des Doppelmail-Risikos erforderlich. SMTP-Protokolltexte, Passwörter und Mailinhalte werden nicht geloggt. Die bisherigen Bewegungs-/Prüf-Outboxen werden nicht per E-Mail versendet. Bestände, Fristen, Sperren und Prüfnachweise bleiben von Zustellfehlern unabhängig.
 
-Bestehende Installation vor Update sichern, ausdrücklich auf Schema 22 migrieren und anschließend starten. Sicherungen umfassen Warteschlange, Versuchshistorien und Empfängerbindungen; SMTP-Dateien/Secrets separat geschützt sichern.
+Bestehende Installation vor Update sichern, ausdrücklich auf Schema 23 migrieren und anschließend starten. Sicherungen umfassen Warteschlange, Versuchshistorien und Empfängerbindungen; SMTP-Dateien/Secrets separat geschützt sichern.
 
 Geprüft: vollständige Go-Race-Suite, Vet/Build, echte lokale TLS-/STARTTLS-Verbindungen einschließlich Anmeldung, geprüfte Zertifikate, fehlendes STARTTLS, Header-/Konfigurationsprüfung, 4xx/5xx, verlorene DATA-Antwort und QUIT-Abbruch nach Annahme. Warteschlange prüft Rollback, konkurrierende Worker, abgelaufene Leases, begrenzte Wiederholungen, stabile Message-IDs, manuelle Freigabe und Empfänger-/Fristenänderungen. Browser prüft Versandstatus, sichere Texte, Fehlerbereinigung und verspätete Antworten nach Abmeldung. HTTPS-Compose-Test mit lokalem TLS-SMTP-Testserver bestand einschließlich Backup/Migration 21→22, Standard ohne Versand, aktivem Overlay, Wiederholschutz, Neustartpersistenz, Snapshot-Integrität und Bereichsrechten. Frühere Bestände, Dokumente, Nachweise und Geräte-/Materialprüfbasiswerte blieben unverändert. Lokale Backup-/Migrationsprüfung bestand. Die Entwicklungsinstanz läuft wieder ohne SMTP-Konfiguration; reale SMTP-Konten und Postfachzustellung sind nicht geprüft.
+
+## Organisatorische Verwaltung (Schema 23)
+
+Betreiber, Betriebsstätten, Lagerorte und Benutzer lassen sich über die Oberfläche verwalten. Das erste Administratorrecht wird ausdrücklich lokal eingerichtet; es verleiht keine Material- oder Gerätefachrechte. Änderungen erhalten Versionsprüfung und unveränderliche Vorher-/Nachher-Nachweise; Rechte-/Passwortänderungen widerrufen Sitzungen. Anleitung und API: [Verwaltung](docs/administration.md). Vor Update sichern und ausdrücklich migrieren. Aktueller Funktionsumfang und verbleibende Arbeit: [Stand und Roadmap](docs/stand-und-roadmap.md).

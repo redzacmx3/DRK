@@ -60,7 +60,7 @@ func run() error {
 	}
 
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: inventory init|device-template|stock-template|backup|migrate|remind-devices|deliver-reminders|retry-reminder-mail|seed-demo|create-product|create-batch|create-user|set-sites|disable-user|serve --db PATH [--listen 127.0.0.1:8080]")
+		return fmt.Errorf("usage: inventory init|device-template|stock-template|backup|migrate|remind-devices|deliver-reminders|retry-reminder-mail|seed-demo|create-product|create-batch|create-user|create-admin|grant-admin|revoke-admin|set-sites|disable-user|serve --db PATH [--listen 127.0.0.1:8080]")
 	}
 	flags := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
 	path := flags.String("db", "inventory.db", "SQLite path")
@@ -208,7 +208,9 @@ func run() error {
 			return err
 		}
 		return app.SeedDemo(db)
-	case "create-user":
+	case "grant-admin", "revoke-admin":
+		return app.SetAdministrator(db, *username, os.Args[1] == "grant-admin")
+	case "create-user", "create-admin":
 		bytes, err := io.ReadAll(io.LimitReader(os.Stdin, 259))
 		if err != nil {
 			return err
@@ -217,6 +219,9 @@ func run() error {
 			return fmt.Errorf("password input too long")
 		}
 		password := strings.TrimSuffix(strings.TrimSuffix(string(bytes), "\n"), "\r")
+		if os.Args[1] == "create-admin" {
+			return app.CreateAdministrator(db, *username, password)
+		}
 		return app.CreateUser(db, *username, password, *site, *role)
 	case "set-sites":
 		sites := []string{}

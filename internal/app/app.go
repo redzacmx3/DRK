@@ -63,11 +63,11 @@ func Migrate(db *sql.DB) (migrationErr error) {
 	if err = tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 22 {
+	if version > 23 {
 		return fmt.Errorf("unsupported schema version %d", version)
 	}
-	for next := version + 1; next <= 22; next++ {
-		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_auth.sql", 3: "migrations/003_stock.sql", 4: "migrations/004_corrections.sql", 5: "migrations/005_packlists.sql", 6: "migrations/006_identifiers.sql", 7: "migrations/007_devices.sql", 8: "migrations/008_device_controls.sql", 9: "migrations/009_device_inspections.sql", 10: "migrations/010_device_documents.sql", 11: "migrations/011_packlist_devices.sql", 12: "migrations/012_pack_device_checks.sql", 13: "migrations/013_device_intake.sql", 14: "migrations/014_stock_intake.sql", 15: "migrations/015_device_details.sql", 16: "migrations/016_device_master_data.sql", 17: "migrations/017_device_maintenance.sql", 18: "migrations/018_device_decommission.sql", 19: "migrations/019_device_corrections.sql", 20: "migrations/020_device_incidents.sql", 21: "migrations/021_device_reminders.sql", 22: "migrations/022_reminder_mail.sql"}[next]
+	for next := version + 1; next <= 23; next++ {
+		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_auth.sql", 3: "migrations/003_stock.sql", 4: "migrations/004_corrections.sql", 5: "migrations/005_packlists.sql", 6: "migrations/006_identifiers.sql", 7: "migrations/007_devices.sql", 8: "migrations/008_device_controls.sql", 9: "migrations/009_device_inspections.sql", 10: "migrations/010_device_documents.sql", 11: "migrations/011_packlist_devices.sql", 12: "migrations/012_pack_device_checks.sql", 13: "migrations/013_device_intake.sql", 14: "migrations/014_stock_intake.sql", 15: "migrations/015_device_details.sql", 16: "migrations/016_device_master_data.sql", 17: "migrations/017_device_maintenance.sql", 18: "migrations/018_device_decommission.sql", 19: "migrations/019_device_corrections.sql", 20: "migrations/020_device_incidents.sql", 21: "migrations/021_device_reminders.sql", 22: "migrations/022_reminder_mail.sql", 23: "migrations/023_administration.sql"}[next]
 		script, err := assets.ReadFile(name)
 		if err != nil {
 			return err
@@ -129,7 +129,7 @@ func Ready(ctx context.Context, db *sql.DB) error {
 	if err := db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version != 22 {
+	if version != 23 {
 		return fmt.Errorf("schema migration required")
 	}
 	var count int
@@ -137,7 +137,7 @@ func Ready(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	var users, roles, sessions, stock, packs, identifiers, devices bool
-	return db.QueryRowContext(ctx, `SELECT EXISTS(SELECT id,password_hash,active FROM users), EXISTS(SELECT user_id,site_id,role FROM role_assignments), EXISTS(SELECT token_hash,csrf_hash FROM sessions), EXISTS(SELECT 1 FROM product_types JOIN batches ON 1=0 JOIN stock_balances ON 1=0 JOIN stock_movements ON 1=0 JOIN movement_lines ON 1=0 JOIN audit_events ON 1=0 JOIN outbox ON 1=0 JOIN idempotency_keys ON 1=0 JOIN stock_intake ON 1=0 JOIN stock_imports ON 1=0 JOIN stock_import_outbox ON 1=0 JOIN stock_import_requests ON 1=0), EXISTS(SELECT 1 FROM packlist_versions JOIN packlist_items ON 1=0 JOIN readiness_checks ON 1=0 JOIN packlist_events ON 1=0 JOIN packlist_outbox ON 1=0 JOIN packlist_requests ON 1=0 JOIN packlist_devices ON 1=0 JOIN pack_device_checks ON 1=0 JOIN pack_device_check_outbox ON 1=0 JOIN pack_device_check_requests ON 1=0), EXISTS(SELECT 1 FROM product_identifiers JOIN catalog_events ON 1=0 JOIN catalog_outbox ON 1=0 JOIN catalog_requests ON 1=0 JOIN movement_packaging ON 1=0), EXISTS(SELECT 1 FROM devices JOIN device_events ON 1=0 JOIN device_outbox ON 1=0 JOIN device_requests ON 1=0 JOIN device_control_events ON 1=0 JOIN device_control_outbox ON 1=0 JOIN device_control_requests ON 1=0 JOIN device_documents ON 1=0 JOIN document_events ON 1=0 JOIN document_outbox ON 1=0 JOIN document_requests ON 1=0 JOIN device_intake ON 1=0 JOIN device_imports ON 1=0 JOIN device_import_outbox ON 1=0 JOIN device_import_requests ON 1=0 JOIN device_reminders ON 1=0 JOIN device_reminder_outbox ON 1=0 JOIN device_reminder_worker ON 1=0 JOIN device_reminder_deliveries ON 1=0 JOIN device_reminder_mail_attempts ON 1=0)`).Scan(&users, &roles, &sessions, &stock, &packs, &identifiers, &devices)
+	return db.QueryRowContext(ctx, `SELECT EXISTS(SELECT id,password_hash,active FROM users), EXISTS(SELECT user_id,site_id,role FROM role_assignments), EXISTS(SELECT token_hash,csrf_hash FROM sessions), EXISTS(SELECT 1 FROM product_types JOIN batches ON 1=0 JOIN stock_balances ON 1=0 JOIN stock_movements ON 1=0 JOIN movement_lines ON 1=0 JOIN audit_events ON 1=0 JOIN outbox ON 1=0 JOIN idempotency_keys ON 1=0 JOIN stock_intake ON 1=0 JOIN stock_imports ON 1=0 JOIN stock_import_outbox ON 1=0 JOIN stock_import_requests ON 1=0), EXISTS(SELECT 1 FROM packlist_versions JOIN packlist_items ON 1=0 JOIN readiness_checks ON 1=0 JOIN packlist_events ON 1=0 JOIN packlist_outbox ON 1=0 JOIN packlist_requests ON 1=0 JOIN packlist_devices ON 1=0 JOIN pack_device_checks ON 1=0 JOIN pack_device_check_outbox ON 1=0 JOIN pack_device_check_requests ON 1=0), EXISTS(SELECT 1 FROM product_identifiers JOIN catalog_events ON 1=0 JOIN catalog_outbox ON 1=0 JOIN catalog_requests ON 1=0 JOIN movement_packaging ON 1=0), EXISTS(SELECT 1 FROM devices JOIN device_events ON 1=0 JOIN device_outbox ON 1=0 JOIN device_requests ON 1=0 JOIN device_control_events ON 1=0 JOIN device_control_outbox ON 1=0 JOIN device_control_requests ON 1=0 JOIN device_documents ON 1=0 JOIN document_events ON 1=0 JOIN document_outbox ON 1=0 JOIN document_requests ON 1=0 JOIN device_intake ON 1=0 JOIN device_imports ON 1=0 JOIN device_import_outbox ON 1=0 JOIN device_import_requests ON 1=0 JOIN device_reminders ON 1=0 JOIN device_reminder_outbox ON 1=0 JOIN device_reminder_worker ON 1=0 JOIN device_reminder_deliveries ON 1=0 JOIN device_reminder_mail_attempts ON 1=0 JOIN administrators ON 1=0 JOIN administrative_versions ON 1=0 JOIN administrative_events ON 1=0 JOIN administrative_requests ON 1=0)`).Scan(&users, &roles, &sessions, &stock, &packs, &identifiers, &devices)
 }
 
 type Location struct {
@@ -168,6 +168,7 @@ func HandlerWithTransport(db *sql.DB, origin string, localHTTP bool) http.Handle
 	deviceRoutes(mux, auth)
 	deviceReminderRoutes(mux, auth)
 	reminderMailRoutes(mux, auth)
+	administrationRoutes(mux, auth)
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
 		if Ready(r.Context(), db) != nil {
