@@ -91,6 +91,19 @@ func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord
 				}
 			}
 		}
+		if rule.Kind == "annex_1" && rule.Applicability == "required" {
+			details, err := checkAnnex1Proofs(ctx, tx, record, rule)
+			if err != nil {
+				return nil, err
+			}
+			check.Reason = "Inbetriebnahme und Einweisung separat auflösen; besondere Funktionsprüfung am Betriebsort, fachliche Eignung und Endanwenderanforderungen bleiben abzunehmen."
+			for _, detail := range details {
+				if detail.Status == "blocked" {
+					check.Status = "blocked"
+				}
+			}
+			checks = append(checks, details...)
+		}
 		checks = append(checks, check)
 	}
 	return checks, nil

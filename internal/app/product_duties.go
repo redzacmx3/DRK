@@ -12,11 +12,15 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
-	EventVersion  int    `json:"event_version,omitempty"`
-	Kind          string `json:"kind"`
-	Applicability string `json:"applicability"`
-	Reason        string `json:"reason"`
-	Evidence      string `json:"evidence"`
+	CommissionVersion    int    `json:"commission_version,omitempty"`
+	InstructionVersion   int    `json:"instruction_version,omitempty"`
+	DesignatedUserID     string `json:"designated_user_id,omitempty"`
+	DesignatedAssignment string `json:"designated_assignment,omitempty"`
+	EventVersion         int    `json:"event_version,omitempty"`
+	Kind                 string `json:"kind"`
+	Applicability        string `json:"applicability"`
+	Reason               string `json:"reason"`
+	Evidence             string `json:"evidence"`
 }
 type productDutyInput struct {
 	ExpectedVersion       int               `json:"expected_version"`
@@ -212,6 +216,9 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			if err := validateProductDutyReference(rule, record); err != nil {
 				return nil, err
 			}
+			if err := validateAnnex1Reference(ctx, tx, rule, record); err != nil {
+				return nil, err
+			}
 			seen[rule.Kind] = true
 		}
 		var status string
@@ -278,12 +285,25 @@ func productDutyRoutes(mux *http.ServeMux, a *authService) {
 			sendStockError(w, err)
 			return
 		}
+		commissions, err := dutyCommissionChoices(r.Context(), tx, record.ID)
+		if err != nil {
+			sendStockError(w, err)
+			return
+		}
+		people, err := dutyPersonChoices(r.Context(), tx, record, manager)
+		if err != nil {
+			sendStockError(w, err)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(struct {
-			Assessment  productDutyAssessment `json:"assessment"`
-			Manager     bool                  `json:"manager"`
-			Maintenance []maintenanceProof    `json:"maintenance"`
-		}{result, manager, record.Maintenances})
+			Assessment   productDutyAssessment  `json:"assessment"`
+			Manager      bool                   `json:"manager"`
+			Maintenance  []maintenanceProof     `json:"maintenance"`
+			Commissions  []dutyCommissionChoice `json:"commissions"`
+			Instructions []instructionProof     `json:"instructions"`
+			People       []dutyPersonChoice     `json:"people"`
+		}{result, manager, record.Maintenances, commissions, record.Instructions, people})
 	})
 	mux.HandleFunc("POST /api/v1/devices/{id}/product-duties", func(w http.ResponseWriter, r *http.Request) {
 		actor, ok := writeAuthorized(a, w, r)
