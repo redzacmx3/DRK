@@ -42,6 +42,7 @@ type deviceBookExport struct {
 	Registration     []bookExportEvent     `json:"registration_events"`
 	Controls         []bookExportEvent     `json:"control_events"`
 	Documents        []documentRecord      `json:"documents"`
+	ManualAccess     []bookExportEvent     `json:"manual_access_events"`
 	DocumentReviews  []bookExportEvent     `json:"document_reviews"`
 	DocumentEvents   []bookExportEvent     `json:"document_events"`
 	Warnings         []string              `json:"warnings"`
@@ -181,7 +182,7 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 			sendExportError(w, err)
 			return
 		}
-		for _, query := range []string{`SELECT count(*) FROM device_events WHERE device_id=?`, `SELECT count(*) FROM device_control_events WHERE device_id=?`, `SELECT count(*) FROM device_documents WHERE device_id=?`, `SELECT count(*) FROM document_events e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM document_reviews e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`} {
+		for _, query := range []string{`SELECT count(*) FROM device_events WHERE device_id=?`, `SELECT count(*) FROM device_control_events WHERE device_id=?`, `SELECT count(*) FROM device_documents WHERE device_id=?`, `SELECT count(*) FROM document_events e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM document_reviews e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM manual_access_events WHERE device_id=?`} {
 			var count int
 			if err = tx.QueryRowContext(ctx, query, id).Scan(&count); err != nil {
 				sendExportError(w, err)
@@ -214,6 +215,35 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 			return
 		}
 		book.Controls, err = bookEvents(ctx, tx, `SELECT id,version,action,actor_id,created_at,payload_json FROM device_control_events WHERE device_id=? ORDER BY version`, id)
+		if err != nil {
+			sendExportError(w, err)
+			return
+		}
+		// Only own person records are exported unless the current site manager requests this record.
+		manager, err := usageManager(ctx, tx, user.ID, id)
+		if err != nil {
+			sendExportError(w, err)
+			return
+		}
+		manualRows, err := tx.QueryContext(ctx, `SELECT id,version,action,actor_id,created_at,payload_json FROM manual_access_events WHERE device_id=? AND (? OR subject_id=?) ORDER BY version`, id, manager, user.ID)
+		if err != nil {
+			sendExportError(w, err)
+			return
+		}
+		book.ManualAccess = []bookExportEvent{}
+		for manualRows.Next() {
+			var event bookExportEvent
+			var payload string
+			if err = manualRows.Scan(&event.ID, &event.Version, &event.Action, &event.ActorID, &event.CreatedAt, &payload); err != nil {
+				manualRows.Close()
+				sendExportError(w, err)
+				return
+			}
+			event.Proof = json.RawMessage(payload)
+			book.ManualAccess = append(book.ManualAccess, event)
+		}
+		err = manualRows.Err()
+		manualRows.Close()
 		if err != nil {
 			sendExportError(w, err)
 			return

@@ -18,13 +18,15 @@ type packDevice struct {
 	Accessories []packAccessory `json:"accessories"`
 }
 type deviceAssessment struct {
-	UserUsage   *usageSummary `json:"user_usage,omitempty"`
-	Requirement packDevice    `json:"requirement"`
-	Device      deviceRecord  `json:"device"`
-	Status      string        `json:"status"`
-	Reasons     []string      `json:"reasons"`
+	ManualAccess *manualAccessSummary `json:"manual_access,omitempty"`
+	UserUsage    *usageSummary        `json:"user_usage,omitempty"`
+	Requirement  packDevice           `json:"requirement"`
+	Device       deviceRecord         `json:"device"`
+	Status       string               `json:"status"`
+	Reasons      []string             `json:"reasons"`
 }
 type packAssessment struct {
+	Evidence operatingEvidence  `json:"operating_evidence"`
 	Basis    string             `json:"device_basis_hash"`
 	Check    *deviceCheckProof  `json:"last_device_check"`
 	Scope    string             `json:"scope"`
@@ -258,6 +260,14 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 		if err != nil {
 			return result, err
 		}
+		access, err := assessManualAccess(ctx, tx, user, user, result.Devices[i].Device, now)
+		if err != nil {
+			return result, err
+		}
+		result.Devices[i].ManualAccess = &manualAccessSummary{access.UserID, access.Version, access.Status, access.Reasons}
+		for _, reason := range access.Reasons {
+			result.Reasons = append(result.Reasons, result.Devices[i].Device.InventoryNumber+" · Gebrauchsanweisung: "+reason)
+		}
 		result.Devices[i].UserUsage = &usageSummary{assessment.UserID, assessment.Version, assessment.Status, assessment.Reasons}
 		for _, reason := range assessment.Reasons {
 			result.Reasons = append(result.Reasons, result.Devices[i].Device.InventoryNumber+" · Nutzer: "+reason)
@@ -271,6 +281,7 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 	if !material.CurrentVersion {
 		result.Status = "obsolete"
 	}
+	result.Evidence = consolidateEvidence(result)
 	return result, nil
 }
 func packAssessmentRoutes(mux *http.ServeMux, a *authService) {

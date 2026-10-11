@@ -20,3 +20,5 @@ Betreiber und Betriebsstätten, Produktumfang und Pflichtbewertungen, qualifizie
 Vor Updates ein neues konsistentes Backup erstellen und notwendige Schemaänderungen ausdrücklich migrieren. Vorhandene Datenvolumes und Sicherungen erhalten. Entwicklungsprüfungen ersetzen keine NAS-, Scanner-, Postfach- oder vollständige Restore-Abnahme.
 
 Dokumentprüfung und Freigabe: [Bedienung und Scannerbetrieb](dokumentpruefung.md).
+
+Gebrauchsanweisungszugang und gemeinsame Voraussetzungen: [Bedienung und Grenzen](gebrauchsanweisungszugang.md).

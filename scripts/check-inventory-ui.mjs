@@ -60,11 +60,14 @@ try {
 
  window.adminPosted=[];window.adminReplies=new Map();window.loseAdminReply=false;window.adminState={objects:[{id:"operator",kind:"operator",name:"<img src=x>",parent_id:"",version:1,rights:[]},{id:"site",kind:"site",name:"Demo",parent_id:"operator",version:1,rights:[]},{id:"warehouse",kind:"location",name:"Lager",parent_id:"site",version:1,rights:[]},{id:"other-user",kind:"user",name:"Andere Person",parent_id:"",version:2,active:true,administrator:false,rights:[]}],events:[],more_events:false};
  window.recallPosted=[];window.recallReplies=new Map();window.loseRecallReply=false;window.testRecalls=[];window.recallTargets=[{key:"batch/warehouse/available",id:"batch",name:"<svg onload=alert(1)>",identity:"TEST",location_id:"warehouse",location:"Lager",site_id:"site",state:"available",quantity:10,version:1,basis_hash:"f".repeat(64),completed:false}];
- window.usagePosted=[];window.usageReplies=new Map();window.usageVersion=0;window.usageEvents=[];window.loseUsageReply=false;window.usageManager=true;
+ window.usagePosted=[];window.manualVersion=0;window.manualEvents=[];window.manualPosted=[];window.manualReplies=new Map();window.loseManualReply=false;window.usageReplies=new Map();window.usageVersion=0;window.usageEvents=[];window.loseUsageReply=false;window.usageManager=true;
  window.fetch = async (input,options={}) => {
   const path = typeof input === 'string' ? input : input.url;
   let data;
   if (path === '/api/v1/me') data = {id:'synthetic-user',username:'test',administrator:true,csrf_token:'synthetic-csrf',rights:[{site_id:'site',role:'material_manager'},{site_id:'site',role:'device_manager'}]};
+  else if(path.includes('/manual-access')){
+   if(options.method==='POST'){const body=JSON.parse(options.body),key=options.headers['Idempotency-Key'];window.manualPosted.push({key,body:options.body});if(window.manualReplies.has(key))data=window.manualReplies.get(key);else{if(window.staleManual||body.expected_version!==window.manualVersion){window.staleManual=false;return new Response(JSON.stringify({message:'Zugangsnachweis geändert'}),{status:409,headers:{'Content-Type':'application/json'}});}window.manualVersion++;data={id:'manual-'+window.manualVersion,version:window.manualVersion,actor_id:'synthetic-user',input:body};window.manualEvents.unshift(data);window.manualReplies.set(key,data);if(window.loseManualReply){window.loseManualReply=false;throw Error('Lost manual reply');}}}else{data={manager:window.usageManager,assessment:{user_id:'synthetic-user',version:window.manualVersion,device_version:window.deviceVersion,status:window.manualEvents.length?(window.manualEvents[0].input.action==='confirm'?'confirmed':'blocked'):'unknown',reasons:['<img src=x> manual access'],events:window.manualEvents,overall_readiness:'not_assessed'}};if(window.holdManual){window.holdManual=false;await new Promise(resolve=>window.releaseManual=resolve);}}
+  }
   else if(path.includes('/usage')) {
    if(options.method==='POST'){
     const posted={body:options.body,key:options.headers['Idempotency-Key']};window.usagePosted.push(posted);
@@ -174,7 +177,7 @@ try {
    if(window.loseDeviceReply){window.loseDeviceReply=false;throw new Error('Lost device response');}
   }
   else if (path.startsWith('/api/v1/packlists?')) data = [window.pack];
-  else if (path === '/api/v1/packlists/pack/assessment') data={status:'blocked',overall_readiness:'not_assessed',reasons:['SYNTH-1: Aktive Sperre: recall'],device_basis_hash:window.devicePhysicalBasis||'d'.repeat(64),devices:[{requirement:{device_id:'device',accessories:[{product_id:'product',quantity:2}]},device:{inventory_number:'SYNTH-1',name:'Demo'}}]};
+  else if (path === '/api/v1/packlists/pack/assessment') data={status:'blocked',overall_readiness:'not_assessed',operating_evidence:{status:'incomplete',components:[{kind:'product_duties',status:'unknown',reason:'<img src=x> Product duty unknown'}]},reasons:['SYNTH-1: Aktive Sperre: recall'],device_basis_hash:window.devicePhysicalBasis||'d'.repeat(64),devices:[{requirement:{device_id:'device',accessories:[{product_id:'product',quantity:2}]},device:{inventory_number:'SYNTH-1',name:'Demo'}}]};
   else if (path === '/api/v1/packlists/pack/readiness') data = {scope:'material_only',overall_readiness:'not_assessed',status:'needs_check',data_as_of:new Date().toISOString(),packlist:window.pack,current_version:true,basis_hash:window.materialBasis,reasons:['Physischer Prüfnachweis fehlt.'],items:[{product:'Demo',unit:'Stück',quantity:5,physical_quantity:10,usable_quantity:10,shortfall:0,min_remaining_days:30,unknown_quantity:0}],last_check:null};
   else if (path === '/api/v1/packlists/pack/device-checks' && !options.method) data=[];
   else if (path === '/api/v1/packlists/pack/checks' && !options.method) data = [];
@@ -471,8 +474,7 @@ try {
  await until("document.querySelector('#device-history').textContent.includes('Außerbetriebnahme: 2024-02-29')");
  await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
  await evaluate("document.querySelector('#device-begin').click()");
- await until("deviceDraft && !document.querySelector('#device-control-form button[type=submit]').disabled && [...document.querySelector('#correction-target').options].some(o=>o.value==='9')");
- assert.equal(await evaluate("[...document.querySelector('#correction-target').options].find(o=>o.value==='9').textContent.includes('Instandhaltung')"),true);
+ await until("deviceDraft && deviceDraft.version===window.deviceVersion && !document.querySelector('#device-control-form button[type=submit]').disabled && [...document.querySelector('#correction-target').options].find(o=>o.value==='9')?.textContent.includes('Instandhaltung')");
  await evaluate("document.querySelector('#device-action').value='correction';document.querySelector('#device-action').dispatchEvent(new Event('change'));document.querySelector('#correction-target').value='9';document.querySelector('#correction-statement').value='<svg onload=alert(1)> corrected examiner';document.querySelector('#correction-document').value='document';window.loseDeviceReply=true;document.querySelector('#device-control-form').requestSubmit()");
  await until("document.querySelector('#device-basis').textContent.includes('Nachweis nicht bestätigt')");
  assert.equal(await evaluate("document.querySelector('#correction-target').disabled"),true);
@@ -593,8 +595,30 @@ try {
  await until("document.querySelector('#usage-status').textContent.includes('Personennachweise geändert')");
  assert.equal(await evaluate('JSON.parse(window.usagePosted[2].body).user_id'),'synthetic-user');
  assert.equal(await evaluate('JSON.parse(window.usagePosted[2].body).expected_version'),1);
+ await until("!document.querySelector('#manual-access-form').hidden");
+ assert.equal(await evaluate("document.querySelector('#manual-access-assessment img')===null"),true);
+ await evaluate("document.querySelector('#manual-access-document').value='document';document.querySelector('#manual-access-version').value='Manual 1';document.querySelector('#manual-access-language').value='Deutsch';document.querySelector('#manual-access-until').value=new Date(Date.now()+3600000).toISOString().slice(0,16);document.querySelector('#manual-access-evidence').value='<img src=x> accessible reference';document.querySelector('#manual-access-qualification').value='Reviewer';document.querySelector('#manual-access-assignment').value='Operator';document.querySelector('#manual-access-note').value='Synthetic access review';document.querySelector('#manual-access-form').requestSubmit()");
+ assert.equal(await evaluate('window.manualPosted.length'),0);
+ await evaluate("document.querySelector('#manual-access-confirmed').checked=true;window.loseManualReply=true;document.querySelector('#manual-access-form').requestSubmit()");
+ await until("document.querySelector('#manual-access-status').textContent.includes('nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#usage-device').disabled"),true);
+ assert.equal(await evaluate("document.querySelector('#manual-access-language').disabled"),true);
+ await evaluate("document.querySelector('#manual-access-submit').click()");
+ await until("document.querySelector('#manual-access-status').textContent.includes('gespeichert')");
+ assert.deepEqual(await evaluate('window.manualPosted[0]'),await evaluate('window.manualPosted[1]'));
+ assert.equal(await evaluate('JSON.parse(window.manualPosted[0].body).user_id'),'synthetic-user');
+ assert.equal(await evaluate('JSON.parse(window.manualPosted[0].body).expected_device_version'),await evaluate('window.deviceVersion'));
+ assert.equal(await evaluate("document.querySelector('#manual-access-events img')===null"),true);
+ await evaluate("document.querySelector('#manual-access-action').value='revoke';document.querySelector('#manual-access-action').dispatchEvent(new Event('change'));window.staleManual=true;document.querySelector('#manual-access-form').requestSubmit()");
+ await until("document.querySelector('#manual-access-status').textContent.includes('Zugangsnachweis geändert')");
+ assert.equal(await evaluate('JSON.parse(window.manualPosted[2].body).expected_version'),1);
+ assert.equal(await evaluate('JSON.parse(window.manualPosted[2].body).document_id===undefined'),true);
+ assert.equal(await evaluate("document.querySelector('#operating-evidence').textContent.includes('Besondere Produktpflichten')"),true);
+ assert.equal(await evaluate("document.querySelector('#operating-evidence img')===null"),true);
  await evaluate("window.usageManager=false;loadUsage();void 0");
- await until("document.querySelector('#usage-form').hidden");
+ await until("document.querySelector('#usage-form').hidden && document.querySelector('#manual-access-form').hidden");
+ await evaluate("window.holdManual=true;window.lateManual=loadManualAccess();void 0");
+ await until('typeof window.releaseManual==="function"');
  await evaluate("window.holdUsage=true;window.lateUsage=loadUsage();void 0");
  await until('typeof window.releaseUsage==="function"');
  await until("!document.querySelector('#recall-create-form').hidden");
@@ -647,6 +671,9 @@ try {
  await evaluate("window.releaseAdmin();window.lateAdmin");
  await evaluate("window.releaseRecall();window.lateRecall");
  await evaluate("window.releaseUsage();window.lateUsage");
+ await evaluate("window.releaseManual();window.lateManual");
+ assert.equal(await evaluate("document.querySelector('#manual-access-assessment').textContent"),'');
+ assert.equal(await evaluate("document.querySelector('#manual-access-events').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#usage-assessment').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#recall-detail').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#admin-overview').textContent"),'');
@@ -660,7 +687,7 @@ try {
  assert.equal(await evaluate("document.querySelector('#attention-list').children.length"),0);
  assert.equal(await evaluate("document.querySelector('#attention-counts').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: document scan/release versioning, frozen exact retry, safe review history and stale conflict; concrete user requirements, frozen exact retry, stale evidence version, safe text, read-only user view and logout clearing; recall preview/frozen activation and measures, exact retries, stale version, safe text and logout clearing; administration scope display, safe text, frozen exact retry, explicit rights, stale version, password clearing and late response after logout; SMTP status and uncertainty, safe text, failure clearing and late mail response after logout; automatic reminder status, stale worker warning, safe text, error clearing and late response after logout; scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: manual access explicit confirmation, frozen exact retry, version conflicts, combined components, scoped read-only display and late logout response; document scan/release versioning, frozen exact retry, safe review history and stale conflict; concrete user requirements, frozen exact retry, stale evidence version, safe text, read-only user view and logout clearing; recall preview/frozen activation and measures, exact retries, stale version, safe text and logout clearing; administration scope display, safe text, frozen exact retry, explicit rights, stale version, password clearing and late response after logout; SMTP status and uncertainty, safe text, failure clearing and late mail response after logout; automatic reminder status, stale worker warning, safe text, error clearing and late response after logout; scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');
