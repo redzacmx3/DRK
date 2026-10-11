@@ -131,3 +131,7 @@ Den Snapshot zusätzlich vom Volume auf einen getrennten Sicherungsort kopieren.
 ## Grenzen des aktuellen Tests
 
 Go-Tests und ein Docker-Test mit echtem Traefik 3.6 prüfen die ausdrücklich aktivierte Netzwerkbindung, TLS auf beiden Verbindungen, exakte öffentliche Origin, sichere Anmeldung/Buchung und die persistente NAS-Compose-Konfiguration. Ein entfernter Backend-Vertrauensanker führt im Test korrekt zum Verbindungsfehler; Zertifikatsprüfung bleibt eingeschaltet. Dein physisches NAS, deine Tailscale-Regeln und deine Dokploy-/Traefik-Installation sind hier nicht erreichbar und müssen bei dir geprüft werden. Login-Limits gelten derzeit für die Backend-Verbindungsadresse, hinter Traefik also gemeinsam für dessen Nutzer. Produktive Freigabe, vollständige Rollen-/Qualifikationsprüfung und Restore-Abnahme bleiben offen.
+
+## Kontrollerinnerungen
+
+Der vorhandene Container erzeugt automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist noch nicht angeschlossen. Bestehende Datenbanken vor Update sichern und ausdrücklich auf Schema 21 migrieren; Volumes erhalten.

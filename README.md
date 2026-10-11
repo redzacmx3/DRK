@@ -292,7 +292,7 @@ Als Nächstes Geräteakten und Fristen ergänzen; vollständige Geräte-/Zubehö
 
 Die Zustände sind `UNKNOWN`, `NOT_APPLICABLE`, `CURRENT`, `DUE_SOON` und `OVERDUE`. Eine Frist gilt bis einschließlich des fachlichen Tages in `Europe/Berlin`; die Vorwarnschwelle ist ein expliziter Parameter. Fehlendes Basisdatum bleibt ungeklärt. Die Funktion beurteilt keine Gerätesperren und erteilt keine Einsatzfreigabe.
 
-Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 20.
+Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Die Anbindung weiterer Prüfungen folgt. Datenbankschema: Version 21.
 
 
 ### Registrierte Geräteakten
@@ -384,7 +384,7 @@ Jedes Gerät in der Übersicht bietet „Geräteakte mit Historie exportieren“
 
 Alle Geräte-Leserollen dürfen Akten innerhalb ihres Bereichs exportieren. Fremde oder unbekannte IDs ergeben dieselbe 404-Antwort. Anhänge in Quarantäne werden nicht als Dateien verpackt: Metadaten, SHA-256 und ihre gebundenen Nachweisreferenzen bleiben sichtbar; der gesonderte Prüfdownload bleibt Geräteverantwortlichen vorbehalten. SHA-256 ermöglicht Konsistenzprüfungen, ist keine Signatur oder unabhängige Herkunftsbestätigung. Personenangaben aus Einweisungen bleiben Teil der geschützten Akte; eine heruntergeladene Kopie unterliegt anschließend der Verantwortung des Empfängers.
 
-Dieser Export enthält vollständig die gespeicherten Fachdaten **dieser Geräteakte**, einschließlich Historien über die 500 Einträge der Bildschirmansicht hinaus. Er bestätigt keine vollständige rechtliche Dokumentation: bisher nicht strukturierte Pflichtangaben und Abläufe werden im Export ausdrücklich als Lücken benannt. Keine automatische Einsatzfreigabe, keine Aufhebung von Sperren oder Quarantäne. Grenze je Historienbereich: 2000 Einträge, insgesamt 8 MiB unkomprimierte Exportdateien, zehn Sekunden Erzeugungszeit. Die zwei gemeinsamen Exportplätze gelten auch für CSV. Bei Überschreitung wird das gesamte Archiv abgelehnt; keine stille Kürzung. Dieser Export erfordert keine eigene Schemaänderung; aktueller Gesamtstand: Version 20.
+Dieser Export enthält vollständig die gespeicherten Fachdaten **dieser Geräteakte**, einschließlich Historien über die 500 Einträge der Bildschirmansicht hinaus. Er bestätigt keine vollständige rechtliche Dokumentation: bisher nicht strukturierte Pflichtangaben und Abläufe werden im Export ausdrücklich als Lücken benannt. Keine automatische Einsatzfreigabe, keine Aufhebung von Sperren oder Quarantäne. Grenze je Historienbereich: 2000 Einträge, insgesamt 8 MiB unkomprimierte Exportdateien, zehn Sekunden Erzeugungszeit. Die zwei gemeinsamen Exportplätze gelten auch für CSV. Bei Überschreitung wird das gesamte Archiv abgelehnt; keine stille Kürzung. Dieser Export erfordert keine eigene Schemaänderung; aktueller Gesamtstand: Version 21.
 
 ### Bestandsverzeichnis-Stammdaten (Schema 16)
 
@@ -442,6 +442,27 @@ Die Oberfläche bündelt überfällige und anstehende Kontrollen, ungeklärte Ko
 
 `GET /api/v1/devices/attention?days=60` akzeptiert 0–365 Tage und liefert den aktuellen Stand aus einer gemeinsamen Datenbanksicht. Meldebewertungen und Sperren stehen zuerst. Außer Betrieb genommene Geräte erhalten keine Kontrolltermine oder Inbetriebnahmehinweise, behalten aber offene Sperren und Meldeaufgaben. Über 1000 berechtigte Geräte, 8 MiB oder bei Zeitüberschreitung wird die gesamte Übersicht abgelehnt; es gibt keine still gekürzte Übersicht. Zwei parallele Übersichten/Aktenexporte sind gemeinsam zugelassen.
 
-Rein lesend, Schema bleibt 20: keine Migration, Ereignisse oder automatische E-Mail-Erinnerungen. Die Anzeige bestätigt keine Einsatzfreigabe. Nach Änderungen aktualisiert sie sich; verspätete Antworten dürfen einen neueren Zeitraum oder eine Abmeldung nicht überschreiben.
+Diese Arbeitsübersicht ist rein lesend und benötigt keine eigene Migration. Der ergänzte Erinnerungsworker verwendet Schema 21; E-Mail-Zustellung folgt separat. Die Anzeige bestätigt keine Einsatzfreigabe. Nach Änderungen aktualisiert sie sich; verspätete Antworten dürfen einen neueren Zeitraum oder eine Abmeldung nicht überschreiben.
 
 Geprüft: Go-Race-Suite, Vet/Build, Bereichsrechte, unveränderte Ereignisse, Kalendergrenzen einschließlich Zeitumstellungen, Grenze gegen Teilanzeigen sowie Browserfilter und verspätete Antworten. HTTPS-Compose-Test mit geprüftem Zertifikat bestätigte vier Zeiträume, alle Leserrollen, leeren Bereich und unveränderte Historien/Bestände.
+
+## Automatische Kontrollerinnerungen (Schema 21)
+
+Ein Hintergrundlauf im bestehenden Dienst startet sofort und anschließend stündlich. Er erzeugt dauerhaft gespeicherte Erinnerungen bei 60/30/7 Tagen vor Fälligkeit, am Fälligkeitstag und nach Überschreitung. Berliner Kalendertage bleiben maßgeblich. Nach ausgefallenen Läufen wird einmal die aktuell dringlichste Schwelle erfasst; versäumte Vorwarnungen werden nicht nachträglich als Serie erzeugt. Je Gerät, Kontrolltyp, belegtem Kontrollzyklus und Schwelle gibt es höchstens einen Eintrag samt eigener Outbox. Wiederholungen, konkurrierende Läufe und Neustarts erzeugen keine Doppelhinweise. Ein einziger Überfälligkeitshinweis bleibt bestehen, ohne tägliche Wiederholungen.
+
+Neue Prüf-/Regelnachweise können einen neuen Kontrollzyklus bilden, auch bei gleichem Fälligkeitstag. Administrative Grund-/Stammdatenänderungen allein tun dies nicht. Frühere Einträge und Outbox bleiben erhalten; ihr aktiver Zustand wird aus aktuellen Akten abgeleitet. Außerbetriebnahme, unbekannte oder ausgenommene Kontrollpflichten erzeugen keine Kontrollerinnerungen. Ein Fehler verwirft den gesamten Lauf einschließlich Outbox und Erfolgszeitpunkt. Geräteversionen, Fachhistorien, Sperren und Prüfbasiswerte werden durch den Worker nicht geändert.
+
+Die Oberfläche zeigt Erzeugungszeit, Schwelle, ursprüngliche Geräteversion und den letzten erfolgreichen Lauf. Bei mehr als zwei Stunden ohne bestätigten Lauf erscheint ein Hinweis. `GET /api/v1/devices/reminders` liefert nur aktive Erinnerungen im berechtigten Bereich und prüft die aktuelle Akte beim Lesen: veraltete Kontrollzyklen und außer Betrieb genommene Geräte verschwinden sofort, auch bevor der Worker wieder läuft. Aktuelle Fristen und Resttage werden beim Lesen berechnet. Die Arbeitsübersicht bleibt unabhängig verfügbar und bestätigt keine Einsatzfreigabe. Keine automatische E-Mail-Zustellung; die eigene Outbox bereitet einen getrennten Transport vor.
+
+Konfiguration in allen Compose-Dateien:
+
+```dotenv
+DRK_DEVICE_REMINDERS=true
+DRK_REMINDER_DAYS=60,30,7
+```
+
+Zulässig sind 1–12 unterschiedliche positive Schwellen bis 365 Tage, getrennt durch Komma. Heute und überfällig bleiben zusätzlich enthalten. `false` stoppt die automatische Erzeugung, löscht aber keine gespeicherten Hinweise. CLI: `inventory remind-devices --db PATH --reminder-days 60,30,7` für einen ausdrücklichen Einmallauf; `serve --device-reminders=false` zum Abschalten. Nicht gleichzeitig mit abweichenden Schwellen betreiben. Grenzen: 1000 Geräte je atomarem Worker-Lauf, 3000 aktive berechtigte Erinnerungen je Übersicht, 8 MiB und zehn Sekunden. Bei Überschreitung keine Teilverarbeitung; letztes erfolgreiches Ergebnis bleibt erhalten.
+
+Bestehende Installation: Dienst stoppen, neues konsistentes Backup anlegen und ausdrücklich auf Schema 21 migrieren, dann starten. `init` aktualisiert bestehende Datenbanken weiterhin nicht automatisch. Sicherungen enthalten auch Erinnerungen/Outbox; keine Volumes löschen.
+
+Geprüft: vollständige Go-Race-Suite, Vet/Build, Schwellen-/Kalendergrenzen, Nachholen ohne Meldeserie, konkurrierende Läufe, deduplizierte Outbox, atomarer Rollback, Start/Abbruch, unveränderliche Nachweise, Bereichsrechte und Verbot von Teilverarbeitung. Browser prüft sichere Texte, Warnung bei altem Erfolgszeitpunkt, Fehlerbereinigung und verspätete Antworten nach Abmeldung. Echte HTTPS-Compose-Migration 20→21 mit Backup und Wiederholung erhielt Bestände, Historien, Anhänge, physische Nachweise und Geräte-/Materialprüfbasiswerte. Automatischer Start, Wiederholung ohne weitere Outbox-Einträge, Snapshot-Integrität, sofortiges Ausblenden nach Außerbetriebnahme und Neustartpersistenz bestanden. Lokales Backup, wiederholte Migration und Einmalläufe bestanden ebenfalls.

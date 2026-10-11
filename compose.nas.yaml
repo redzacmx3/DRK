@@ -21,7 +21,7 @@ services:
   inventory:
     <<: *inventory
     restart: unless-stopped
-    command: ["serve", "--db", "/data/inventory.db", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--origin", "${DRK_ORIGIN:?Set the exact public HTTPS origin}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
+    command: ["serve", "--db", "/data/inventory.db", "--device-reminders=${DRK_DEVICE_REMINDERS:-true}", "--reminder-days", "${DRK_REMINDER_DAYS:-60,30,7}", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--origin", "${DRK_ORIGIN:?Set the exact public HTTPS origin}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
     ports:
       - "${DRK_BIND_IP:?Set the NAS Tailscale IPv4 address}:${DRK_HTTPS_PORT:-8443}:8080"
     healthcheck:

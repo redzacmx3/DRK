@@ -14,7 +14,7 @@ const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Ent
 const stateNames = {available:'Verfügbar',quarantined:'Quarantäne',damaged:'Beschädigt'};
 function clearDeviceHistory(){for(const field of reportFields)document.querySelector("#report-"+field.replaceAll("_","-")).value="";for(const id of ["incident-kind","incident-description","incident-consequences","incident-document","report-incident","report-document"])document.querySelector("#"+id).value="";document.querySelector("#report-incident").replaceChildren();for(const id of ["correction-statement","correction-target","correction-document","maintenance-kind","maintenance-executor","maintenance-measure","maintenance-result","maintenance-document"])document.querySelector("#"+id).value="";for(const key of masterDataFields)document.querySelector('#master-'+key.replaceAll('_','-')).value='';document.querySelector('#correction-target').replaceChildren();document.querySelector('#device-history').replaceChildren();document.querySelector('#device-history-status').textContent='';for(const field of ['name','manufacturer','model','serial'])document.querySelector('#device-detail-'+field).value='';}
 function signedOut(message) {
- attentionSequence++;attentionBoard=null;document.querySelector("#attention-list").replaceChildren();document.querySelector("#attention-status").textContent="";document.querySelector("#attention-counts").textContent="";
+ attentionSequence++;attentionBoard=null;document.querySelector("#reminder-list").replaceChildren();document.querySelector("#reminder-status").textContent="";document.querySelector("#attention-list").replaceChildren();document.querySelector("#attention-status").textContent="";document.querySelector("#attention-counts").textContent="";
  clearDeviceHistory();
  stockIntakeDraft=null;stockIntakeLoading=false;document.querySelector("#stock-import-file").value="";document.querySelector("#stock-import-rows").replaceChildren();document.querySelector("#stock-import-locations").replaceChildren();document.querySelector("#stock-import-status").textContent="";document.querySelector("#stock-import").hidden=true;
  intakeDraft=null;intakeLoading=false;document.querySelector("#device-import-file").value="";document.querySelector("#device-import-rows").replaceChildren();document.querySelector("#device-import-locations").replaceChildren();document.querySelector("#device-import-status").textContent="";document.querySelector("#device-import").hidden=true;
@@ -816,12 +816,27 @@ function renderDeviceAttention(){
 }
 async function loadDeviceAttention(){
  const owner=user?.id;if(!owner)return;const sequence=++attentionSequence,days=document.querySelector('#attention-days').value;
- attentionBoard=null;document.querySelector('#attention-list').replaceChildren();document.querySelector('#attention-counts').textContent='';const message=document.querySelector('#attention-status');message.textContent='Arbeitsübersicht wird geladen …';
+ attentionBoard=null;document.querySelector('#reminder-list').replaceChildren();document.querySelector('#reminder-status').textContent='';document.querySelector('#attention-list').replaceChildren();document.querySelector('#attention-counts').textContent='';const message=document.querySelector('#attention-status');message.textContent='Arbeitsübersicht wird geladen …';
  try{const response=await fetch('/api/v1/devices/attention?days='+encodeURIComponent(days),{cache:'no-store'});if(user?.id!==owner||sequence!==attentionSequence)return;if(response.status===401){signedOut('Bitte erneut anmelden.');return;}const result=await response.json();if(user?.id!==owner||sequence!==attentionSequence)return;if(!response.ok)throw new Error(result.message||'Arbeitsübersicht nicht verfügbar.');attentionBoard=result;
  message.textContent=`Datenstand ${result.as_of} · Fachlicher Tag ${result.day} · ${result.devices.length} Geräte mit Hinweisen von ${result.scanned_devices} Geräten · Zeitraum ${result.horizon_days} Tage. Zähler beziehen sich auf einzelne Hinweise.`;
- document.querySelector('#attention-counts').textContent=Object.entries(attentionKindNames).map(([kind,label])=>`${label}: ${result.counts[kind]||0}`).join(' · ');renderDeviceAttention();
+ document.querySelector('#attention-counts').textContent=Object.entries(attentionKindNames).map(([kind,label])=>`${label}: ${result.counts[kind]||0}`).join(' · ');renderDeviceAttention();await loadDeviceReminders(owner,sequence);
  }catch(error){if(user?.id===owner&&sequence===attentionSequence)message.textContent=error.message;}
 }
 document.querySelector('#attention-refresh').addEventListener('click',loadDeviceAttention);
 document.querySelector('#attention-days').addEventListener('change',loadDeviceAttention);
 document.querySelector('#attention-filter').addEventListener('change',renderDeviceAttention);
+
+async function loadDeviceReminders(owner,sequence){
+ const message=document.querySelector('#reminder-status'),list=document.querySelector('#reminder-list');
+ try{
+  const response=await fetch('/api/v1/devices/reminders',{cache:'no-store'});if(user?.id!==owner||sequence!==attentionSequence)return;
+  if(response.status===401){signedOut('Bitte erneut anmelden.');return;}
+  const result=await response.json();if(user?.id!==owner||sequence!==attentionSequence)return;
+  if(!response.ok)throw new Error(result.message||'Erinnerungen nicht verfügbar.');
+  const stale=result.last_worker_success && Date.parse(result.as_of)-Date.parse(result.last_worker_success)>2*60*60*1000;
+  message.textContent=result.last_worker_success?`Letzter erfolgreicher Hintergrundlauf: ${result.last_worker_success} · Schwellen: ${result.thresholds.join(', ')} Tage sowie heute/überfällig.${stale?' Hintergrundlauf seit über zwei Stunden nicht bestätigt; aktuelle Arbeitsübersicht prüfen.':''}`:'Noch kein erfolgreicher Hintergrundlauf. Aktuelle Arbeitsübersicht prüfen.';
+  list.replaceChildren();
+  for(const item of result.reminders){const entry=document.createElement('li');entry.textContent=`${item.inventory_number} · ${item.name} · ${item.control_type==='electrical'?'Elektrische Kontrolle':item.control_type} · Fällig ${item.due_on} · ${item.days_remaining<0?Math.abs(item.days_remaining)+' Tage überfällig':item.days_remaining===0?'Heute fällig':'In '+item.days_remaining+' Tagen'} · Erzeugt ${item.created_at} bei ${item.threshold_days===-1?'Überschreitung':item.threshold_days===0?'Fälligkeit':item.threshold_days+'-Tage-Schwelle'} · Geräteversion ${item.source_version}`;list.append(entry);}
+  if(!result.reminders.length){const entry=document.createElement('li');entry.textContent='Keine gespeicherten Erinnerungen für aktuell gültige Kontrollfristen in Ihrem Bereich.';list.append(entry);}
+ }catch(error){if(user?.id===owner&&sequence===attentionSequence){list.replaceChildren();message.textContent=error.message;}}
+}

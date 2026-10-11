@@ -19,7 +19,7 @@ services:
     depends_on:
       init:
         condition: service_completed_successfully
-    command: ["serve", "--db", "/data/inventory.db", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--http=${DRK_HTTP:-true}", "--origin", "${DRK_ORIGIN:-http://localhost:8080}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
+    command: ["serve", "--db", "/data/inventory.db", "--device-reminders=${DRK_DEVICE_REMINDERS:-true}", "--reminder-days", "${DRK_REMINDER_DAYS:-60,30,7}", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--http=${DRK_HTTP:-true}", "--origin", "${DRK_ORIGIN:-http://localhost:8080}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
     ports:
       - "${DRK_BIND_IP:-127.0.0.1}:${DRK_PORT:-8080}:8080"
     restart: unless-stopped

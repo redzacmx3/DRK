@@ -42,14 +42,14 @@ func TestFreshInitializationDoesNotUpgradeExistingDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err = db.Exec("DELETE FROM schema_migrations WHERE version=20"); err != nil {
+	if _, err = db.Exec("DELETE FROM schema_migrations WHERE version=21"); err != nil {
 		t.Fatal(err)
 	}
 	if err = run(); err == nil {
 		t.Fatal("existing old schema automatically upgraded")
 	}
 	var version int
-	if err = db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != 19 {
+	if err = db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != 20 {
 		t.Fatalf("existing schema changed: %d %v", version, err)
 	}
 }
@@ -69,6 +69,21 @@ func TestOriginMustMatchExplicitTransport(t *testing.T) {
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatal("invalid transport created database")
+		}
+	}
+}
+
+func TestReminderConfigurationRejectedBeforeDatabaseCreation(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	for _, command := range []string{"serve", "remind-devices"} {
+		path := filepath.Join(t.TempDir(), "must-not-exist.db")
+		os.Args = []string{"inventory", command, "--db", path, "--reminder-days", "7,7"}
+		if err := run(); err == nil {
+			t.Fatal("invalid thresholds accepted")
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatal("database touched")
 		}
 	}
 }

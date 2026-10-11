@@ -62,6 +62,11 @@ try {
   const path = typeof input === 'string' ? input : input.url;
   let data;
   if (path === '/api/v1/me') data = {id:'synthetic-user',username:'test',csrf_token:'synthetic-csrf',rights:[{site_id:'site',role:'material_manager'},{site_id:'site',role:'device_manager'}]};
+  else if (path === '/api/v1/devices/reminders') {
+   data={as_of:'2026-10-11T12:00:00Z',last_worker_success:'2026-10-11T08:00:00Z',thresholds:[60,30,7],reminders:[{id:'reminder',device_id:'device',inventory_number:'TEST',name:'<svg onload=alert(1)>',control_type:'STK',due_on:'2026-10-10',threshold_days:-1,days_remaining:-1,source_version:2,created_at:'2026-10-11T08:00:00Z'}]};
+   if(window.holdReminders){window.holdReminders=false;await new Promise(resolve=>window.releaseReminders=resolve);}
+   if(window.failReminders){window.failReminders=false;return new Response(JSON.stringify({message:'Synthetic worker unavailable'}),{status:503,headers:{'Content-Type':'application/json'}});}
+  }
   else if (path.startsWith('/api/v1/devices/attention?')) {
    data={as_of:'2026-10-11T12:00:00Z',day:'2026-10-11',horizon_days:Number(new URL(path,location.origin).searchParams.get('days')),scanned_devices:1,counts:{block:1,overdue:1},devices:[{id:'device',inventory_number:'TEST',name:'<img src=x onerror=alert(1)>',location_id:'warehouse',version:window.deviceVersion,reasons:[{kind:'block',description:'Synthetic block'},{kind:'overdue',control_type:'STK',due_on:'2026-10-10',days_remaining:-1,description:'Synthetic overdue'}]}]};
    if(window.holdAttention){window.holdAttention=false;await new Promise(resolve=>window.releaseAttention=resolve);}
@@ -157,6 +162,15 @@ try {
  await until("document.querySelector('#booking') && !document.querySelector('#booking').hidden");
  await until("document.querySelector('#attention-list').textContent.includes('Synthetic overdue')");
  assert.equal(await evaluate("document.querySelector('#attention-list img')===null"),true);
+ await until("document.querySelector('#reminder-list').textContent.includes('<svg')");
+ assert.equal(await evaluate("document.querySelector('#reminder-list svg')===null"),true);
+ assert.equal(await evaluate("document.querySelector('#reminder-status').textContent.includes('seit über zwei Stunden')"),true);
+ await evaluate("window.failReminders=true;void loadDeviceAttention()");
+ await until("document.querySelector('#reminder-status').textContent.includes('Synthetic worker unavailable')");
+ assert.equal(await evaluate("document.querySelector('#reminder-list').children.length"),0);
+ await evaluate('void loadDeviceAttention()');
+ await until("document.querySelector('#reminder-list').children.length===1");
+
  await evaluate("document.querySelector('#attention-filter').value='block';document.querySelector('#attention-filter').dispatchEvent(new Event('change'))");
  assert.equal(await evaluate("document.querySelector('#attention-list').textContent.includes('Synthetic overdue')"),false);
  await evaluate("window.holdAttention=true;void loadDeviceAttention()");
@@ -496,11 +510,17 @@ try {
  assert.deepEqual(await evaluate('window.stockIntakePosted[1]'),await evaluate('window.stockIntakePosted[2]'));
  assert.equal(await evaluate("JSON.parse(window.stockIntakePosted[2].body).locations['Offline Lager']"),'warehouse');
  assert.equal(await evaluate("JSON.parse(window.stockIntakePosted[2].body).csv.includes('000123')"),true);
+ await evaluate('window.holdReminders=true;void loadDeviceAttention()');
+ await until('typeof window.releaseReminders === "function"');
  await evaluate("signedOut('Test logout')");
+ await evaluate('window.releaseReminders()');
+ await evaluate('new Promise(resolve=>setTimeout(resolve,50))');
+ assert.equal(await evaluate("document.querySelector('#reminder-list').children.length"),0);
+
  assert.equal(await evaluate("document.querySelector('#attention-list').children.length"),0);
  assert.equal(await evaluate("document.querySelector('#attention-counts').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: automatic reminder status, stale worker warning, safe text, error clearing and late response after logout; scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');

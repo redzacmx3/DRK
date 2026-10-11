@@ -65,3 +65,7 @@ docker compose --env-file .env.local -f compose.local.yaml up -d --no-build --wa
 ```
 
 Für reproduzierbare Updates den Commit-Tag statt `latest` verwenden. Bestehende Instanz stoppen, ein neues Backup erzeugen, dann explizit migrieren und starten. `init` überschreibt keine vorhandenen Daten oder Sicherungen.
+
+## Kontrollerinnerungen
+
+Der vorhandene Container erzeugt automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist noch nicht angeschlossen. Bestehende Datenbanken vor Update sichern und ausdrücklich auf Schema 21 migrieren; Volumes erhalten.
