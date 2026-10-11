@@ -18,3 +18,5 @@ Aktueller Funktionsumfang und Prioritäten: [Stand und Roadmap](stand-und-roadma
 Betreiber und Betriebsstätten, Produktumfang und Pflichtbewertungen, qualifizierte Zuständigkeiten, Kontrollregeln, Datenschutz/Aufbewahrung und betrieblicher Ersatzprozess festlegen. Die Anwendung bestätigt derzeit keine vollständige Einsatzfreigabe. Nur synthetische Entwicklungsdaten verwenden, bis die fachliche und betriebliche Abnahme abgeschlossen ist.
 
 Vor Updates ein neues konsistentes Backup erstellen und notwendige Schemaänderungen ausdrücklich migrieren. Vorhandene Datenvolumes und Sicherungen erhalten. Entwicklungsprüfungen ersetzen keine NAS-, Scanner-, Postfach- oder vollständige Restore-Abnahme.
+
+Dokumentprüfung und Freigabe: [Bedienung und Scannerbetrieb](dokumentpruefung.md).

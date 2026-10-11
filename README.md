@@ -479,7 +479,7 @@ SMTP-Annahme ist keine Bestätigung der Postfachzustellung. Temporäre Fehler we
 
 `GET /api/v1/devices/reminder-mail` und die Oberfläche zeigen die letzten 200 Zustellungen im berechtigten Bereich, Status, Versuche und Message-ID, ohne Empfängeradressen oder Zugangsdaten auszugeben. Weitere Einträge werden ausdrücklich angekündigt. Der Status bleibt auch nach Außerbetriebnahme sichtbar. Wiederaufnahme erfolgt über die lokale CLI; bei unklarer Annahme ist nach externer Prüfung eine ausdrückliche Bestätigung des Doppelmail-Risikos erforderlich. SMTP-Protokolltexte, Passwörter und Mailinhalte werden nicht geloggt. Die bisherigen Bewegungs-/Prüf-Outboxen werden nicht per E-Mail versendet. Bestände, Fristen, Sperren und Prüfnachweise bleiben von Zustellfehlern unabhängig.
 
-Bestehende Installation vor Update sichern, ausdrücklich auf Schema 25 migrieren und anschließend starten. Sicherungen umfassen Warteschlange, Versuchshistorien und Empfängerbindungen; SMTP-Dateien/Secrets separat geschützt sichern.
+Bestehende Installation vor Update sichern, ausdrücklich auf Schema 26 migrieren und anschließend starten. Sicherungen umfassen Warteschlange, Versuchshistorien und Empfängerbindungen; SMTP-Dateien/Secrets separat geschützt sichern.
 
 Geprüft: vollständige Go-Race-Suite, Vet/Build, echte lokale TLS-/STARTTLS-Verbindungen einschließlich Anmeldung, geprüfte Zertifikate, fehlendes STARTTLS, Header-/Konfigurationsprüfung, 4xx/5xx, verlorene DATA-Antwort und QUIT-Abbruch nach Annahme. Warteschlange prüft Rollback, konkurrierende Worker, abgelaufene Leases, begrenzte Wiederholungen, stabile Message-IDs, manuelle Freigabe und Empfänger-/Fristenänderungen. Browser prüft Versandstatus, sichere Texte, Fehlerbereinigung und verspätete Antworten nach Abmeldung. HTTPS-Compose-Test mit lokalem TLS-SMTP-Testserver bestand einschließlich Backup/Migration 21→22, Standard ohne Versand, aktivem Overlay, Wiederholschutz, Neustartpersistenz, Snapshot-Integrität und Bereichsrechten. Frühere Bestände, Dokumente, Nachweise und Geräte-/Materialprüfbasiswerte blieben unverändert. Lokale Backup-/Migrationsprüfung bestand. Die Entwicklungsinstanz läuft wieder ohne SMTP-Konfiguration; reale SMTP-Konten und Postfachzustellung sind nicht geprüft.
 
@@ -494,3 +494,8 @@ Produkt-/Chargenrückrufe und Gerätebereiche werden nach geprüfter Standortvor
 ## Konkrete Benutzer- und Einweisungsnachweise (Schema 25)
 
 Geräteverantwortliche erfassen ausdrückliche Einweisungspflichten und notwendige Qualifikationscodes, ordnen bestehende Einweisungsereignisse konkreten Konten zu und dokumentieren befristete Qualifikationsnachweise mit Widerruf. Konto-/Betriebsstättenstatus, Gültigkeit und Änderungen der Geräteidentifikation werden beim Lesen geprüft. Die Packlistenbewertung enthält die personenbezogene Prüfung des angemeldeten Kontos. Quarantäneanhänge verhindern weiterhin positive Einweisungsbewertung; Gesamtfreigabe bleibt `not_assessed`. [Bedienung und Grenzen](docs/personenbewertung.md).
+
+
+## Kontrollierte Dokumentfreigabe (Schema 26)
+
+Optionale ClamAV-Anbindung über `DRK_CLAMD_ADDRESS`, getrennte aktuelle Malwareprüfung und fachliche Freigabe, unveränderliche Prüfgeschichte sowie ausdrücklicher Freigabeentzug. Ohne erreichbaren Scanner mit aktuellen Signaturen bleiben Freigaben gesperrt. Aktuelle Anhangszustände wirken auf die personenbezogene Bewertung; ursprüngliche Einweisungsnachweise und physische Prüfbasiswerte bleiben erhalten. Gesamtfreigabe weiter `not_assessed`. [Bedienung, Scannerbetrieb und Grenzen](docs/dokumentpruefung.md).

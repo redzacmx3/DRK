@@ -183,7 +183,11 @@ func assessUsage(ctx context.Context, tx *sql.Tx, actor, subject string, record 
 						all = false
 						result.Reasons = append(result.Reasons, "Einweisungszuordnung nach Identifikationsänderung erneut prüfen.")
 					}
-					if proof.DocumentStatus != "released" {
+					status, err := currentDocumentStatus(ctx, tx, proof.DocumentID, record.ID)
+					if err != nil {
+						return result, err
+					}
+					if status != "released" {
 						all = false
 						result.Reasons = append(result.Reasons, "Einweisungsanhang nicht fachlich freigegeben (Quarantäne).")
 					}

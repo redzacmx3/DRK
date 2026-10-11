@@ -171,7 +171,11 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 		}
 		assessed.Reasons = append(assessed.Reasons, "Einweisungspflicht und konkrete Nutzerqualifikation noch nicht vollständig bewertet.")
 		for _, instruction := range record.Instructions {
-			if instruction.DocumentStatus == "quarantined" {
+			status, err := currentDocumentStatus(ctx, tx, instruction.DocumentID, record.ID)
+			if err != nil {
+				return result, err
+			}
+			if status != "released" {
 				if assessed.Status != "blocked" {
 					assessed.Status = "unknown"
 				}

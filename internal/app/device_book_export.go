@@ -42,6 +42,7 @@ type deviceBookExport struct {
 	Registration     []bookExportEvent     `json:"registration_events"`
 	Controls         []bookExportEvent     `json:"control_events"`
 	Documents        []documentRecord      `json:"documents"`
+	DocumentReviews  []bookExportEvent     `json:"document_reviews"`
 	DocumentEvents   []bookExportEvent     `json:"document_events"`
 	Warnings         []string              `json:"warnings"`
 }
@@ -180,7 +181,7 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 			sendExportError(w, err)
 			return
 		}
-		for _, query := range []string{`SELECT count(*) FROM device_events WHERE device_id=?`, `SELECT count(*) FROM device_control_events WHERE device_id=?`, `SELECT count(*) FROM device_documents WHERE device_id=?`, `SELECT count(*) FROM document_events e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`} {
+		for _, query := range []string{`SELECT count(*) FROM device_events WHERE device_id=?`, `SELECT count(*) FROM device_control_events WHERE device_id=?`, `SELECT count(*) FROM device_documents WHERE device_id=?`, `SELECT count(*) FROM document_events e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM document_reviews e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`} {
 			var count int
 			if err = tx.QueryRowContext(ctx, query, id).Scan(&count); err != nil {
 				sendExportError(w, err)
@@ -217,19 +218,24 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 			sendExportError(w, err)
 			return
 		}
+		book.DocumentReviews, err = bookEvents(ctx, tx, `SELECT e.id,e.version,e.action,e.actor_id,e.created_at,e.payload_json FROM document_reviews e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=? ORDER BY e.created_at,e.id`, id)
+		if err != nil {
+			sendExportError(w, err)
+			return
+		}
 		book.DocumentEvents, err = bookEvents(ctx, tx, `SELECT e.id,0,'document',e.actor_id,e.created_at,e.snapshot_json FROM document_events e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=? ORDER BY e.created_at,e.id`, id)
 		if err != nil {
 			sendExportError(w, err)
 			return
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT id,device_id,filename,media_type,size,sha256,created_by,created_at,note,status FROM device_documents WHERE device_id=? ORDER BY created_at,id`, id)
+		rows, err := tx.QueryContext(ctx, `SELECT id,device_id,filename,media_type,size,sha256,created_by,created_at,note,status,review_version FROM effective_documents WHERE device_id=? ORDER BY created_at,id`, id)
 		if err != nil {
 			sendExportError(w, err)
 			return
 		}
 		for rows.Next() {
 			var d documentRecord
-			if err = rows.Scan(&d.ID, &d.DeviceID, &d.Filename, &d.MediaType, &d.Size, &d.SHA256, &d.CreatedBy, &d.CreatedAt, &d.Note, &d.Status); err != nil {
+			if err = rows.Scan(&d.ID, &d.DeviceID, &d.Filename, &d.MediaType, &d.Size, &d.SHA256, &d.CreatedBy, &d.CreatedAt, &d.Note, &d.Status, &d.ReviewVersion); err != nil {
 				rows.Close()
 				sendExportError(w, err)
 				return

@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -163,19 +164,21 @@ type attemptWindow struct {
 	Count int
 }
 type authService struct {
-	db          *sql.DB
-	origin      string
-	localHTTP   bool
-	now         func() time.Time
-	dummy       string
-	mu          sync.Mutex
-	attempts    map[string]attemptWindow
-	loginSlots  chan struct{}
-	exportSlots chan struct{}
+	clamdAddress  string
+	documentSlots chan struct{}
+	db            *sql.DB
+	origin        string
+	localHTTP     bool
+	now           func() time.Time
+	dummy         string
+	mu            sync.Mutex
+	attempts      map[string]attemptWindow
+	loginSlots    chan struct{}
+	exportSlots   chan struct{}
 }
 
 func newAuth(db *sql.DB, origin string) *authService {
-	return &authService{db: db, origin: origin, now: time.Now, dummy: passwordHash(randomToken()), attempts: map[string]attemptWindow{}, loginSlots: make(chan struct{}, 2), exportSlots: make(chan struct{}, 2)}
+	return &authService{clamdAddress: os.Getenv("DRK_CLAMD_ADDRESS"), documentSlots: make(chan struct{}, 1), db: db, origin: origin, now: time.Now, dummy: passwordHash(randomToken()), attempts: map[string]attemptWindow{}, loginSlots: make(chan struct{}, 2), exportSlots: make(chan struct{}, 2)}
 }
 func (a *authService) cookieName() string {
 	if a.localHTTP {

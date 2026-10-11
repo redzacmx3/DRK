@@ -51,7 +51,7 @@ try {
  await call('Page.addScriptToEvaluateOnNewDocument',{source:`
  const realFetch = window.fetch.bind(window);
  window.testBalances = [{batch_id:'batch',location_id:'warehouse',state:'available',quantity:10,usable_quantity:10,version:1,product:'Demo',unit:'Stück',lot:'DEMO',location:'Lager',expires_on:'2030-01-01',blocked:false}];
- window.posted = []; window.devicePosted=[];window.deviceReplies=new Map();window.loseDeviceReply=false;window.testDocuments=[];window.documentPosted=[];window.documentReplies=new Map();window.loseDocumentReply=false;window.deviceVersion=0;window.deviceDetails={name:"<img src=x onerror=alert(1)>",manufacturer:"Demo",model:"Model",serial_or_lot:"SERIAL"};window.testIncidents=[];window.deviceHistory=[];window.deviceMasterData=null;window.deviceBlocks=[{id:"recall-block",reason:"recall",note:"Synthetic recall"}];
+ window.posted = []; window.devicePosted=[];window.deviceReplies=new Map();window.loseDeviceReply=false;window.testDocuments=[];window.documentPosted=[];window.reviewPosts=[];window.reviewReplies=new Map();window.reviewHistory=[];window.loseReviewReply=false;window.documentReplies=new Map();window.loseDocumentReply=false;window.deviceVersion=0;window.deviceDetails={name:"<img src=x onerror=alert(1)>",manufacturer:"Demo",model:"Model",serial_or_lot:"SERIAL"};window.testIncidents=[];window.deviceHistory=[];window.deviceMasterData=null;window.deviceBlocks=[{id:"recall-block",reason:"recall",note:"Synthetic recall"}];
  window.stockIntakePosted=[];window.stockIntakePreviewPosted=[];window.stockIntakeReplies=new Map();window.stockIntakeBasis='1'.repeat(64);window.loseStockIntakeReply=false;
  window.intakePosted=[];window.intakePreviewPosted=[];window.intakeReplies=new Map();window.intakeBasis='1'.repeat(64);window.loseIntakeReply=false;
  window.pack = {id:'pack',location_id:'warehouse',version:1,title:'Material',check_valid_hours:24,created_at:new Date().toISOString(),note:'Synthetic',items:[{product_id:'product',quantity:5,min_remaining_days:30}]};
@@ -147,6 +147,9 @@ try {
    data={import_id:'import',created_count:1,unchanged_count:0,created_device_ids:['created-device']};window.stockIntakeReplies.set(key,data);if(window.loseStockIntakeReply){window.loseStockIntakeReply=false;throw new Error('Lost import reply');}
   }
   else if (path === '/api/v1/devices') data = [{id:'device',location_id:'warehouse',version:window.deviceVersion,incidents:window.testIncidents,active_blocks:window.deviceBlocks,inventory_number:'SYNTH-1',...window.deviceDetails}];
+  else if(path==='/api/v1/devices/device/documents/document/reviews'){
+   if(options.method==='POST'){const body=JSON.parse(options.body),key=options.headers['Idempotency-Key'];window.reviewPosts.push({key,body:options.body});if(window.reviewReplies.has(key))data=window.reviewReplies.get(key);else{const doc=window.testDocuments[0];if(body.expected_version!==(doc.review_version||0))return new Response(JSON.stringify({message:'Dokumentstand geändert'}),{status:409,headers:{'Content-Type':'application/json'}});doc.review_version=(doc.review_version||0)+1;doc.status=body.action==='release'?'released':body.action==='reject'?'rejected':'quarantined';data={version:doc.review_version,status:doc.status,action:body.action,input:body,actor_id:'synthetic-user',created_at:'2026-10-11',...(body.action==='scan'?{scan:{result:'clean',engine:'Synthetic <img src=x> scanner'}}:{})};window.reviewHistory.unshift(data);window.reviewReplies.set(key,data);if(window.loseReviewReply){window.loseReviewReply=false;throw Error('Lost review response');}}}else data=window.reviewHistory;
+  }
   else if(path==='/api/v1/devices/device/documents' && !options.method)data=window.testDocuments;
   else if(path==='/api/v1/devices/device/documents' && options.method==='POST'){
    const key=options.headers['Idempotency-Key'],request=JSON.parse(options.body);window.documentPosted.push({key,body:options.body});
@@ -386,6 +389,28 @@ try {
  await until("document.querySelector('#document-status').textContent.includes('in Quarantäne')");
  await until("document.querySelector('#device-instruction-document').options.length === 2");
  assert.equal(await evaluate("document.querySelector('#document-list a').getAttribute('href').endsWith('/download?review=true')"),true);
+ await until("!document.querySelector('#document-review-form').hidden");
+ await evaluate("document.querySelector('#document-review-evidence').value='<img src=x> scan evidence';document.querySelector('#document-review-qualification').value='reviewer';document.querySelector('#document-review-assignment').value='assignment';document.querySelector('#document-review-note').value='synthetic decision';window.loseReviewReply=true;document.querySelector('#document-review-form').requestSubmit()");
+ await until("document.querySelector('#document-review-status').textContent.includes('nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#document-review-action').disabled"),true);
+ await evaluate("document.querySelector('#document-review-form').requestSubmit()");
+ await until("document.querySelector('#document-review-status').textContent.includes('Malwarebefund clean')");
+ assert.deepEqual(await evaluate('window.reviewPosts[0]'),await evaluate('window.reviewPosts[1]'));
+ assert.equal(await evaluate('JSON.parse(window.reviewPosts[0].body).expected_version'),0);
+ await evaluate("document.querySelector('#document-review-history').click()");
+ await until("document.querySelector('#document-review-events').textContent.includes('<img src=x>')");
+ assert.equal(await evaluate("document.querySelector('#document-review-events img')===null"),true);
+ await evaluate("document.querySelector('#document-review-action').value='release';document.querySelector('#document-review-form').requestSubmit()");
+ await until("document.querySelector('#document-review-status').textContent.includes('gespeichert: released')");
+ assert.equal(await evaluate('JSON.parse(window.reviewPosts.at(-1).body).expected_version'),1);
+ await evaluate("document.querySelector('#devices-list button').click()");
+ await until("document.querySelector('#devices-list ul a')!==null");
+ assert.equal(await evaluate("document.querySelector('#devices-list ul a').getAttribute('href')"),'/api/v1/devices/device/documents/document/download');
+
+ await evaluate("window.testDocuments[0].review_version++;document.querySelector('#document-review-action').value='quarantine';document.querySelector('#document-review-form').requestSubmit()");
+ await until("document.querySelector('#document-review-status').textContent.includes('Dokumentstand geändert')");
+ await evaluate("document.querySelector('#device-begin').click()");
+ await until("document.querySelector('#document-review-choice').textContent.includes('Prüfversion 3')");
  await evaluate("document.querySelector('#device-action').value='instruction';document.querySelector('#device-action').dispatchEvent(new Event('change'));document.querySelector('#device-instructor').value='Instructor';document.querySelector('#device-trainee').value='Trainee';document.querySelector('#device-document-version').value='Revision 2';document.querySelector('#device-instruction-document').value='document';document.querySelector('#device-control-form').requestSubmit()");
  await until('window.devicePosted.length === 8');
  assert.deepEqual(await evaluate('({path:window.devicePosted[7].path,doc:JSON.parse(window.devicePosted[7].body).document_id,scope:JSON.parse(window.devicePosted[7].body).instruction_scope})'),{path:'/api/v1/devices/device/instructions',doc:'document',scope:'device'});
@@ -635,7 +660,7 @@ try {
  assert.equal(await evaluate("document.querySelector('#attention-list').children.length"),0);
  assert.equal(await evaluate("document.querySelector('#attention-counts').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: concrete user requirements, frozen exact retry, stale evidence version, safe text, read-only user view and logout clearing; recall preview/frozen activation and measures, exact retries, stale version, safe text and logout clearing; administration scope display, safe text, frozen exact retry, explicit rights, stale version, password clearing and late response after logout; SMTP status and uncertainty, safe text, failure clearing and late mail response after logout; automatic reminder status, stale worker warning, safe text, error clearing and late response after logout; scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: document scan/release versioning, frozen exact retry, safe review history and stale conflict; concrete user requirements, frozen exact retry, stale evidence version, safe text, read-only user view and logout clearing; recall preview/frozen activation and measures, exact retries, stale version, safe text and logout clearing; administration scope display, safe text, frozen exact retry, explicit rights, stale version, password clearing and late response after logout; SMTP status and uncertainty, safe text, failure clearing and late mail response after logout; automatic reminder status, stale worker warning, safe text, error clearing and late response after logout; scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');

@@ -1,6 +1,8 @@
 # Development only: HTTPS with a local development certificate. Loopback binding is intentional.
 services:
   inventory:
+    environment:
+      DRK_CLAMD_ADDRESS: ${DRK_CLAMD_ADDRESS:-}
     build: .
     image: drk-inventory:dev
     network_mode: host

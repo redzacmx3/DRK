@@ -94,5 +94,5 @@
 <pre>{{.Value}}</pre>
 </td>
 </tr>{{end}}</table>
-</article>{{else}}<p>Keine Anhangsereignisse erfasst.</p>{{end}}</body>
+</article>{{else}}<p>Keine Anhangsereignisse erfasst.</p>{{end}}<h2>Dokumentprüfung und Freigabe</h2>{{range .DocumentReviews}}<article><h3>Prüfversion {{.Version}} · {{.Action}}</h3><p>Ereignis {{.ID}} · {{.CreatedAt}} · Akteur-ID {{.ActorID}}</p><pre>{{.Proof | printf "%s"}}</pre></article>{{else}}<p>Keine Prüfereignisse erfasst.</p>{{end}}</body>
 </html>
