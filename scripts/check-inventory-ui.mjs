@@ -60,10 +60,19 @@ try {
 
  window.adminPosted=[];window.adminReplies=new Map();window.loseAdminReply=false;window.adminState={objects:[{id:"operator",kind:"operator",name:"<img src=x>",parent_id:"",version:1,rights:[]},{id:"site",kind:"site",name:"Demo",parent_id:"operator",version:1,rights:[]},{id:"warehouse",kind:"location",name:"Lager",parent_id:"site",version:1,rights:[]},{id:"other-user",kind:"user",name:"Andere Person",parent_id:"",version:2,active:true,administrator:false,rights:[]}],events:[],more_events:false};
  window.recallPosted=[];window.recallReplies=new Map();window.loseRecallReply=false;window.testRecalls=[];window.recallTargets=[{key:"batch/warehouse/available",id:"batch",name:"<svg onload=alert(1)>",identity:"TEST",location_id:"warehouse",location:"Lager",site_id:"site",state:"available",quantity:10,version:1,basis_hash:"f".repeat(64),completed:false}];
+ window.usagePosted=[];window.usageReplies=new Map();window.usageVersion=0;window.usageEvents=[];window.loseUsageReply=false;window.usageManager=true;
  window.fetch = async (input,options={}) => {
   const path = typeof input === 'string' ? input : input.url;
   let data;
   if (path === '/api/v1/me') data = {id:'synthetic-user',username:'test',administrator:true,csrf_token:'synthetic-csrf',rights:[{site_id:'site',role:'material_manager'},{site_id:'site',role:'device_manager'}]};
+  else if(path.includes('/usage')) {
+   if(options.method==='POST'){
+    const posted={body:options.body,key:options.headers['Idempotency-Key']};window.usagePosted.push(posted);
+    if(window.staleUsage){window.staleUsage=false;return new Response(JSON.stringify({message:'Personennachweise geändert'}),{status:409});}
+    if(window.usageReplies.has(posted.key))data=window.usageReplies.get(posted.key);else{const body=JSON.parse(posted.body);window.usageVersion++;window.usageEvents.push({id:'usage-event-'+window.usageVersion,version:window.usageVersion,actor:'<img src=x>',input:body});data={event_id:'usage-event-'+window.usageVersion,version:window.usageVersion};window.usageReplies.set(posted.key,data);}
+    if(window.loseUsageReply){window.loseUsageReply=false;throw Error('Synthetic lost usage reply');}
+   }else{data={assessment:{user_id:'synthetic-user',version:window.usageVersion,device_version:window.deviceVersion,status:'unknown',instruction_mode:'required',codes:['basic_competence'],reasons:['<img src=x> Quarantäne'],events:window.usageEvents,overall_readiness:'not_assessed'},manager:window.usageManager,people:[{id:'synthetic-user',name:'Test',active:true}]};if(window.holdUsage){window.holdUsage=false;await new Promise(resolve=>window.releaseUsage=resolve);}}
+  }
   else if(path==='/api/v1/recalls') {
    if(options.method==='POST'){
     const posted={body:options.body,key:options.headers['Idempotency-Key']};window.recallPosted.push(posted);
@@ -545,6 +554,24 @@ try {
  assert.equal(await evaluate("JSON.parse(window.stockIntakePosted[2].body).csv.includes('000123')"),true);
  await evaluate('window.holdMail=true;void loadDeviceAttention()');
  await until('typeof window.releaseMail === "function"');
+ await evaluate("document.querySelector('#usage-load').click()");
+ await until("!document.querySelector('#usage-form').hidden");
+ assert.equal(await evaluate("document.querySelector('#usage-assessment img')===null"),true);
+ await evaluate("document.querySelector('#usage-action').value='policy';document.querySelector('#usage-action').dispatchEvent(new Event('change'));document.querySelector('#usage-codes').value='basic_competence';document.querySelector('#usage-evidence').value='Product source';document.querySelector('#usage-reviewer').value='Reviewer qualification';document.querySelector('#usage-assignment').value='Operator assignment';document.querySelector('#usage-note').value='Synthetic user policy';window.loseUsageReply=true;document.querySelector('#usage-form').requestSubmit()");
+ await until("document.querySelector('#usage-status').textContent.includes('nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#usage-device').disabled"),true);
+ await evaluate("document.querySelector('#usage-submit').click()");
+ await until("document.querySelector('#usage-status').textContent.includes('gespeichert')");
+ assert.deepEqual(await evaluate('window.usagePosted[0]'),await evaluate('window.usagePosted[1]'));
+ assert.equal(await evaluate("document.querySelector('#usage-events img')===null"),true);
+ await evaluate("document.querySelector('#usage-action').value='qualify';document.querySelector('#usage-action').dispatchEvent(new Event('change'));document.querySelector('#usage-code').value='basic_competence';document.querySelector('#usage-from').value='2020-01-01';document.querySelector('#usage-until').value='2099-12-31';document.querySelector('#usage-note').value='Reviewed qualification';window.staleUsage=true;document.querySelector('#usage-form').requestSubmit()");
+ await until("document.querySelector('#usage-status').textContent.includes('Personennachweise geändert')");
+ assert.equal(await evaluate('JSON.parse(window.usagePosted[2].body).user_id'),'synthetic-user');
+ assert.equal(await evaluate('JSON.parse(window.usagePosted[2].body).expected_version'),1);
+ await evaluate("window.usageManager=false;loadUsage();void 0");
+ await until("document.querySelector('#usage-form').hidden");
+ await evaluate("window.holdUsage=true;window.lateUsage=loadUsage();void 0");
+ await until('typeof window.releaseUsage==="function"');
  await until("!document.querySelector('#recall-create-form').hidden");
  await evaluate("document.querySelector('#recall-title').value='Synthetic recall';document.querySelector('#recall-reference').value='Manufacturer notice';document.querySelector('#recall-source').value='Source evidence';document.querySelector('#recall-create-note').value='Test activation';document.querySelector('#recall-create-form').requestSubmit()");
  await until("!document.querySelector('#recall-create').disabled");
@@ -594,6 +621,8 @@ try {
  await evaluate("signedOut('Test logout')");
  await evaluate("window.releaseAdmin();window.lateAdmin");
  await evaluate("window.releaseRecall();window.lateRecall");
+ await evaluate("window.releaseUsage();window.lateUsage");
+ assert.equal(await evaluate("document.querySelector('#usage-assessment').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#recall-detail').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#admin-overview').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#administration').hidden"),true);
@@ -606,7 +635,7 @@ try {
  assert.equal(await evaluate("document.querySelector('#attention-list').children.length"),0);
  assert.equal(await evaluate("document.querySelector('#attention-counts').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: recall preview/frozen activation and measures, exact retries, stale version, safe text and logout clearing; administration scope display, safe text, frozen exact retry, explicit rights, stale version, password clearing and late response after logout; SMTP status and uncertainty, safe text, failure clearing and late mail response after logout; automatic reminder status, stale worker warning, safe text, error clearing and late response after logout; scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: concrete user requirements, frozen exact retry, stale evidence version, safe text, read-only user view and logout clearing; recall preview/frozen activation and measures, exact retries, stale version, safe text and logout clearing; administration scope display, safe text, frozen exact retry, explicit rights, stale version, password clearing and late response after logout; SMTP status and uncertainty, safe text, failure clearing and late mail response after logout; automatic reminder status, stale worker warning, safe text, error clearing and late response after logout; scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');

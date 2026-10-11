@@ -1,6 +1,6 @@
 # Stand und Roadmap
 
-Aktueller Stand: Schema 24. Diese Seite fasst den heutigen Funktionsumfang zusammen; ältere Meilensteine sind in der [Entwicklungshistorie](entwicklungshistorie.md) dokumentiert. Der [Blueprint](blueprint-v2.md) bleibt die konzeptionelle Grundlage und ist keine Behauptung vollständig umgesetzter Funktionen.
+Aktueller Stand: Schema 25. Diese Seite fasst den heutigen Funktionsumfang zusammen; ältere Meilensteine sind in der [Entwicklungshistorie](entwicklungshistorie.md) dokumentiert. Der [Blueprint](blueprint-v2.md) bleibt die konzeptionelle Grundlage und ist keine Behauptung vollständig umgesetzter Funktionen.
 
 ## Vorhanden
 
@@ -10,6 +10,7 @@ Aktueller Stand: Schema 24. Diese Seite fasst den heutigen Funktionsumfang zusam
 | Verwaltung | Betreiber, Betriebsstätten, Lagerorte und Benutzer; separates Administratorrecht, Versionen und unveränderliche Änderungshistorie |
 | Rechte | Sitzungen, Origin/CSRF, Viewer/Helfer/Materialwart/Geräteverantwortlicher je Betriebsstätte |
 | Material | Eingang, Umlagerung, Entnahme, Gegenbuchung, Inventur, Chargen und Verfall, unveränderliches Journal |
+| Personenbewertung | Gerätespezifische Pflichten, konkrete Kontozuordnung von Einweisungen, befristete Qualifikationsnachweise und Widerrufe; Gesamtfreigabe weiter ungeklärt |
 | Geräte | Akten, Stammdaten, Inbetriebnahme, versionierte Fristen, Prüfungen, getrennte Sperren/Freigaben, Einweisung, Instandhaltung, Außerbetriebnahme, ergänzende Richtigstellung |
 | Rückrufe | Produkt-/Chargen-/Gerätebereiche, geprüfte Treffer-Vorschau, unabhängige Sperren, Standortmaßnahmen und kontrollierter Gesamtabschluss |
 | Störungen | Störungserfassung und separate Meldebewertung mit Behörden-/Herstellerreferenzen; keine automatische Behördenmeldung |
@@ -22,8 +23,8 @@ Aktueller Stand: Schema 24. Diese Seite fasst den heutigen Funktionsumfang zusam
 
 ## Nächste Umsetzung
 
-1. Vollständige Einsatzbewertung: konkrete Nutzer-/Einweisungspflichten und notwendige fachliche Nachweise zusammenführen. Aktuell bleibt die Gesamtfreigabe `not_assessed`.
-2. Malwareprüfung und kontrollierte Dokumentfreigabe.
+1. Malwareprüfung und kontrollierte Dokumentfreigabe als Voraussetzung für freigegebene Einweisungsanhänge.
+2. Vollständige Einsatzfreigabe: bestätigte besondere Produktpflichten, Gebrauchsanweisungszugang, Funktions- und Fachnachweise mit der vorhandenen Personenbewertung zusammenführen. Gesamtfreigabe weiterhin `not_assessed`.
 3. Automatisierte verschlüsselte externe Backups, vollständige Wiederherstellung und Betriebsüberwachung.
 
 ## Weitere offene Funktionen
@@ -36,6 +37,8 @@ Echter NAS-/Dockhand-/Traefik-Betrieb, USB-/Kamerascanner, eigener SMTP-Anbieter
 
 ## Zuletzt geprüft
 
-Schema 24: vollständige Go-Tests mit Race-Prüfung, `go vet`, Programm- und Docker-Build sowie Chromium-Oberflächenprüfungen bestanden. Rechtegrenzen, numerische Serienbereiche, aktuelle Geräteidentifikation, atomarer Fehler-Rollback, CSV-Vorschau-Konflikte und künftige Zugänge geprüft. Bestehende lokale und Compose-Datenbanken nach neuen Backups zweimal migriert; Bestände, Journale, Akten, Anhänge und frühere Prüfbasiswerte beim Upgrade erhalten. Verifiziertes HTTPS prüfte Material-/Gerätesperren, Quarantäne späterer Eingänge und Gerätezuordnung, Maßnahmen, Abschluss, Wiederholschutz nach Neustart sowie Gerätearchiv-Manifest. Snapshot-Integrität und Fremdschlüssel geprüft. Synthetische Rückrufe abgeschlossen und temporäre Koordinatorrechte wieder entzogen. Diese Prüfungen ersetzen keine produktive Abnahme.
+Schema 25: vollständige Go-Tests mit Race-Prüfung, `go vet`, Programm- und Docker-Build sowie Chromium-Oberflächenprüfungen bestanden. Personenrechte, ausdrückliche Einweisungszuordnung, quarantänisierte Nachweise, Befristung, Widerruf auch ausgeschiedener Personen, Änderungen der Geräteidentifikation, Versionskonflikte und atomarer Fehler-Rollback geprüft. Lokale und Compose-Datenbanken nach neuen Backups zweimal migriert; bestehende Bestände, Journale, Akten, Anhänge und Prüfbasiswerte erhalten. Verifiziertes HTTPS prüfte ausdrückliche Regeln, personenbezogene Qualifikation, Widerruf, fehlende Gesamtfreigabe sowie Wiederholschutz nach Neustart und Rechteentzug. Snapshot-Integrität und Fremdschlüssel geprüft; temporäre Testkonten deaktiviert. Diese Prüfungen ersetzen keine produktive Abnahme.
 
 Rückrufbedienung und Berechtigungen: [Rückrufe](rueckrufe.md). Die Kombination aus Administratorrecht und Fachrolle erlaubt ausdrücklich globale Rückrufkoordination; Einzelmaßnahmen bleiben standortgebunden.
+
+Personenbezogene Prüfung: [Bedienung, Rechte und Grenzen](personenbewertung.md). Sie erfasst konkrete Nachweise; sie bestätigt keine vollständige medizinische Nutzungsfreigabe.

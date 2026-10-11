@@ -196,3 +196,8 @@ Geprüft: vollständige Go-Race-Suite, Vet/Build, echte lokale TLS-/STARTTLS-Ver
 ## Verwaltung (Schema 23) – damalige Prüfung
 
 Schema 23: vollständige Go-Tests mit Race-Prüfung, `go vet`, Programm- und Docker-Build sowie Chromium-Prüfungen der Oberfläche. Bestehende lokale und Compose-Datenbanken nach neuen Backups zweimal migriert. Über verifiziertes HTTPS organisatorische Änderungen, ausdrückliche Mehrfachrollen, Passwortwechsel, Sitzungswiderruf und dauerhafte Wiederholantworten einschließlich Neustart geprüft. Bestände, Journale, Akten, Anhänge und frühere Material-/Geräteprüfgrundlagen erhalten; Snapshot-Integrität und Fremdschlüssel geprüft. Temporäre Administratorkonten wieder entberechtigt und deaktiviert. Das ersetzt keine der oben genannten produktiven Abnahmen.
+
+
+## Rückrufprüfung – Schema 24
+
+Schema 24: vollständige Go-Tests mit Race-Prüfung, `go vet`, Programm- und Docker-Build sowie Chromium-Oberflächenprüfungen bestanden. Rechtegrenzen, numerische Serienbereiche, aktuelle Geräteidentifikation, atomarer Fehler-Rollback, CSV-Vorschau-Konflikte und künftige Zugänge geprüft. Bestehende lokale und Compose-Datenbanken nach neuen Backups zweimal migriert; Bestände, Journale, Akten, Anhänge und frühere Prüfbasiswerte beim Upgrade erhalten. Verifiziertes HTTPS prüfte Material-/Gerätesperren, Quarantäne späterer Eingänge und Gerätezuordnung, Maßnahmen, Abschluss, Wiederholschutz nach Neustart sowie Gerätearchiv-Manifest. Snapshot-Integrität und Fremdschlüssel geprüft. Synthetische Rückrufe abgeschlossen und temporäre Koordinatorrechte wieder entzogen. Diese Prüfungen ersetzen keine produktive Abnahme.

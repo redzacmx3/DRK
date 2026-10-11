@@ -18,10 +18,11 @@ type packDevice struct {
 	Accessories []packAccessory `json:"accessories"`
 }
 type deviceAssessment struct {
-	Requirement packDevice   `json:"requirement"`
-	Device      deviceRecord `json:"device"`
-	Status      string       `json:"status"`
-	Reasons     []string     `json:"reasons"`
+	UserUsage   *usageSummary `json:"user_usage,omitempty"`
+	Requirement packDevice    `json:"requirement"`
+	Device      deviceRecord  `json:"device"`
+	Status      string        `json:"status"`
+	Reasons     []string      `json:"reasons"`
 }
 type packAssessment struct {
 	Basis    string             `json:"device_basis_hash"`
@@ -246,6 +247,16 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 			if result.Status == "needs_device_check" {
 				result.Status = "physically_checked"
 			}
+		}
+	}
+	for i := range result.Devices {
+		assessment, err := assessUsage(ctx, tx, user, user, result.Devices[i].Device, now)
+		if err != nil {
+			return result, err
+		}
+		result.Devices[i].UserUsage = &usageSummary{assessment.UserID, assessment.Version, assessment.Status, assessment.Reasons}
+		for _, reason := range assessment.Reasons {
+			result.Reasons = append(result.Reasons, result.Devices[i].Device.InventoryNumber+" · Nutzer: "+reason)
 		}
 	}
 	for _, device := range result.Devices {
