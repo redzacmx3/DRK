@@ -149,3 +149,72 @@ func TestDutyFunctionValidationAndIndependentDeviceBlock(t *testing.T) {
 		t.Fatal("identity change accepted")
 	}
 }
+
+func TestDutyFunctionExplicitAcceptanceAndInvalidation(t *testing.T) {
+	f, id, document := annex1Fixture(t)
+	in := functionDutyInput(document, warehouse)
+	acceptance := &dutyFunctionAcceptance{Reviewed: true, Decision: "accepted", PerformedOn: "2024-01-04", Qualification: "Synthetic acceptance competence", Assignment: "Synthetic acceptance assignment", Evidence: "Synthetic acceptance protocol", Note: "Synthetic examiner, method and conditions suitability assessment"}
+	in.Rules[0].FunctionCheck.Acceptance = acceptance
+	for _, variant := range []string{"unchecked", "early", "future", "decision", "qualification", "assignment", "evidence", "note", "failed"} {
+		bad := in
+		bad.Rules = append([]productDutyRule{}, in.Rules...)
+		proof := *in.Rules[0].FunctionCheck
+		bad.Rules[0].FunctionCheck = &proof
+		a := *acceptance
+		proof.Acceptance = &a
+		switch variant {
+		case "unchecked":
+			a.Reviewed = false
+		case "early":
+			a.PerformedOn = "2024-01-02"
+		case "future":
+			a.PerformedOn = "2099-01-01"
+		case "decision":
+			a.Decision = "automatic"
+		case "qualification":
+			a.Qualification = ""
+		case "assignment":
+			a.Assignment = ""
+		case "evidence":
+			a.Evidence = ""
+		case "note":
+			a.Note = ""
+		case "failed":
+			proof.Result = "failed"
+		}
+		dutyPost(t, f, id, "accept-invalid-"+variant, bad, 400)
+	}
+	first := dutyPost(t, f, id, "function-accept", in, 200)
+	if annex1Status(t, f, id, "annex_1_function") != "accepted" || annex1Status(t, f, id, "annex_1") != "unknown" || dutyRead(t, f, id).Overall != "not_assessed" {
+		t.Fatal("missing partial acceptance or false overall release")
+	}
+	_, files := bookArchive(t, f, id)
+	if !strings.Contains(string(files["akte.json"]), "Synthetic acceptance protocol") || !strings.Contains(string(files["geraeteakte.html"]), "accepted") {
+		t.Fatal("missing archive acceptance")
+	}
+	reviewPost(t, f, id, document.ID, "accept-withdraw", reviewProof(document, "quarantine", 2), 200)
+	if dutyRead(t, f, id).Status != "unknown" {
+		t.Fatal("withdrawn source accepted")
+	}
+	if replay := dutyPost(t, f, id, "function-accept", in, 200); replay.ID != first.ID {
+		t.Fatal("acceptance retry changed")
+	}
+	reviewPost(t, f, id, document.ID, "accept-rescan", reviewProof(document, "scan", 3), 200)
+	reviewPost(t, f, id, document.ID, "accept-rerelease", reviewProof(document, "release", 4), 200)
+	in.ExpectedVersion = 1
+	acceptance.Decision = "rejected"
+	dutyPost(t, f, id, "function-reject", in, 200)
+	if annex1Status(t, f, id, "annex_1_function") != "blocked" || annex1Status(t, f, id, "annex_1") != "blocked" {
+		t.Fatal("rejection ignored")
+	}
+	in.ExpectedVersion = 2
+	acceptance.Decision = "accepted"
+	dutyPost(t, f, id, "function-accept-again", in, 200)
+	defect := controlProof()
+	defect.ExpectedVersion = 2
+	defect.BlockReason = "defect"
+	requireStatus(t, packHTTP(f, "POST", "devices/"+id+"/defects", "accept-independent-block", defect), 200)
+	if annex1Status(t, f, id, "annex_1_function") != "blocked" {
+		t.Fatal("partial acceptance released independent block")
+	}
+}
