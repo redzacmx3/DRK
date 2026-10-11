@@ -435,3 +435,13 @@ Die physische Geräte-Prüfbasis ändert sich; Materialprüfungen bleiben unabh�
 Jede Meldestatusänderung ergänzt unveränderliche Historie, verantwortlichen Akteur/Zeitpunkt und Nachweis. Offene Meldebewertungen blockieren die Geräte-Sollbewertung unabhängig von einzeln freigegebenen Sperren. Abschluss hebt keine Sperre auf und bestätigt keine Einsatzbereitschaft. Nach Außerbetriebnahme sind Nachträge möglich, ohne Reaktivierung oder verkürzte Aufbewahrung. Störungen und Meldeereignisse können separat richtiggestellt werden. Version/Outbox/Wiederholschutz/Bereichsrechte und atomarer Rollback gelten; Anhänge bleiben in Quarantäne. Physische Geräteprüfungen veralten, Materialbasis bleibt unabhängig. Oberfläche/HTML/JSON/ZIP enthalten Meldebezüge und Historie; CSV nennt Störungen und offene Bewertungen.
 
 Bestehende Installationen benötigen vor Update eine neue Sicherung und ausdrückliche Migration auf Schema 20; vorhandene Datenbanken werden beim einfachen Docker-Start nicht automatisch aktualisiert.
+
+## Geräte-Arbeitsübersicht
+
+Die Oberfläche bündelt überfällige und anstehende Kontrollen, ungeklärte Kontrollpflichten, fehlende Inbetriebnahmenachweise, aktive Sperren und offene Meldebewertungen im eigenen berechtigten Bereich. Zeitraum: heute, 7, 30, 60 oder 365 Tage; Kategorien sind filterbar. Fälligkeit am heutigen Berliner Kalendertag bleibt fristgerecht und erscheint als heute fällig. Zeitumstellungen verändern die Tagesabstände nicht. Zähler zählen einzelne Hinweise; ein Gerät kann mehrere Hinweise haben.
+
+`GET /api/v1/devices/attention?days=60` akzeptiert 0–365 Tage und liefert den aktuellen Stand aus einer gemeinsamen Datenbanksicht. Meldebewertungen und Sperren stehen zuerst. Außer Betrieb genommene Geräte erhalten keine Kontrolltermine oder Inbetriebnahmehinweise, behalten aber offene Sperren und Meldeaufgaben. Über 1000 berechtigte Geräte, 8 MiB oder bei Zeitüberschreitung wird die gesamte Übersicht abgelehnt; es gibt keine still gekürzte Übersicht. Zwei parallele Übersichten/Aktenexporte sind gemeinsam zugelassen.
+
+Rein lesend, Schema bleibt 20: keine Migration, Ereignisse oder automatische E-Mail-Erinnerungen. Die Anzeige bestätigt keine Einsatzfreigabe. Nach Änderungen aktualisiert sie sich; verspätete Antworten dürfen einen neueren Zeitraum oder eine Abmeldung nicht überschreiben.
+
+Geprüft: Go-Race-Suite, Vet/Build, Bereichsrechte, unveränderte Ereignisse, Kalendergrenzen einschließlich Zeitumstellungen, Grenze gegen Teilanzeigen sowie Browserfilter und verspätete Antworten. HTTPS-Compose-Test mit geprüftem Zertifikat bestätigte vier Zeiträume, alle Leserrollen, leeren Bereich und unveränderte Historien/Bestände.

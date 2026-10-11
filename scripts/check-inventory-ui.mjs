@@ -62,6 +62,10 @@ try {
   const path = typeof input === 'string' ? input : input.url;
   let data;
   if (path === '/api/v1/me') data = {id:'synthetic-user',username:'test',csrf_token:'synthetic-csrf',rights:[{site_id:'site',role:'material_manager'},{site_id:'site',role:'device_manager'}]};
+  else if (path.startsWith('/api/v1/devices/attention?')) {
+   data={as_of:'2026-10-11T12:00:00Z',day:'2026-10-11',horizon_days:Number(new URL(path,location.origin).searchParams.get('days')),scanned_devices:1,counts:{block:1,overdue:1},devices:[{id:'device',inventory_number:'TEST',name:'<img src=x onerror=alert(1)>',location_id:'warehouse',version:window.deviceVersion,reasons:[{kind:'block',description:'Synthetic block'},{kind:'overdue',control_type:'STK',due_on:'2026-10-10',days_remaining:-1,description:'Synthetic overdue'}]}]};
+   if(window.holdAttention){window.holdAttention=false;await new Promise(resolve=>window.releaseAttention=resolve);}
+  }
   else if (path === '/api/v1/locations') data = [{id:'warehouse',name:'Lager',site:'Demo',operator:'Demo',site_id:'site'}];
   else if (path === '/api/v1/stock/catalog') data = [{id:'batch',product_id:'product',product:'Demo',unit:'Stück',lot:'DEMO'}];
   else if (path === '/api/v1/stock/balances') data = window.testBalances;
@@ -151,6 +155,19 @@ try {
  `});
  await call('Page.navigate',{url});
  await until("document.querySelector('#booking') && !document.querySelector('#booking').hidden");
+ await until("document.querySelector('#attention-list').textContent.includes('Synthetic overdue')");
+ assert.equal(await evaluate("document.querySelector('#attention-list img')===null"),true);
+ await evaluate("document.querySelector('#attention-filter').value='block';document.querySelector('#attention-filter').dispatchEvent(new Event('change'))");
+ assert.equal(await evaluate("document.querySelector('#attention-list').textContent.includes('Synthetic overdue')"),false);
+ await evaluate("window.holdAttention=true;void loadDeviceAttention()");
+ await until('typeof window.releaseAttention === "function"');
+ await evaluate("document.querySelector('#attention-days').value='0';document.querySelector('#attention-days').dispatchEvent(new Event('change'))");
+ await until("document.querySelector('#attention-status').textContent.includes('Zeitraum 0 Tage')");
+ await evaluate('window.releaseAttention()');
+ await evaluate('new Promise(resolve=>setTimeout(resolve,50))');
+ assert.equal(await evaluate('attentionBoard.horizon_days'),0);
+ await evaluate("document.querySelector('#attention-filter').value='all';document.querySelector('#attention-days').value='60';document.querySelector('#attention-days').dispatchEvent(new Event('change'))");
+ await until("document.querySelector('#attention-list').textContent.includes('Synthetic overdue')");
  await evaluate("document.querySelector('#action').value='inventories';document.querySelector('#action').dispatchEvent(new Event('change'))");
  assert.equal(await evaluate("document.querySelector('#quantity').disabled"),true);
  assert.equal(await evaluate("document.querySelector('#booking button[type=submit]').disabled"),true);
@@ -480,8 +497,10 @@ try {
  assert.equal(await evaluate("JSON.parse(window.stockIntakePosted[2].body).locations['Offline Lager']"),'warehouse');
  assert.equal(await evaluate("JSON.parse(window.stockIntakePosted[2].body).csv.includes('000123')"),true);
  await evaluate("signedOut('Test logout')");
+ assert.equal(await evaluate("document.querySelector('#attention-list').children.length"),0);
+ assert.equal(await evaluate("document.querySelector('#attention-counts').textContent"),'');
  assert.equal(await evaluate("document.querySelector('#devices-list').children.length"),0);
- console.log('Browser UI passed: versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
+ console.log('Browser UI passed: scoped attention filters, safe text, civil horizon, stale-response rejection and logout clearing; versioned device-details prefill, frozen retry and safe before/after history; material CSV mode invalidation, mapping, safe text and exact retry; device CSV file preview, explicit location mapping, safe text, stale-preview rejection and exact import retry; explicit physical device results, frozen basis and exact lost-response retry; device/accessory requirement form and independent blocked assessment; exact attachment upload retry, quarantine download link and explicit instruction binding; inspection proof retry and explicit individual-block release, frozen device version, exact proof retry after lost response, stale-version rejection, scoped device overview, safe text rendering and logout clearing; frozen count/pack/check bases, exact retries, explicit identifier quantity and scan confirmation, packaging conversion without booking, rejection of conflicting/ambiguous codes and URL navigation (simulated API).');
 
 } finally {
  socket?.close();browser.kill('SIGTERM');

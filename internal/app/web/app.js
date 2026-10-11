@@ -14,6 +14,7 @@ const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Ent
 const stateNames = {available:'Verfügbar',quarantined:'Quarantäne',damaged:'Beschädigt'};
 function clearDeviceHistory(){for(const field of reportFields)document.querySelector("#report-"+field.replaceAll("_","-")).value="";for(const id of ["incident-kind","incident-description","incident-consequences","incident-document","report-incident","report-document"])document.querySelector("#"+id).value="";document.querySelector("#report-incident").replaceChildren();for(const id of ["correction-statement","correction-target","correction-document","maintenance-kind","maintenance-executor","maintenance-measure","maintenance-result","maintenance-document"])document.querySelector("#"+id).value="";for(const key of masterDataFields)document.querySelector('#master-'+key.replaceAll('_','-')).value='';document.querySelector('#correction-target').replaceChildren();document.querySelector('#device-history').replaceChildren();document.querySelector('#device-history-status').textContent='';for(const field of ['name','manufacturer','model','serial'])document.querySelector('#device-detail-'+field).value='';}
 function signedOut(message) {
+ attentionSequence++;attentionBoard=null;document.querySelector("#attention-list").replaceChildren();document.querySelector("#attention-status").textContent="";document.querySelector("#attention-counts").textContent="";
  clearDeviceHistory();
  stockIntakeDraft=null;stockIntakeLoading=false;document.querySelector("#stock-import-file").value="";document.querySelector("#stock-import-rows").replaceChildren();document.querySelector("#stock-import-locations").replaceChildren();document.querySelector("#stock-import-status").textContent="";document.querySelector("#stock-import").hidden=true;
  intakeDraft=null;intakeLoading=false;document.querySelector("#device-import-file").value="";document.querySelector("#device-import-rows").replaceChildren();document.querySelector("#device-import-locations").replaceChildren();document.querySelector("#device-import-status").textContent="";document.querySelector("#device-import").hidden=true;
@@ -533,6 +534,7 @@ async function loadDevices() {
  if(!devicePending && !documentPending) deviceAllowedActions();
  document.querySelector('#device-control-form').hidden = !devicePending && !document.querySelector('#device-choice').options.length;
  if(documentPending)document.querySelector('#document-upload-form').hidden=false;
+ await loadDeviceAttention();if(user?.id!==owner)return;
  message.textContent = devices.length ? `${devices.length} Geräte angezeigt.${response.headers.get('X-Has-More') === 'true' ? ' Weitere Geräte vorhanden; Übersicht begrenzt.' : ''}` : 'Keine Geräte im freigegebenen Bereich registriert.';
  } catch (error) { if (user?.id === owner) message.textContent = error.message; }
 }
@@ -799,3 +801,27 @@ for(const id of ['master-actor-name','master-actor-address'])document.querySelec
 document.querySelector("#report-incident").addEventListener("change",reportPrefill);
 
 document.querySelector("#report-status").addEventListener("change",deviceActionFields);
+
+let attentionBoard=null,attentionSequence=0;
+const attentionKindNames={report:'Offene Meldebewertungen',block:'Aktive Sperren',overdue:'Überfällige Kontrollen',due:'Anstehende Kontrollen',unknown:'Ungeklärte Kontrollpflichten',not_commissioned:'Fehlende Inbetriebnahmenachweise'};
+function renderDeviceAttention(){
+ const list=document.querySelector('#attention-list');list.replaceChildren();if(!attentionBoard)return;
+ const kind=document.querySelector('#attention-filter').value;
+ for(const item of attentionBoard.devices){const reasons=item.reasons.filter(reason=>kind==='all'||reason.kind===kind);if(!reasons.length)continue;
+ const entry=document.createElement('li'),heading=document.createElement('strong');heading.textContent=`${item.inventory_number} · ${item.name} · ${locations.find(location=>location.id===item.location_id)?.name||'Lagerort'} · Version ${item.version}`;entry.append(heading);
+ for(const reason of reasons){const p=document.createElement('p');p.textContent=`${attentionKindNames[reason.kind]}${reason.control_type?' · '+(reason.control_type==='electrical'?'Elektrische Kontrolle':reason.control_type):''}${reason.due_on?' · '+reason.due_on:''}${reason.days_remaining!==undefined?' · '+(reason.days_remaining<0?Math.abs(reason.days_remaining)+' Tage überfällig':reason.days_remaining===0?'Heute fällig':'In '+reason.days_remaining+' Tagen'):''}${reason.source_version?' · Bezug auf Version '+reason.source_version:''} · ${reason.description}`;entry.append(p);}
+ const link=document.createElement('a');link.href=`/api/v1/devices/${encodeURIComponent(item.id)}/export.zip`;link.textContent='Geräteakte mit Nachweisen herunterladen';entry.append(link);list.append(entry);
+ }
+ if(!list.children.length){const entry=document.createElement('li');entry.textContent='Keine Hinweise für diesen Filter.';list.append(entry);}
+}
+async function loadDeviceAttention(){
+ const owner=user?.id;if(!owner)return;const sequence=++attentionSequence,days=document.querySelector('#attention-days').value;
+ attentionBoard=null;document.querySelector('#attention-list').replaceChildren();document.querySelector('#attention-counts').textContent='';const message=document.querySelector('#attention-status');message.textContent='Arbeitsübersicht wird geladen …';
+ try{const response=await fetch('/api/v1/devices/attention?days='+encodeURIComponent(days),{cache:'no-store'});if(user?.id!==owner||sequence!==attentionSequence)return;if(response.status===401){signedOut('Bitte erneut anmelden.');return;}const result=await response.json();if(user?.id!==owner||sequence!==attentionSequence)return;if(!response.ok)throw new Error(result.message||'Arbeitsübersicht nicht verfügbar.');attentionBoard=result;
+ message.textContent=`Datenstand ${result.as_of} · Fachlicher Tag ${result.day} · ${result.devices.length} Geräte mit Hinweisen von ${result.scanned_devices} Geräten · Zeitraum ${result.horizon_days} Tage. Zähler beziehen sich auf einzelne Hinweise.`;
+ document.querySelector('#attention-counts').textContent=Object.entries(attentionKindNames).map(([kind,label])=>`${label}: ${result.counts[kind]||0}`).join(' · ');renderDeviceAttention();
+ }catch(error){if(user?.id===owner&&sequence===attentionSequence)message.textContent=error.message;}
+}
+document.querySelector('#attention-refresh').addEventListener('click',loadDeviceAttention);
+document.querySelector('#attention-days').addEventListener('change',loadDeviceAttention);
+document.querySelector('#attention-filter').addEventListener('change',renderDeviceAttention);
