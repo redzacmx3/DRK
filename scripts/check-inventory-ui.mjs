@@ -51,7 +51,7 @@ try {
  await call('Page.addScriptToEvaluateOnNewDocument',{source:`
  const realFetch = window.fetch.bind(window);
  window.testBalances = [{batch_id:'batch',location_id:'warehouse',state:'available',quantity:10,usable_quantity:10,version:1,product:'Demo',unit:'Stück',lot:'DEMO',location:'Lager',expires_on:'2030-01-01',blocked:false}];
- window.posted = []; window.devicePosted=[];window.deviceReplies=new Map();window.loseDeviceReply=false;window.testDocuments=[];window.documentPosted=[];window.documentReplies=new Map();window.loseDocumentReply=false;window.deviceVersion=0;window.deviceDetails={name:"<img src=x onerror=alert(1)>",manufacturer:"Demo",model:"Model",serial_or_lot:"SERIAL"};window.deviceHistory=[];window.deviceMasterData=null;window.deviceBlocks=[{id:"recall-block",reason:"recall",note:"Synthetic recall"}];
+ window.posted = []; window.devicePosted=[];window.deviceReplies=new Map();window.loseDeviceReply=false;window.testDocuments=[];window.documentPosted=[];window.documentReplies=new Map();window.loseDocumentReply=false;window.deviceVersion=0;window.deviceDetails={name:"<img src=x onerror=alert(1)>",manufacturer:"Demo",model:"Model",serial_or_lot:"SERIAL"};window.testIncidents=[];window.deviceHistory=[];window.deviceMasterData=null;window.deviceBlocks=[{id:"recall-block",reason:"recall",note:"Synthetic recall"}];
  window.stockIntakePosted=[];window.stockIntakePreviewPosted=[];window.stockIntakeReplies=new Map();window.stockIntakeBasis='1'.repeat(64);window.loseStockIntakeReply=false;
  window.intakePosted=[];window.intakePreviewPosted=[];window.intakeReplies=new Map();window.intakeBasis='1'.repeat(64);window.loseIntakeReply=false;
  window.pack = {id:'pack',location_id:'warehouse',version:1,title:'Material',check_valid_hours:24,created_at:new Date().toISOString(),note:'Synthetic',items:[{product_id:'product',quantity:5,min_remaining_days:30}]};
@@ -103,7 +103,7 @@ try {
    if(request.basis_hash!==window.stockIntakeBasis)return new Response(JSON.stringify({message:'Vorschau geändert; CSV erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
    data={import_id:'import',created_count:1,unchanged_count:0,created_device_ids:['created-device']};window.stockIntakeReplies.set(key,data);if(window.loseStockIntakeReply){window.loseStockIntakeReply=false;throw new Error('Lost import reply');}
   }
-  else if (path === '/api/v1/devices') data = [{id:'device',location_id:'warehouse',version:window.deviceVersion,active_blocks:window.deviceBlocks,inventory_number:'SYNTH-1',...window.deviceDetails}];
+  else if (path === '/api/v1/devices') data = [{id:'device',location_id:'warehouse',version:window.deviceVersion,incidents:window.testIncidents,active_blocks:window.deviceBlocks,inventory_number:'SYNTH-1',...window.deviceDetails}];
   else if(path==='/api/v1/devices/device/documents' && !options.method)data=window.testDocuments;
   else if(path==='/api/v1/devices/device/documents' && options.method==='POST'){
    const key=options.headers['Idempotency-Key'],request=JSON.parse(options.body);window.documentPosted.push({key,body:options.body});
@@ -111,13 +111,15 @@ try {
    data={id:'document',device_id:'device',filename:request.filename,size:atob(request.content).length,sha256:'a'.repeat(64),status:'quarantined'};window.testDocuments.push(data);window.documentReplies.set(key,data);
    if(window.loseDocumentReply){window.loseDocumentReply=false;throw new Error('Lost upload response');}
   }
-  else if (path === '/api/v1/devices/device/book') data={id:'device',version:window.deviceVersion,active_blocks:window.deviceBlocks,master_data:window.deviceMasterData,...window.deviceDetails};
+  else if (path === '/api/v1/devices/device/book') data={id:'device',version:window.deviceVersion,incidents:window.testIncidents,active_blocks:window.deviceBlocks,master_data:window.deviceMasterData,...window.deviceDetails};
   else if(path==='/api/v1/devices/device/events')data=window.deviceHistory;
-  else if (path === '/api/v1/devices/device/corrections' || path === '/api/v1/devices/device/decommission' || path === '/api/v1/devices/device/maintenance' || path === '/api/v1/devices/device/master-data' || path === '/api/v1/devices/device/details' || path === '/api/v1/devices/device/commission' || path === '/api/v1/devices/device/rules' || path === '/api/v1/devices/device/inspections' || path === '/api/v1/devices/device/defects' || path === '/api/v1/devices/device/releases' || path === '/api/v1/devices/device/instructions') {
+  else if (path === '/api/v1/devices/device/incidents' || path === '/api/v1/devices/device/reports' || path === '/api/v1/devices/device/corrections' || path === '/api/v1/devices/device/decommission' || path === '/api/v1/devices/device/maintenance' || path === '/api/v1/devices/device/master-data' || path === '/api/v1/devices/device/details' || path === '/api/v1/devices/device/commission' || path === '/api/v1/devices/device/rules' || path === '/api/v1/devices/device/inspections' || path === '/api/v1/devices/device/defects' || path === '/api/v1/devices/device/releases' || path === '/api/v1/devices/device/instructions') {
    const key=options.headers['Idempotency-Key'],request=JSON.parse(options.body);window.devicePosted.push({path,key,body:options.body});
    if(window.deviceReplies.has(key))return new Response(JSON.stringify(window.deviceReplies.get(key)),{status:200,headers:{'Content-Type':'application/json'}});
    if(request.expected_version!==window.deviceVersion)return new Response(JSON.stringify({message:'Geräteakte wurde geändert; erneut prüfen.'}),{status:409,headers:{'Content-Type':'application/json'}});
    if(path.endsWith('/details')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'details',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:{...request,before_details:window.deviceDetails,identity_review:true}});window.deviceDetails={...request.details};}
+   if(path.endsWith('/incidents')){window.testIncidents.push({version:window.deviceVersion+1,occurred_on:request.performed_on,...request.incident,report:{incident_version:window.deviceVersion+1,status:'ASSESSMENT_REQUIRED'}});window.deviceHistory.unshift({version:window.deviceVersion+1,action:'incident',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:request});}
+   if(path.endsWith('/reports')){window.testIncidents.find(i=>i.version===request.report.incident_version).report={...request.report};window.deviceHistory.unshift({version:window.deviceVersion+1,action:'report',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:request});}
    if(path.endsWith('/corrections')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'correction',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:request});}
    if(path.endsWith('/decommission')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'decommission',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:request});}
    if(path.endsWith('/maintenance')){window.deviceHistory.unshift({version:window.deviceVersion+1,action:'maintenance',actor_id:'synthetic-user',created_at:new Date().toISOString(),proof:request});}
@@ -384,6 +386,40 @@ try {
  assert.equal(await evaluate('JSON.parse(window.devicePosted[17].body).correction.target_version'),9);
  await until("document.querySelector('#device-history').textContent.includes('corrected examiner')");
  assert.equal(await evaluate("document.querySelector('#device-history svg')===null"),true);
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
+ await evaluate("document.querySelector('#device-begin').click()");
+ await until("deviceDraft && !document.querySelector('#device-control-form button[type=submit]').disabled");
+ await evaluate("document.querySelector('#device-action').value='incident';document.querySelector('#device-action').dispatchEvent(new Event('change'));document.querySelector('#device-date').value='2024-02-01';document.querySelector('#incident-kind').value='suspected_serious_incident';document.querySelector('#incident-description').value='<svg onload=alert(1)> synthetic incident';document.querySelector('#incident-consequences').value='Consequences unknown; synthetic case';document.querySelector('#incident-document').value='document';window.loseDeviceReply=true;document.querySelector('#device-control-form').requestSubmit()");
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#incident-kind').disabled"),true);
+ await evaluate("document.querySelector('#device-control-form').requestSubmit()");
+ await until('window.devicePosted.length === 20');
+ assert.deepEqual(await evaluate('window.devicePosted[18]'),await evaluate('window.devicePosted[19]'));
+ assert.equal(await evaluate("'qualification' in JSON.parse(window.devicePosted[19].body)"),false);
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
+ assert.equal(await evaluate("document.querySelector('#device-history svg')===null"),true);
+ await evaluate("document.querySelector('#device-begin').click()");
+ await until("deviceDraft?.incidents?.length===1 && !document.querySelector('#device-control-form button[type=submit]').disabled");
+ await evaluate("document.querySelector('#device-action').value='report';document.querySelector('#device-action').dispatchEvent(new Event('change'));document.querySelector('#report-incident').value='12';document.querySelector('#report-incident').dispatchEvent(new Event('change'));document.querySelector('#report-status').value='REPORTED';document.querySelector('#report-responsible').value='Synthetic safety officer';document.querySelector('#report-authority').value='Synthetic authority';document.querySelector('#report-authority-reference').value='SYNTH-A-1';document.querySelector('#report-authority-reported-at').value='2024-02-02T12:00:00';window.loseDeviceReply=true;document.querySelector('#device-control-form').requestSubmit()");
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis nicht bestätigt')");
+ assert.equal(await evaluate("document.querySelector('#report-status').disabled"),true);
+ assert.equal(await evaluate("document.querySelector('#report-authority-reference').disabled"),true);
+ await evaluate("document.querySelector('#device-control-form').requestSubmit()");
+ await until('window.devicePosted.length === 22');
+ assert.deepEqual(await evaluate('window.devicePosted[20]'),await evaluate('window.devicePosted[21]'));
+ assert.equal(await evaluate("JSON.parse(window.devicePosted[21].body).report.incident_version"),12);
+ assert.equal(await evaluate("Date.parse(JSON.parse(window.devicePosted[21].body).report.authority_reported_at)===new Date('2024-02-02T12:00:00').getTime()"),true);
+ await until("document.querySelector('#device-history').textContent.includes('SYNTH-A-1')");
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
+ await evaluate("document.querySelector('#device-begin').click()");
+ await until("deviceDraft?.incidents?.[0]?.report?.status==='REPORTED'");
+ await evaluate("document.querySelector('#report-incident').value='12';document.querySelector('#report-incident').dispatchEvent(new Event('change'))");
+ assert.equal(await evaluate("document.querySelector('#report-authority-reference').value"),'SYNTH-A-1');
+ await evaluate("document.querySelector('#device-action').value='report';document.querySelector('#device-action').dispatchEvent(new Event('change'));document.querySelector('#report-status').value='FOLLOW_UP';document.querySelector('#device-control-form').requestSubmit()");
+ await until('window.devicePosted.length===23');
+ assert.equal(await evaluate('JSON.parse(window.devicePosted[22].body).report.authority_reported_at'),await evaluate('JSON.parse(window.devicePosted[21].body).report.authority_reported_at'));
+ await until("document.querySelector('#device-basis').textContent.includes('Nachweis gespeichert')");
+
  assert.equal(await evaluate("document.querySelector('#device-import').hidden"),false);
  assert.equal(await evaluate("document.querySelector('#device-import-commit').disabled"),true);
  await evaluate("const intakeTransfer=new DataTransfer();intakeTransfer.items.add(new File(['Inventarnummer;Bezeichnung;Standort;Seriennummer\\nCSV-UI-1;Equipment;Offline Lager;000123\\n'],'intake.csv',{type:'text/csv'}));document.querySelector('#device-import-file').files=intakeTransfer.files;document.querySelector('#device-import-file').dispatchEvent(new Event('change'));document.querySelector('#device-import-form').requestSubmit()");

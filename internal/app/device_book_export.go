@@ -88,7 +88,7 @@ func bookProofFields(proof json.RawMessage) []bookProofField {
 	if json.Unmarshal(proof, &values) != nil {
 		return []bookProofField{{"Originaldaten", string(proof)}}
 	}
-	labels := map[string]string{"correction": "Richtigstellung", "corrected_event": "Gebundener Ursprungsnachweis", "target_version": "Ursprungsversion", "statement": "Richtiggestellte Angaben", "payload_sha256": "SHA-256 des Ursprungsnachweises", "maintenance_kind": "Art der Instandhaltung", "master_data": "Neue Stammdaten", "before_master_data": "Stammdaten vor der Änderung", "name": "Bezeichnung", "manufacturer": "Hersteller", "model": "Modell", "serial_or_lot": "Serien-/Losnummer", "inventory_number": "Inventarnummer", "location_id": "Lagerort-ID", "performed_on": "Fachliches Datum", "evidence": "Nachweisreferenz", "qualification": "Qualifikationsreferenz", "assignment": "Betrieblicher Auftrag", "note": "Begründung / Notiz", "control_type": "Kontrollart", "result": "Ergebnis", "examiner": "Prüfer / Firma", "method": "Methode / Messwerte", "block_reason": "Sperrgrund", "block_id": "Betroffene Sperre", "rules": "Bestätigte Kontrollregeln", "calculated": "Berechnete Fristen", "instructor": "Einweisende Person", "trainee": "Eingewiesene Person", "instruction_scope": "Geltungsbereich der Einweisung", "transfer_evidence": "Übertragbarkeitsnachweis", "document_version": "Unterlagenversion", "document_id": "Dokument-ID", "document": "Gebundener Anhangsnachweis", "details": "Neue Grunddaten", "before_details": "Grunddaten vor der Änderung", "identity_review": "Identifikationsänderung erfordert Prüfung", "expected_version": "Bearbeitungsbasis: Geräteversion", "filename": "Dateiname", "media_type": "Dateityp", "sha256": "SHA-256", "size": "Dateigröße in Bytes", "status": "Status", "created_by": "Akteur-ID", "created_at": "Erfassungszeitpunkt", "id": "Objekt-ID", "device_id": "Geräte-ID"}
+	labels := map[string]string{"incident": "Störung", "report": "Meldebezug", "correction": "Richtigstellung", "assessment_reference": "Bewertungs-/Entscheidungsreferenz", "description": "Beschreibung", "consequences": "Folgen", "incident_version": "Störungsversion", "responsible": "Verantwortliche Person/Funktion", "authority": "Behörde", "authority_reference": "Behördenreferenz", "authority_reported_at": "Behördenmeldung erfolgt am", "manufacturer_contact": "Herstellerkontakt", "manufacturer_reference": "Herstellerreferenz", "manufacturer_reported_at": "Herstellermeldung erfolgt am", "corrected_event": "Gebundener Ursprungsnachweis", "target_version": "Ursprungsversion", "statement": "Richtiggestellte Angaben", "payload_sha256": "SHA-256 des Ursprungsnachweises", "maintenance_kind": "Art der Instandhaltung", "master_data": "Neue Stammdaten", "before_master_data": "Stammdaten vor der Änderung", "name": "Bezeichnung", "manufacturer": "Hersteller", "model": "Modell", "serial_or_lot": "Serien-/Losnummer", "inventory_number": "Inventarnummer", "location_id": "Lagerort-ID", "performed_on": "Fachliches Datum", "evidence": "Nachweisreferenz", "qualification": "Qualifikationsreferenz", "assignment": "Betrieblicher Auftrag", "note": "Begründung / Notiz", "control_type": "Kontrollart", "result": "Ergebnis", "examiner": "Prüfer / Firma", "method": "Methode / Messwerte", "block_reason": "Sperrgrund", "block_id": "Betroffene Sperre", "rules": "Bestätigte Kontrollregeln", "calculated": "Berechnete Fristen", "instructor": "Einweisende Person", "trainee": "Eingewiesene Person", "instruction_scope": "Geltungsbereich der Einweisung", "transfer_evidence": "Übertragbarkeitsnachweis", "document_version": "Unterlagenversion", "document_id": "Dokument-ID", "document": "Gebundener Anhangsnachweis", "details": "Neue Grunddaten", "before_details": "Grunddaten vor der Änderung", "identity_review": "Identifikationsänderung erfordert Prüfung", "expected_version": "Bearbeitungsbasis: Geräteversion", "filename": "Dateiname", "media_type": "Dateityp", "sha256": "SHA-256", "size": "Dateigröße in Bytes", "status": "Status", "created_by": "Akteur-ID", "created_at": "Erfassungszeitpunkt", "id": "Objekt-ID", "device_id": "Geräte-ID"}
 	keys := []string{}
 	for key := range values {
 		keys = append(keys, key)
@@ -117,9 +117,23 @@ func bookProofFields(proof json.RawMessage) []bookProofField {
 
 var deviceBookTemplate = template.Must(template.New("device-book.html").Funcs(template.FuncMap{
 	"fields": bookProofFields,
-	"proof":  func(value any) string { b, _ := json.MarshalIndent(value, "", "  "); return string(b) },
+	"incidentKind": func(value string) string {
+		names := map[string]string{"malfunction": "Störung", "repeated_operating_error": "Wiederholter gleichartiger Bedienungsfehler", "suspected_serious_incident": "Verdacht auf schwerwiegendes Vorkommnis"}
+		if names[value] != "" {
+			return names[value]
+		}
+		return value
+	},
+	"reportStatus": func(value string) string {
+		names := map[string]string{"ASSESSMENT_REQUIRED": "Bewertung erforderlich", "REPORT_PENDING": "Behördenmeldung ausstehend", "REPORTED": "An Behörde gemeldet", "FOLLOW_UP": "Nachbearbeitung", "CLOSED": "Bearbeitung abgeschlossen"}
+		if names[value] != "" {
+			return names[value]
+		}
+		return value
+	},
+	"proof": func(value any) string { b, _ := json.MarshalIndent(value, "", "  "); return string(b) },
 	"action": func(value string) string {
-		names := map[string]string{"correction": "Richtigstellung", "decommission": "Außerbetriebnahme", "maintenance": "Instandhaltung", "registration": "Registrierung", "master_data": "Bestandsverzeichnis-Stammdaten", "details": "Grunddatenänderung", "commission": "Inbetriebnahme", "rules": "Kontrollregeln", "inspection": "Prüfung", "defect": "Sperrmeldung", "release": "Sperrenfreigabe", "instruction": "Einweisung", "document": "Anhang erfasst"}
+		names := map[string]string{"incident": "Störung", "report": "Meldebezug", "correction": "Richtigstellung", "decommission": "Außerbetriebnahme", "maintenance": "Instandhaltung", "registration": "Registrierung", "master_data": "Bestandsverzeichnis-Stammdaten", "details": "Grunddatenänderung", "commission": "Inbetriebnahme", "rules": "Kontrollregeln", "inspection": "Prüfung", "defect": "Sperrmeldung", "release": "Sperrenfreigabe", "instruction": "Einweisung", "document": "Anhang erfasst"}
 		if name := names[value]; name != "" {
 			return name
 		}
@@ -153,7 +167,7 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 		now := a.now()
 		book := deviceBookExport{FormatVersion: 1, GeneratedAt: now.UTC().Format(time.RFC3339Nano), Documents: []documentRecord{}, Warnings: []string{
 			"Alle gespeicherten Einträge dieser Geräteakte im gemeinsamen Datenbankstand. Keine vollständige Einsatzfreigabe.",
-			"Noch nicht strukturiert erfasst: Buchpflichtbewertung, Behörden-/Herstellermeldungen, vollständiger Aufbewahrungsplan und technische Umsetzung richtiggestellter Fachangaben. Rechtliche Vollständigkeit ist nicht bestätigt.",
+			"Noch nicht strukturiert erfasst: Buchpflichtbewertung, unabhängige Meldepflichtbewertung, vollständiger Aufbewahrungsplan und technische Umsetzung richtiggestellter Fachangaben. Rechtliche Vollständigkeit ist nicht bestätigt.",
 			"Qualifikations-, Auftrags- und Prüfbezüge sind erfasste Referenzen; ihre unabhängige Prüfung ist nicht bestätigt.",
 			"Anhangsinhalte in Quarantäne sind ausgeschlossen; Metadaten, Prüfsummen und Erfassungshistorie sind enthalten.",
 			"SHA-256 prüft Dateikonsistenz; keine digitale Signatur oder Bestätigung der Herkunft."}}

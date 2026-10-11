@@ -133,6 +133,12 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 			assessed.Status = "blocked"
 			assessed.Reasons = append(assessed.Reasons, "Gerät befindet sich nicht am Sollort.")
 		}
+		for _, incident := range record.Incidents {
+			if incident.Report != nil && incident.Report.Status != "CLOSED" {
+				assessed.Status = "blocked"
+				assessed.Reasons = append(assessed.Reasons, "Störung: Meldebewertung/-bearbeitung noch offen.")
+			}
+		}
 		if record.Decommission != nil {
 			assessed.Status = "blocked"
 			assessed.Reasons = append(assessed.Reasons, "Gerät außer Betrieb seit "+record.Decommission.PerformedOn)

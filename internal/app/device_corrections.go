@@ -31,7 +31,7 @@ type correctionProof struct {
 
 func correctableAction(action string) bool {
 	switch action {
-	case "commission", "rules", "inspection", "defect", "release", "instruction", "maintenance", "decommission":
+	case "commission", "rules", "inspection", "defect", "release", "instruction", "maintenance", "decommission", "incident", "report":
 		return true
 	}
 	return false

@@ -99,7 +99,7 @@ func deviceExportRoutes(mux *http.ServeMux, a *authService) {
 		writer := csv.NewWriter(&data)
 		writer.Comma = ';'
 		writer.UseCRLF = true
-		writer.Write([]string{"Datenstand UTC", "Betreiber", "Betriebsstätte", "Lagerort", "Geräte-ID", "Inventarnummer", "Bezeichnung", "Hersteller", "Modell", "Serien-/Losnummer", "Geräteversion", "Inbetriebnahme", "Lebenszyklus", "STK Status", "STK Frist", "MTK Status", "MTK Frist", "Elektrisch Status", "Elektrisch Frist", "Aktive Sperren", "Einweisungsnachweise", "Bewertung", "Hinweise", "Geräteart", "Anschaffungsjahr", "Wirtschaftsakteur Funktion", "Wirtschaftsakteur Firma", "Wirtschaftsakteur Anschrift", "Betriebliche Zuordnung", "Instandhaltungsnachweise", "Außerbetriebnahme", "Mindestaufbewahrung einschließlich", "Richtigstellungen"})
+		writer.Write([]string{"Datenstand UTC", "Betreiber", "Betriebsstätte", "Lagerort", "Geräte-ID", "Inventarnummer", "Bezeichnung", "Hersteller", "Modell", "Serien-/Losnummer", "Geräteversion", "Inbetriebnahme", "Lebenszyklus", "STK Status", "STK Frist", "MTK Status", "MTK Frist", "Elektrisch Status", "Elektrisch Frist", "Aktive Sperren", "Einweisungsnachweise", "Bewertung", "Hinweise", "Geräteart", "Anschaffungsjahr", "Wirtschaftsakteur Funktion", "Wirtschaftsakteur Firma", "Wirtschaftsakteur Anschrift", "Betriebliche Zuordnung", "Instandhaltungsnachweise", "Außerbetriebnahme", "Mindestaufbewahrung einschließlich", "Richtigstellungen", "Störungen", "Offene Meldebewertungen"})
 		for i := range entries {
 			e := &entries[i]
 			d := &e.record
@@ -121,7 +121,13 @@ func deviceExportRoutes(mux *http.ServeMux, a *authService) {
 			if d.Decommission != nil {
 				retired, retain = d.Decommission.PerformedOn, d.Decommission.RetainThrough
 			}
-			record = append(record, retired, retain, strconv.Itoa(len(d.Corrections)))
+			open := 0
+			for _, incident := range d.Incidents {
+				if incident.Report != nil && incident.Report.Status != "CLOSED" {
+					open++
+				}
+			}
+			record = append(record, retired, retain, strconv.Itoa(len(d.Corrections)), strconv.Itoa(len(d.Incidents)), strconv.Itoa(open))
 			writer.Write(record)
 			writer.Flush()
 			if data.Len() > 8<<20 {

@@ -11,6 +11,8 @@ import (
 )
 
 type deviceControlInput struct {
+	Incident         *deviceIncident   `json:"incident,omitempty"`
+	Report           *incidentReport   `json:"report,omitempty"`
 	Correction       *deviceCorrection `json:"correction,omitempty"`
 	MaintenanceKind  string            `json:"maintenance_kind,omitempty"`
 	MasterData       *deviceMasterData `json:"master_data,omitempty"`
@@ -65,6 +67,8 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 		return err
 	}
 	defer rows.Close()
+	record.Incidents = nil
+	record.Reports = nil
 	record.Corrections = nil
 	record.Decommission = nil
 	record.Maintenances = nil
@@ -111,6 +115,45 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 		} else if action == "commission" {
 			record.CommissionedOn = input.PerformedOn
 			record.Lifecycle = "IN_SERVICE"
+		} else if action == "incident" || action == "report" {
+			var proof struct {
+				Document *documentRecord `json:"document,omitempty"`
+			}
+			if err = json.Unmarshal([]byte(payload), &proof); err != nil {
+				return err
+			}
+			sha := ""
+			if proof.Document != nil {
+				sha = proof.Document.SHA256
+			}
+			if action == "incident" {
+				if input.Incident == nil {
+					return fmt.Errorf("missing incident")
+				}
+				record.Incidents = append(record.Incidents, incidentProof{eventID, version, input.PerformedOn, *input.Incident, input.Evidence, input.DocumentID, sha, &incidentReport{IncidentVersion: version, Status: "ASSESSMENT_REQUIRED"}})
+				reason := "quarantine"
+				if input.Incident.Kind == "malfunction" {
+					reason = "defect"
+				}
+				record.ActiveBlocks = append(record.ActiveBlocks, deviceBlock{eventID, reason, "", version, "Störung: " + input.Incident.Description + ". " + input.Note})
+			} else {
+				if input.Report == nil {
+					return fmt.Errorf("missing incident report")
+				}
+				found := false
+				for i := range record.Incidents {
+					if record.Incidents[i].Version == input.Report.IncidentVersion {
+						copy := *input.Report
+						record.Incidents[i].Report = &copy
+						found = true
+						break
+					}
+				}
+				if !found {
+					return fmt.Errorf("missing incident origin")
+				}
+				record.Reports = append(record.Reports, reportProof{eventID, version, *input.Report, input.Evidence, input.DocumentID, sha})
+			}
 		} else if action == "correction" {
 			var proof struct {
 				Target   *correctedEvent `json:"corrected_event"`
@@ -199,6 +242,11 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 	if record.Decommission != nil {
 		record.Reasons = append(record.Reasons, "Gerät außer Betrieb seit "+record.Decommission.PerformedOn)
 	}
+	for _, incident := range record.Incidents {
+		if incident.Report != nil && incident.Report.Status != "CLOSED" {
+			record.Reasons = append(record.Reasons, "Störung Version "+strconv.Itoa(incident.Version)+": Meldebewertung/-bearbeitung offen ("+incident.Report.Status+")")
+		}
+	}
 	if record.CommissionedOn == "" {
 		record.Reasons = append(record.Reasons, "Inbetriebnahmenachweis fehlt")
 	}
@@ -228,7 +276,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 }
 func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action string, input deviceControlInput, now time.Time) ([]byte, error) {
 	bad := func(message string) ([]byte, error) { return nil, &stockError{400, "invalid_device_control", message} }
-	if input.ExpectedVersion < 0 || !validReason(input.Evidence) || (action != "defect" && action != "details" && action != "master_data" && action != "decommission" && (!validReason(input.Qualification) || !validReason(input.Assignment))) || !validReason(input.Note) {
+	if input.ExpectedVersion < 0 || !validReason(input.Evidence) || (action != "defect" && action != "details" && action != "master_data" && action != "decommission" && action != "incident" && (!validReason(input.Qualification) || !validReason(input.Assignment))) || !validReason(input.Note) {
 		return bad("Nachweis, Qualifikation, betrieblicher Auftrag und Begründung erforderlich.")
 	}
 	canonical, _ := json.Marshal(input)
@@ -242,7 +290,7 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		return nil, err
 	}
 	var allowed bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM devices d JOIN locations l ON l.id=d.location_id JOIN role_assignments a ON a.site_id=l.site_id WHERE d.id=? AND a.user_id=? AND (a.role='device_manager' OR (?='defect' AND a.role='helper')))`, id, user, action).Scan(&allowed); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM devices d JOIN locations l ON l.id=d.location_id JOIN role_assignments a ON a.site_id=l.site_id WHERE d.id=? AND a.user_id=? AND (a.role='device_manager' OR (? IN ('defect','incident') AND a.role='helper')))`, id, user, action).Scan(&allowed); err != nil {
 		return nil, err
 	}
 	if !allowed {
@@ -274,6 +322,22 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 	}
 	if action == "decommission" {
 		if err := validateDecommission(input, record, now); err != nil {
+			return nil, err
+		}
+	}
+	if action != "incident" && input.Incident != nil {
+		return bad("Störung separat erfassen.")
+	}
+	if action != "report" && input.Report != nil {
+		return bad("Meldestatus separat erfassen.")
+	}
+	if action == "incident" {
+		if err := validateIncident(input, now); err != nil {
+			return nil, err
+		}
+	}
+	if action == "report" {
+		if err := validateIncidentReport(input, record, now); err != nil {
 			return nil, err
 		}
 	}
@@ -320,7 +384,7 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		identityReview = (before.Manufacturer != input.Details.Manufacturer || before.Model != input.Details.Model || before.SerialOrLot != input.Details.SerialOrLot) && (record.CommissionedOn != "" || len(record.Instructions) > 0 || len(record.InspectionDates) > 0 || len(record.Maintenances) > 0)
 	}
 	version := record.Version + 1
-	if action != "instruction" && (input.Instructor != "" || input.Trainee != "" || input.InstructionScope != "" || input.TransferEvidence != "" || input.DocumentVersion != "" || (input.DocumentID != "" && action != "maintenance" && action != "correction")) {
+	if action != "instruction" && (input.Instructor != "" || input.Trainee != "" || input.InstructionScope != "" || input.TransferEvidence != "" || input.DocumentVersion != "" || (input.DocumentID != "" && action != "maintenance" && action != "correction" && action != "incident" && action != "report")) {
 		return bad("Einweisungsangaben separat erfassen.")
 	}
 
@@ -388,7 +452,7 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		if err = validateDeviceAction(ctx, tx, user, action, &input, record, now); err != nil {
 			return nil, err
 		}
-	} else if action != "details" && action != "master_data" && action != "maintenance" && action != "decommission" && action != "correction" {
+	} else if action != "details" && action != "master_data" && action != "maintenance" && action != "decommission" && action != "correction" && action != "incident" && action != "report" {
 		return bad("Unbekannter Vorgang.")
 	}
 
@@ -401,7 +465,7 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 		calculated[rule.ControlType] = deadline
 	}
 	var document *documentRecord
-	if action == "instruction" || ((action == "maintenance" || action == "correction") && input.DocumentID != "") {
+	if action == "instruction" || ((action == "maintenance" || action == "correction" || action == "incident" || action == "report") && input.DocumentID != "") {
 		document = &documentRecord{}
 		if err = tx.QueryRowContext(ctx, `SELECT id,device_id,filename,media_type,size,sha256,created_by,created_at,note,status FROM device_documents WHERE id=? AND device_id=?`, input.DocumentID, id).Scan(&document.ID, &document.DeviceID, &document.Filename, &document.MediaType, &document.Size, &document.SHA256, &document.CreatedBy, &document.CreatedAt, &document.Note, &document.Status); err != nil {
 			if err == sql.ErrNoRows {
@@ -484,8 +548,8 @@ func deviceControlRoutes(mux *http.ServeMux, a *authService) {
 		json.NewEncoder(w).Encode(events)
 	})
 
-	for _, action := range []string{"commission", "rules", "inspection", "defect", "release", "instruction", "details", "master_data", "maintenance", "decommission", "correction"} {
-		route := map[string]string{"inspection": "inspections", "defect": "defects", "release": "releases", "instruction": "instructions", "master_data": "master-data", "maintenance": "maintenance", "correction": "corrections"}[action]
+	for _, action := range []string{"commission", "rules", "inspection", "defect", "release", "instruction", "details", "master_data", "maintenance", "decommission", "correction", "incident", "report"} {
+		route := map[string]string{"inspection": "inspections", "defect": "defects", "release": "releases", "instruction": "instructions", "master_data": "master-data", "maintenance": "maintenance", "correction": "corrections", "incident": "incidents", "report": "reports"}[action]
 		if route == "" {
 			route = action
 		}
