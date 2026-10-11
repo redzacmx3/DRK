@@ -74,6 +74,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 	record.Maintenances = nil
 	record.Instructions = []instructionProof{}
 	record.ActiveBlocks = []deviceBlock{}
+	record.RecallRevision = 0
 	record.EffectiveRules = map[string]DeadlineRule{}
 	record.PassedVersions = map[string]int{}
 	record.InspectionDates = map[string]string{}
@@ -233,6 +234,9 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 
 	}
 	if err = rows.Err(); err != nil {
+		return err
+	}
+	if err = projectRecalls(ctx, tx, record); err != nil {
 		return err
 	}
 	if record.Version == 0 {

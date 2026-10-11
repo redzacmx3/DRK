@@ -163,7 +163,16 @@ func bookStock(ctx context.Context, db *sql.DB, user, tokenHash, key, kind strin
 	}
 	var expiry sql.NullString
 	var blocked int
-	err = tx.QueryRowContext(ctx, `SELECT expires_on,blocked FROM batches WHERE id=?`, input.BatchID).Scan(&expiry, &blocked)
+	// Legacy pre-migration journal verification also exercises this function.
+	var hasRecallView bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='view' AND name='effective_batches')`).Scan(&hasRecallView); err != nil {
+		return nil, err
+	}
+	batchTable := "batches"
+	if hasRecallView {
+		batchTable = "effective_batches"
+	}
+	err = tx.QueryRowContext(ctx, `SELECT expires_on,blocked FROM `+batchTable+` WHERE id=?`, input.BatchID).Scan(&expiry, &blocked)
 	if err == sql.ErrNoRows {
 		return nil, &stockError{404, "not_found", "Charge nicht gefunden."}
 	}
@@ -172,7 +181,7 @@ func bookStock(ctx context.Context, db *sql.DB, user, tokenHash, key, kind strin
 	}
 	var packQuantity int64
 	if input.IdentifierID != "" {
-		err = tx.QueryRowContext(ctx, `SELECT i.pack_quantity FROM product_identifiers i JOIN batches b ON b.product_id=i.product_id WHERE i.id=? AND i.active=1 AND b.id=?`, input.IdentifierID, input.BatchID).Scan(&packQuantity)
+		err = tx.QueryRowContext(ctx, `SELECT i.pack_quantity FROM product_identifiers i JOIN effective_batches b ON b.product_id=i.product_id WHERE i.id=? AND i.active=1 AND b.id=?`, input.IdentifierID, input.BatchID).Scan(&packQuantity)
 		if err == sql.ErrNoRows {
 			return nil, conflict("identifier_changed", "Verpackungskennung widerrufen oder Artikel/Charge passt nicht; erneut scannen.")
 		}
@@ -351,7 +360,7 @@ func stockRoutes(mux *http.ServeMux, a *authService) {
 			Expires   *string `json:"expires_on"`
 			Blocked   bool    `json:"blocked"`
 		}
-		rows, err := a.db.QueryContext(r.Context(), `SELECT b.id,p.id,p.name,p.base_unit,b.lot,b.expires_on,b.blocked FROM batches b JOIN product_types p ON p.id=b.product_id WHERE EXISTS(SELECT 1 FROM role_assignments WHERE user_id=? AND role IN ('viewer','helper','material_manager')) ORDER BY p.name,b.lot,b.id LIMIT 500`, user.ID)
+		rows, err := a.db.QueryContext(r.Context(), `SELECT b.id,p.id,p.name,p.base_unit,b.lot,b.expires_on,b.blocked FROM effective_batches b JOIN product_types p ON p.id=b.product_id WHERE EXISTS(SELECT 1 FROM role_assignments WHERE user_id=? AND role IN ('viewer','helper','material_manager')) ORDER BY p.name,b.lot,b.id LIMIT 500`, user.ID)
 		if err != nil {
 			sendStockError(w, err)
 			return
@@ -394,7 +403,7 @@ func stockRoutes(mux *http.ServeMux, a *authService) {
 			Expires    *string `json:"expires_on"`
 			Blocked    bool    `json:"blocked"`
 		}
-		rows, err := a.db.QueryContext(r.Context(), `SELECT b.batch_id,b.location_id,b.state,b.quantity,b.version,p.name,p.base_unit,c.lot,l.name,c.expires_on,c.blocked FROM stock_balances b JOIN batches c ON c.id=b.batch_id JOIN product_types p ON p.id=c.product_id JOIN locations l ON l.id=b.location_id WHERE EXISTS(SELECT 1 FROM role_assignments a WHERE a.user_id=? AND a.site_id=l.site_id AND a.role IN ('viewer','helper','material_manager')) ORDER BY p.name,c.lot,l.name,b.state LIMIT 500`, user.ID)
+		rows, err := a.db.QueryContext(r.Context(), `SELECT b.batch_id,b.location_id,b.state,b.quantity,b.version,p.name,p.base_unit,c.lot,l.name,c.expires_on,c.blocked FROM stock_balances b JOIN effective_batches c ON c.id=b.batch_id JOIN product_types p ON p.id=c.product_id JOIN locations l ON l.id=b.location_id WHERE EXISTS(SELECT 1 FROM role_assignments a WHERE a.user_id=? AND a.site_id=l.site_id AND a.role IN ('viewer','helper','material_manager')) ORDER BY p.name,c.lot,l.name,b.state LIMIT 500`, user.ID)
 		if err != nil {
 			sendStockError(w, err)
 			return

@@ -9,6 +9,7 @@ Aktueller Funktionsumfang und Prioritäten: [Stand und Roadmap](stand-und-roadma
 - [Geräte-Ersterfassung](erstinventarisierung.md): Excel mit Barcode-Etiketten und CSV-Import.
 - [Verbrauchsmaterial-Erfassung](verbrauchsmaterial-erfassung.md): eigene Excel-Vorlage, Erstbestand und spätere Zugänge.
 - [Verwaltung](administration.md): Betreiber, Betriebsstätten, Lagerorte, Benutzer und getrennte Rechte.
+- [Rückrufe](rueckrufe.md): geprüfte Treffer, Sperrwirkung, Einzelmaßnahmen und Gesamtabschluss.
 - [SMTP-Erinnerungen](smtp-erinnerungen.md): optionale TLS-Zustellung; standardmäßig deaktiviert.
 
 ## Vor einem Pilotbetrieb

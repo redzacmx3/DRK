@@ -47,13 +47,14 @@ type materialItem struct {
 	Excluded  int64  `json:"excluded_quantity"`
 }
 type materialBasisRow struct {
-	Batch    string  `json:"batch_id"`
-	Product  string  `json:"product_id"`
-	State    string  `json:"state"`
-	Quantity int64   `json:"quantity"`
-	Version  int64   `json:"version"`
-	Expiry   *string `json:"expires_on"`
-	Blocked  bool    `json:"blocked"`
+	RecallRevision int64   `json:"recall_revision,omitempty"`
+	Batch          string  `json:"batch_id"`
+	Product        string  `json:"product_id"`
+	State          string  `json:"state"`
+	Quantity       int64   `json:"quantity"`
+	Version        int64   `json:"version"`
+	Expiry         *string `json:"expires_on"`
+	Blocked        bool    `json:"blocked"`
 }
 type materialSnapshot struct {
 	Pack  packVersion        `json:"packlist"`
@@ -155,7 +156,7 @@ func calculateMaterial(ctx context.Context, tx *sql.Tx, p packVersion, now time.
 		if err := tx.QueryRowContext(ctx, `SELECT name,base_unit FROM product_types WHERE id=?`, item.ProductID).Scan(&m.Product, &m.Unit); err != nil {
 			return result, snapshot, err
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT b.batch_id,c.product_id,b.state,b.quantity,b.version,c.expires_on,c.blocked FROM stock_balances b JOIN batches c ON c.id=b.batch_id WHERE b.location_id=? AND c.product_id=? ORDER BY b.batch_id,b.state`, p.Location, item.ProductID)
+		rows, err := tx.QueryContext(ctx, `SELECT b.batch_id,c.product_id,b.state,b.quantity,b.version,c.expires_on,c.blocked,c.recall_revision FROM stock_balances b JOIN effective_batches c ON c.id=b.batch_id WHERE b.location_id=? AND c.product_id=? ORDER BY b.batch_id,b.state`, p.Location, item.ProductID)
 		if err != nil {
 			return result, snapshot, err
 		}
@@ -163,7 +164,7 @@ func calculateMaterial(ctx context.Context, tx *sql.Tx, p packVersion, now time.
 		threshold := day.AddDate(0, 0, item.MinDays).Format("2006-01-02")
 		for rows.Next() {
 			var row materialBasisRow
-			if err = rows.Scan(&row.Batch, &row.Product, &row.State, &row.Quantity, &row.Version, &row.Expiry, &row.Blocked); err != nil {
+			if err = rows.Scan(&row.Batch, &row.Product, &row.State, &row.Quantity, &row.Version, &row.Expiry, &row.Blocked, &row.RecallRevision); err != nil {
 				rows.Close()
 				return result, snapshot, err
 			}

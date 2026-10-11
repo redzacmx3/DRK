@@ -42,14 +42,14 @@ func TestFreshInitializationDoesNotUpgradeExistingDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err = db.Exec("DELETE FROM schema_migrations WHERE version=23"); err != nil {
+	if _, err = db.Exec("DELETE FROM schema_migrations WHERE version=24"); err != nil {
 		t.Fatal(err)
 	}
 	if err = run(); err == nil {
 		t.Fatal("existing old schema automatically upgraded")
 	}
 	var version int
-	if err = db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != 22 {
+	if err = db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != 23 {
 		t.Fatalf("existing schema changed: %d %v", version, err)
 	}
 }

@@ -37,14 +37,15 @@ type instructionProof struct {
 	DocumentStatus  string `json:"document_status"`
 }
 type deviceRecord struct {
-	Incidents    []incidentProof    `json:"incidents,omitempty"`
-	Reports      []reportProof      `json:"reports,omitempty"`
-	Corrections  []correctionProof  `json:"corrections,omitempty"`
-	Decommission *decommissionProof `json:"decommission,omitempty"`
-	Maintenances []maintenanceProof `json:"maintenances,omitempty"`
-	MasterData   *deviceMasterData  `json:"master_data,omitempty"`
-	Intake       *deviceIntake      `json:"intake,omitempty"`
-	Instructions []instructionProof `json:"instructions"`
+	RecallRevision int64              `json:"recall_revision,omitempty"`
+	Incidents      []incidentProof    `json:"incidents,omitempty"`
+	Reports        []reportProof      `json:"reports,omitempty"`
+	Corrections    []correctionProof  `json:"corrections,omitempty"`
+	Decommission   *decommissionProof `json:"decommission,omitempty"`
+	Maintenances   []maintenanceProof `json:"maintenances,omitempty"`
+	MasterData     *deviceMasterData  `json:"master_data,omitempty"`
+	Intake         *deviceIntake      `json:"intake,omitempty"`
+	Instructions   []instructionProof `json:"instructions"`
 
 	ActiveBlocks    []deviceBlock           `json:"active_blocks"`
 	EffectiveRules  map[string]DeadlineRule `json:"control_rules,omitempty"`

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -111,6 +112,9 @@ func validateDeviceAction(ctx context.Context, tx *sql.Tx, user, action string, 
 		for _, block := range record.ActiveBlocks {
 			if block.ID == input.BlockID {
 				found = true
+				if strings.HasPrefix(block.ID, "recall:") {
+					return conflict("central_recall", "Diese Sperre wird ausschließlich im zentralen Rückrufworkflow geschlossen.")
+				}
 				if block.Reason == "inspection_failed" && (record.PassedVersions[block.ControlType] <= block.Version || (record.Controls[block.ControlType].State != "CURRENT" && record.Controls[block.ControlType].State != "DUE_SOON")) {
 					return conflict("passed_inspection_required", "Prüfversagenssperre benötigt eine spätere bestandene, noch gültige Kontrolle.")
 				}

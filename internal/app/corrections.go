@@ -162,7 +162,7 @@ func bookInventory(ctx context.Context, db *sql.DB, user, tokenHash, key string,
 	}
 	var expiry sql.NullString
 	var blocked int
-	if err = tx.QueryRowContext(ctx, `SELECT expires_on,blocked FROM batches WHERE id=?`, input.BatchID).Scan(&expiry, &blocked); err == sql.ErrNoRows {
+	if err = tx.QueryRowContext(ctx, `SELECT expires_on,blocked FROM effective_batches WHERE id=?`, input.BatchID).Scan(&expiry, &blocked); err == sql.ErrNoRows {
 		return nil, &stockError{404, "not_found", "Charge nicht gefunden."}
 	} else if err != nil {
 		return nil, err
@@ -418,7 +418,7 @@ func correctionRoutes(mux *http.ServeMux, a *authService) {
 			Basis           *int64  `json:"basis_quantity"`
 			BasisVersion    *int64  `json:"basis_version"`
 		}
-		rows, err := a.db.QueryContext(r.Context(), `SELECT m.id,m.kind,m.batch_id,p.name,b.lot,p.base_unit,m.from_location_id,m.to_location_id,src.name,dst.name,m.quantity,m.state,m.created_at,m.note,m.reversed_movement_id,(SELECT r.id FROM stock_movements r WHERE r.reversed_movement_id=m.id),m.counted_quantity,m.basis_quantity,m.basis_version,pack.identifier_id,ident.kind,ident.value,pack.pack_count,pack.pack_quantity FROM stock_movements m JOIN batches b ON b.id=m.batch_id JOIN product_types p ON p.id=b.product_id LEFT JOIN locations src ON src.id=m.from_location_id LEFT JOIN locations dst ON dst.id=m.to_location_id LEFT JOIN movement_packaging pack ON pack.movement_id=m.id LEFT JOIN product_identifiers ident ON ident.id=pack.identifier_id WHERE (m.from_location_id IS NULL OR EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=src.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager'))) AND (m.to_location_id IS NULL OR EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=dst.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager'))) ORDER BY m.created_at DESC,m.id DESC LIMIT ? OFFSET ?`, user.ID, user.ID, limit+1, offset)
+		rows, err := a.db.QueryContext(r.Context(), `SELECT m.id,m.kind,m.batch_id,p.name,b.lot,p.base_unit,m.from_location_id,m.to_location_id,src.name,dst.name,m.quantity,m.state,m.created_at,m.note,m.reversed_movement_id,(SELECT r.id FROM stock_movements r WHERE r.reversed_movement_id=m.id),m.counted_quantity,m.basis_quantity,m.basis_version,pack.identifier_id,ident.kind,ident.value,pack.pack_count,pack.pack_quantity FROM stock_movements m JOIN effective_batches b ON b.id=m.batch_id JOIN product_types p ON p.id=b.product_id LEFT JOIN locations src ON src.id=m.from_location_id LEFT JOIN locations dst ON dst.id=m.to_location_id LEFT JOIN movement_packaging pack ON pack.movement_id=m.id LEFT JOIN product_identifiers ident ON ident.id=pack.identifier_id WHERE (m.from_location_id IS NULL OR EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=src.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager'))) AND (m.to_location_id IS NULL OR EXISTS(SELECT 1 FROM role_assignments a WHERE a.site_id=dst.site_id AND a.user_id=? AND a.role IN ('viewer','helper','material_manager'))) ORDER BY m.created_at DESC,m.id DESC LIMIT ? OFFSET ?`, user.ID, user.ID, limit+1, offset)
 		if err != nil {
 			sendStockError(w, err)
 			return

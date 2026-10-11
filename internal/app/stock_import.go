@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -322,13 +323,13 @@ func previewStockImport(ctx context.Context, tx *sql.Tx, user string, input stoc
 			var expiry sql.NullString
 			blocked := 0
 			if row.Product != "" && row.Status == "new" {
-				err = tx.QueryRowContext(ctx, `SELECT id,expires_on,blocked FROM batches WHERE product_id=? AND lot=?`, row.Product, intakeLot(*row)).Scan(&row.Batch, &expiry, &blocked)
+				err = tx.QueryRowContext(ctx, `SELECT id,expires_on,blocked FROM effective_batches WHERE product_id=? AND lot=?`, row.Product, intakeLot(*row)).Scan(&row.Batch, &expiry, &blocked)
 				if err == nil && expiry.String != d.Expiry {
 					issue("Verfall weicht von vorhandener Charge ab; keine Änderung durch Import.")
 				} else if err != nil && err != sql.ErrNoRows {
 					return result, err
 				}
-				balances, err := tx.QueryContext(ctx, `SELECT b.batch_id,b.state,b.quantity,b.version FROM stock_balances b JOIN batches c ON c.id=b.batch_id WHERE c.product_id=? AND b.location_id=? ORDER BY b.batch_id,b.state`, row.Product, row.Location)
+				balances, err := tx.QueryContext(ctx, `SELECT b.batch_id,b.state,b.quantity,b.version FROM stock_balances b JOIN effective_batches c ON c.id=b.batch_id WHERE c.product_id=? AND b.location_id=? ORDER BY b.batch_id,b.state`, row.Product, row.Location)
 				if err != nil {
 					return result, err
 				}
@@ -355,8 +356,19 @@ func previewStockImport(ctx context.Context, tx *sql.Tx, user string, input stoc
 				if err != nil {
 					return result, err
 				}
+				var revision int64
+				var recallBlocked bool
+				if err = tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(s.version),0),COALESCE(MAX(s.status='OPEN'),0) FROM recalls r JOIN recall_state s ON s.recall_id=r.id WHERE r.kind='material' AND r.product_id=? AND (r.batch_id IS NULL OR r.batch_id=?)`, row.Product, row.Batch).Scan(&revision, &recallBlocked); err != nil {
+					return result, err
+				}
+				if recallBlocked {
+					blocked = 1
+				}
 				encoded, _ := json.Marshal(basis)
 				row.StockBasis = digest(string(encoded))
+				if revision > 0 {
+					row.StockBasis = digest(row.StockBasis + fmt.Sprint(revision))
+				}
 			}
 			row.State = "quarantined"
 			if d.Lot != "" && d.Expiry != "" && d.Expiry >= localDay(now) && blocked == 0 {

@@ -242,7 +242,7 @@ func resolveBarcode(ctx context.Context, db *sql.DB, user, text, format string, 
 			result.ProductID = parsed.ObjectID
 		case "batch":
 			b := scanBatch{}
-			err = tx.QueryRowContext(ctx, `SELECT id,product_id,lot,expires_on,blocked FROM batches WHERE id=?`, parsed.ObjectID).Scan(&b.ID, &result.ProductID, &b.Lot, &b.Expiry, &b.Blocked)
+			err = tx.QueryRowContext(ctx, `SELECT id,product_id,lot,expires_on,blocked FROM effective_batches WHERE id=?`, parsed.ObjectID).Scan(&b.ID, &result.ProductID, &b.Lot, &b.Expiry, &b.Blocked)
 			if err == sql.ErrNoRows {
 				return result, scopeError()
 			}
@@ -274,7 +274,7 @@ func resolveBarcode(ctx context.Context, db *sql.DB, user, text, format string, 
 	result.Status = "product_match"
 	if parsed.Lot != "" {
 		b := scanBatch{}
-		err = tx.QueryRowContext(ctx, `SELECT id,lot,expires_on,blocked FROM batches WHERE product_id=? AND lot=?`, result.ProductID, parsed.Lot).Scan(&b.ID, &b.Lot, &b.Expiry, &b.Blocked)
+		err = tx.QueryRowContext(ctx, `SELECT id,lot,expires_on,blocked FROM effective_batches WHERE product_id=? AND lot=?`, result.ProductID, parsed.Lot).Scan(&b.ID, &b.Lot, &b.Expiry, &b.Blocked)
 		if err == sql.ErrNoRows {
 			result.Status = "unregistered_batch"
 			result.Warnings = append(result.Warnings, "Charge noch nicht angelegt; Verfall muss vor Anlage fachlich bestätigt werden.")
