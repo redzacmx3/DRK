@@ -549,3 +549,8 @@ Weitere Produktpflichten unterstützen die separate Teilabnahme einer konkreten 
 ### Fachliche IT-Sicherheitsabnahme (Schema 29)
 
 Produktspezifische externe IT-Prüfungen können mit Softwarestand, Systemumfang, Protokoll, Befunden, Maßnahmenstatus und bestätigter Fälligkeit teilabgenommen werden. Offene Maßnahmen oder nicht bestandene Prüfungen verhindern positive Abnahme. [Bedienung und Grenzen](docs/produktpflichten.md). Keine automatische Softwareprüfung; Gesamtfreigabe offen, keine neue Migration.
+
+
+### Besondere Anwendergruppen (Schema 29)
+
+Personenkreis, Nutzungsumfang, produktspezifische Bedingungen und Ausnahmegrundlagen können ausdrücklich fachlich bewertet werden. Gruppenabnahme verleiht keine Kontorechte oder individuelle Eignung. [Bedienung und Grenzen](docs/produktpflichten.md). Gesamtfreigabe offen; keine neue Migration.

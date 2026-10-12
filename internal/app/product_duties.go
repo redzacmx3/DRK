@@ -12,6 +12,7 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
+	UserGroupAcceptance   *dutyUserGroupAcceptance   `json:"user_group_acceptance,omitempty"`
 	SecurityAcceptance    *dutySecurityAcceptance    `json:"security_acceptance,omitempty"`
 	ElectricalAcceptance  *dutyElectricalAcceptance  `json:"electrical_acceptance,omitempty"`
 	STKAcceptance         *dutySTKAcceptance         `json:"stk_acceptance,omitempty"`
@@ -44,6 +45,7 @@ type productDutyInput struct {
 	Note                  string            `json:"note"`
 }
 type productDutyEvent struct {
+	UserGroupBasis             *dutyBookBasis        `json:"user_group_basis,omitempty"`
 	SecurityBasis              *dutyBookBasis        `json:"security_basis,omitempty"`
 	ElectricalBasis            *dutyBookBasis        `json:"electrical_basis,omitempty"`
 	STKBasis                   *dutyBookBasis        `json:"stk_basis,omitempty"`
@@ -223,6 +225,17 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 			}
 		}
 	}
+	for _, rule := range last.Input.Rules {
+		if rule.Kind == "special_user_group" && rule.Applicability == "required" {
+			for i := range result.Checks {
+				if result.Checks[i].Kind == "special_user_group" {
+					if err := checkDutyUserGroup(ctx, tx, record, rule, last.Input.DocumentID, last.UserGroupBasis, &result.Checks[i]); err != nil {
+						return result, err
+					}
+				}
+			}
+		}
+	}
 	result.Status = "reviewed"
 	result.Reasons = append(result.Reasons, "Anwendbarkeit und Nachweisreferenzen fachlich dokumentiert; Erfüllung der besonderen Pflichten und Einsatzfreigabe noch gesondert abzunehmen.")
 	return result, nil
@@ -362,6 +375,13 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			}
 			if securityBasis != nil {
 				event.SecurityBasis = securityBasis
+			}
+			groupBasis, err := validateDutyUserGroup(ctx, tx, record, rule, in.DocumentID, now)
+			if err != nil {
+				return nil, err
+			}
+			if groupBasis != nil {
+				event.UserGroupBasis = groupBasis
 			}
 			seen[rule.Kind] = true
 		}
