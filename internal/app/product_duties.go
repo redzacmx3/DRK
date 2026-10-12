@@ -12,7 +12,7 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
- MaintenanceAcceptance *dutyMaintenanceAcceptance `json:"maintenance_acceptance,omitempty"`
+	MaintenanceAcceptance *dutyMaintenanceAcceptance `json:"maintenance_acceptance,omitempty"`
 	InstructionAcceptance *dutyInstructionAcceptance `json:"instruction_acceptance,omitempty"`
 	FunctionCheck         *dutyFunctionProof         `json:"function_check,omitempty"`
 	CommissionVersion     int                        `json:"commission_version,omitempty"`
@@ -39,7 +39,7 @@ type productDutyInput struct {
 	Note                  string            `json:"note"`
 }
 type productDutyEvent struct {
- MaintenanceBasis *dutyMaintenanceBasis `json:"maintenance_basis,omitempty"`
+	MaintenanceBasis           *dutyMaintenanceBasis `json:"maintenance_basis,omitempty"`
 	InstructionAcceptanceBasis *dutyInstructionBasis `json:"instruction_acceptance_basis,omitempty"`
 	FunctionDocumentSHA256     string                `json:"function_document_sha256,omitempty"`
 	ID                         string                `json:"id"`
@@ -240,8 +240,12 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 				event.InstructionAcceptanceBasis = basis
 			}
 			maintenanceBasis, err := validateDutyMaintenanceAcceptance(ctx, tx, rule, record, in.DocumentID, now)
-			if err != nil { return nil, err }
-			if maintenanceBasis != nil { event.MaintenanceBasis = maintenanceBasis }
+			if err != nil {
+				return nil, err
+			}
+			if maintenanceBasis != nil {
+				event.MaintenanceBasis = maintenanceBasis
+			}
 			seen[rule.Kind] = true
 		}
 		var status string

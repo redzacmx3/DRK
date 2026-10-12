@@ -69,7 +69,9 @@ func validateDutyMaintenanceAcceptance(ctx context.Context, tx *sql.Tx, rule pro
 	}
 	basis := &dutyMaintenanceBasis{SourceDocumentID: source}
 	var status string
-	if err := tx.QueryRowContext(ctx, `SELECT status,review_version FROM effective_documents WHERE id=? AND device_id=?`, source, record.ID).Scan(&status, &basis.SourceReviewVersion); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT status,review_version FROM effective_documents WHERE id=? AND device_id=?`, source, record.ID).Scan(&status, &basis.SourceReviewVersion); err == sql.ErrNoRows {
+		return nil, scopeError()
+	} else if err != nil {
 		return nil, err
 	}
 	if status != "released" {

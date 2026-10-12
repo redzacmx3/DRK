@@ -96,8 +96,8 @@ func TestProductDutyMaintenanceReferenceResolutionAndInvalidation(t *testing.T) 
 	newer.MaintenanceKind = "maintenance"
 	newer.DocumentID = document.ID
 	requireStatus(t, packHTTP(f, "POST", "devices/"+id+"/maintenance", "newer-maintenance-event", newer), 200)
-	if maintenanceDutyStatus(t, f, id) != "unknown" {
-		t.Fatal("superseded proof accepted")
+	if maintenanceDutyStatus(t, f, id) != "blocked" {
+		t.Fatal("newer maintenance follow-up block hidden by superseded proof")
 	}
 	in = maintenanceDuty(in, 2)
 	in.ExpectedVersion = 2

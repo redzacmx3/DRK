@@ -68,7 +68,20 @@ func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord
 							check.Reason = "Zugeordneter Wartungsnachweis wurde richtiggestellt; fachlich abgleichen und neuen Nachweis erfassen."
 						}
 					}
-					if check.Status == "record_found" && (len(record.ActiveBlocks) > 0 || record.Decommission != nil) {
+					independentBlock := record.Decommission != nil
+					for _, block := range record.ActiveBlocks {
+						correctionBlock := false
+						for _, correction := range record.Corrections {
+							if correction.EventID == block.ID {
+								correctionBlock = true
+								break
+							}
+						}
+						if !correctionBlock {
+							independentBlock = true
+						}
+					}
+					if (check.Status == "record_found" && len(record.ActiveBlocks) > 0) || (check.Status == "unknown" || check.Status == "record_found") && independentBlock {
 						check.Status = "blocked"
 						check.Reason = "Gerät gesperrt oder außer Betrieb; Wartungsreferenz ermöglicht keine positive Vorprüfung."
 					}

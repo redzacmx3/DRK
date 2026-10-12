@@ -31,6 +31,12 @@ func TestMaintenanceAcceptanceSnapshotsAndDecisions(t *testing.T) {
 	a.ScopeEvidence = ""
 	dutyPost(t, f, id, "maintenance-acceptance-incomplete", in, 400)
 	a.ScopeEvidence = "Synthetic scope"
+	in.DocumentID = "00000000-0000-4000-8000-000000000099"
+	dutyPost(t, f, id, "maintenance-acceptance-missing-source", in, 404)
+	if dutyRead(t, f, id).Version != 0 {
+		t.Fatal("invalid source committed an event")
+	}
+	in.DocumentID = document.ID
 	dutyPost(t, f, id, "maintenance-acceptance-positive", in, 200)
 	if maintenanceDutyStatus(t, f, id) != "accepted" || dutyRead(t, f, id).Overall != "not_assessed" {
 		t.Fatal("missing scoped approval")
@@ -73,6 +79,18 @@ func TestMaintenanceAcceptanceSnapshotsAndDecisions(t *testing.T) {
 	checks, err = checkProductDutyProofs(context.Background(), tx, record, []productDutyRule{*rule}, "", nil, basis)
 	if err != nil || checks[0].Status != "blocked" {
 		t.Fatal("failed proof downgraded", checks, err)
+	}
+	record.Maintenances[0].Result = "completed"
+	record.Corrections[len(record.Corrections)-1].EventID = "synthetic-correction"
+	record.ActiveBlocks = []deviceBlock{{ID: "synthetic-correction"}}
+	checks, err = checkProductDutyProofs(context.Background(), tx, record, []productDutyRule{*rule}, "", nil, basis)
+	if err != nil || checks[0].Status != "unknown" {
+		t.Fatal("correction-only semantics changed", checks, err)
+	}
+	record.ActiveBlocks = append(record.ActiveBlocks, deviceBlock{ID: "synthetic-independent-defect"})
+	checks, err = checkProductDutyProofs(context.Background(), tx, record, []productDutyRule{*rule}, "", nil, basis)
+	if err != nil || checks[0].Status != "blocked" {
+		t.Fatal("independent block hidden by correction", checks, err)
 	}
 	tx.Rollback()
 	in.ExpectedVersion = 2
