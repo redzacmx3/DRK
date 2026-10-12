@@ -18,6 +18,7 @@ type dutyControlAcceptance struct {
 }
 type dutyMTKAcceptance = dutyControlAcceptance
 type dutySTKAcceptance = dutyControlAcceptance
+type dutyElectricalAcceptance = dutyControlAcceptance
 
 type dutyInspectionChoice struct {
 	Version     int    `json:"version"`
@@ -55,19 +56,20 @@ func dutyInspectionChoices(ctx context.Context, tx *sql.Tx, id string) ([]dutyIn
 	return choices, rows.Err()
 }
 func checkDutyControlAcceptance(ctx context.Context, tx *sql.Tx, record deviceRecord, a *dutyControlAcceptance, source string, basis *dutyBookBasis, controlType, detailKind string) (productDutyCheck, error) {
-	check := productDutyCheck{Kind: detailKind, Status: "unknown", Reason: controlType + "-Prüfung, Protokoll und fachliche Teilabnahme offen."}
+	controlName := dutyControlName(controlType)
+	check := productDutyCheck{Kind: detailKind, Status: "unknown", Reason: controlName + "-Prüfung, Protokoll und fachliche Teilabnahme offen."}
 	if a == nil {
 		return check, nil
 	}
 	check.EventVersion = a.InspectionVersion
 	if a.Decision == "rejected" {
 		check.Status = "blocked"
-		check.Reason = controlType + " ausdrücklich fachlich nicht abgenommen."
+		check.Reason = controlName + " ausdrücklich fachlich nicht abgenommen."
 		return check, nil
 	}
 	if len(record.ActiveBlocks) > 0 || record.Decommission != nil {
 		check.Status = "blocked"
-		check.Reason = "Gerät gesperrt oder außer Betrieb; keine positive " + controlType + "-Teilabnahme."
+		check.Reason = "Gerät gesperrt oder außer Betrieb; keine positive " + controlName + "-Teilabnahme."
 		return check, nil
 	}
 	choices, err := dutyInspectionChoices(ctx, tx, record.ID)
@@ -85,33 +87,33 @@ func checkDutyControlAcceptance(ctx context.Context, tx *sql.Tx, record deviceRe
 	}
 	if selected.Result != "passed" {
 		check.Status = "blocked"
-		check.Reason = "Zugeordnete " + controlType + " nicht bestanden."
+		check.Reason = "Zugeordnete " + controlName + " nicht bestanden."
 		return check, nil
 	}
 	control, ok := record.EffectiveRules[controlType]
 	if !ok || control.Applicability != "required" || record.PassedVersions[controlType] != a.InspectionVersion {
-		check.Reason = controlType + "-Pflicht oder neueste bestandene Prüfung nicht aktuell zugeordnet."
+		check.Reason = controlName + "-Pflicht oder neueste bestandene Prüfung nicht aktuell zugeordnet."
 		return check, nil
 	}
 	state := record.Controls[controlType].State
 	if state == "OVERDUE" {
 		check.Status = "blocked"
-		check.Reason = controlType + "-Kontrollfrist überschritten."
+		check.Reason = controlName + "-Kontrollfrist überschritten."
 		return check, nil
 	}
 	if state != "CURRENT" && state != "DUE_SOON" {
-		check.Reason = controlType + "-Kontrollfrist ungeklärt."
+		check.Reason = controlName + "-Kontrollfrist ungeklärt."
 		return check, nil
 	}
 	for _, correction := range record.Corrections {
 		if correction.Target.Version == a.InspectionVersion {
-			check.Reason = controlType + "-Prüfung richtiggestellt; neuen Nachweis und Abnahme erfassen."
+			check.Reason = controlName + "-Prüfung richtiggestellt; neuen Nachweis und Abnahme erfassen."
 			return check, nil
 		}
 	}
 	if basis == nil {
 		check.Status = "record_found"
-		check.Reason = "Aktuelle bestandene " + controlType + " gefunden; qualifizierte Abnahme offen."
+		check.Reason = "Aktuelle bestandene " + controlName + " gefunden; qualifizierte Abnahme offen."
 		return check, nil
 	}
 	// Reuse the opaque device-book snapshot and document epoch binding, without asserting book completeness.
@@ -120,19 +122,20 @@ func checkDutyControlAcceptance(ctx context.Context, tx *sql.Tx, record deviceRe
 		return check, err
 	}
 	if check.Status == "unknown" {
-		check.Reason = "Aktenstand oder Dokumentprüfstand seit " + controlType + "-Abnahme geändert; erneut fachlich prüfen."
+		check.Reason = "Aktenstand oder Dokumentprüfstand seit " + controlName + "-Abnahme geändert; erneut fachlich prüfen."
 	}
 	if check.Status == "accepted" {
-		check.Reason = controlType + " mit Protokoll, Prüfumfang, Prüferbefähigung und Kennzeichnung ausdrücklich fachlich abgenommen; Gesamtfreigabe offen."
+		check.Reason = controlName + " mit Protokoll, Prüfumfang, Prüferbefähigung und Kennzeichnung ausdrücklich fachlich abgenommen; Gesamtfreigabe offen."
 	}
 	return check, nil
 }
 func validateDutyControlAcceptance(ctx context.Context, tx *sql.Tx, record deviceRecord, rule productDutyRule, a *dutyControlAcceptance, source string, now time.Time, controlType, detailKind, ruleKind, prefix string) (*dutyBookBasis, error) {
+	controlName := dutyControlName(controlType)
 	if a == nil {
 		return nil, nil
 	}
 	if rule.Kind != ruleKind || rule.Applicability != "required" || a.InspectionVersion <= 0 {
-		return nil, adminInvalid(controlType + "-Teilabnahme nur im zugehörigen erforderlichen Pflichtbereich mit konkreter Prüfung erfassen.")
+		return nil, adminInvalid(controlName + "-Teilabnahme nur im zugehörigen erforderlichen Pflichtbereich mit konkreter Prüfung erfassen.")
 	}
 	choices, err := dutyInspectionChoices(ctx, tx, record.ID)
 	if err != nil {
@@ -145,11 +148,11 @@ func validateDutyControlAcceptance(ctx context.Context, tx *sql.Tx, record devic
 		}
 	}
 	if selected == nil {
-		return nil, adminInvalid(controlType + "-Prüfung derselben Geräteakte auswählen; andere Kontrollarten ersetzen sie nicht.")
+		return nil, adminInvalid(controlName + "-Prüfung derselben Geräteakte auswählen; andere Kontrollarten ersetzen sie nicht.")
 	}
 	day, err := time.Parse("2006-01-02", a.PerformedOn)
 	if err != nil || day.Format("2006-01-02") != a.PerformedOn || a.PerformedOn < selected.PerformedOn || a.PerformedOn > now.UTC().Format("2006-01-02") || !a.Reviewed || (a.Decision != "accepted" && a.Decision != "rejected") {
-		return nil, adminInvalid(controlType + "-Abnahme ausdrücklich bestätigen: Entscheidung und Datum ab Prüftag bis heute erforderlich.")
+		return nil, adminInvalid(controlName + "-Abnahme ausdrücklich bestätigen: Entscheidung und Datum ab Prüftag bis heute erforderlich.")
 	}
 	for _, value := range []string{a.Qualification, a.Assignment, a.Evidence, a.Note, a.ScopeEvidence, a.ExecutorEvidence, a.MarkingEvidence} {
 		if !validReason(value) {
@@ -178,4 +181,17 @@ func checkDutySTK(ctx context.Context, tx *sql.Tx, record deviceRecord, rule pro
 }
 func validateDutySTK(ctx context.Context, tx *sql.Tx, record deviceRecord, rule productDutyRule, source string, now time.Time) (*dutyBookBasis, error) {
 	return validateDutyControlAcceptance(ctx, tx, record, rule, rule.STKAcceptance, source, now, "STK", "annex_1_stk", "annex_1", "stk")
+}
+
+func dutyControlName(kind string) string {
+	if kind == "electrical" {
+		return "Elektrische Sicherheitsprüfung"
+	}
+	return kind
+}
+func checkDutyElectrical(ctx context.Context, tx *sql.Tx, record deviceRecord, rule productDutyRule, source string, basis *dutyBookBasis) (productDutyCheck, error) {
+	return checkDutyControlAcceptance(ctx, tx, record, rule.ElectricalAcceptance, source, basis, "electrical", "electrical_safety")
+}
+func validateDutyElectrical(ctx context.Context, tx *sql.Tx, record deviceRecord, rule productDutyRule, source string, now time.Time) (*dutyBookBasis, error) {
+	return validateDutyControlAcceptance(ctx, tx, record, rule, rule.ElectricalAcceptance, source, now, "electrical", "electrical_safety", "other", "electrical")
 }

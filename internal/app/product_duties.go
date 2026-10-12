@@ -12,6 +12,7 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
+	ElectricalAcceptance  *dutyElectricalAcceptance  `json:"electrical_acceptance,omitempty"`
 	STKAcceptance         *dutySTKAcceptance         `json:"stk_acceptance,omitempty"`
 	MTKAcceptance         *dutyMTKAcceptance         `json:"mtk_acceptance,omitempty"`
 	BookAcceptance        *dutyBookAcceptance        `json:"book_acceptance,omitempty"`
@@ -42,6 +43,7 @@ type productDutyInput struct {
 	Note                  string            `json:"note"`
 }
 type productDutyEvent struct {
+	ElectricalBasis            *dutyBookBasis        `json:"electrical_basis,omitempty"`
 	STKBasis                   *dutyBookBasis        `json:"stk_basis,omitempty"`
 	MTKBasis                   *dutyBookBasis        `json:"mtk_basis,omitempty"`
 	BookBasis                  *dutyBookBasis        `json:"book_basis,omitempty"`
@@ -192,6 +194,22 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 			}
 		}
 	}
+	for _, rule := range last.Input.Rules {
+		if rule.Kind == "other" && rule.Applicability == "required" {
+			check, err := checkDutyElectrical(ctx, tx, record, rule, last.Input.DocumentID, last.ElectricalBasis)
+			if err != nil {
+				return result, err
+			}
+			result.Checks = append(result.Checks, check)
+			if check.Status == "blocked" {
+				for i := range result.Checks {
+					if result.Checks[i].Kind == "other" {
+						result.Checks[i].Status = "blocked"
+					}
+				}
+			}
+		}
+	}
 	result.Status = "reviewed"
 	result.Reasons = append(result.Reasons, "Anwendbarkeit und Nachweisreferenzen fachlich dokumentiert; Erfüllung der besonderen Pflichten und Einsatzfreigabe noch gesondert abzunehmen.")
 	return result, nil
@@ -317,6 +335,13 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			}
 			if stkBasis != nil {
 				event.STKBasis = stkBasis
+			}
+			electricalBasis, err := validateDutyElectrical(ctx, tx, record, rule, in.DocumentID, now)
+			if err != nil {
+				return nil, err
+			}
+			if electricalBasis != nil {
+				event.ElectricalBasis = electricalBasis
 			}
 			seen[rule.Kind] = true
 		}

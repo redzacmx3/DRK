@@ -539,3 +539,8 @@ Anlage-2-Pflichten unterstützen die ausdrückliche Teilabnahme einer konkreten 
 ### Fachliche STK-Teilabnahme (Schema 29)
 
 Anlage-1-Pflichten unterstützen die separate Teilabnahme einer konkreten STK mit Protokoll, Prüfumfang, Prüferbefähigung und Kennzeichnung. Veraltete Nachweise, Fristüberschreitung oder neuere Fehlprüfung verhindern positive Abnahme. [Bedienung und Grenzen](docs/produktpflichten.md). Gesamtfreigabe bleibt offen; keine neue Migration.
+
+
+### Fachliche Teilabnahme elektrischer Sicherheit (Schema 29)
+
+Weitere Produktpflichten unterstützen die separate Teilabnahme einer konkreten elektrischen Prüfung mit Protokoll und aktueller ausdrücklich bewerteter Kontrollregel. STK und MTK bleiben getrennt; Gesamtfreigabe offen. [Bedienung und Grenzen](docs/produktpflichten.md). Keine neue Migration.
