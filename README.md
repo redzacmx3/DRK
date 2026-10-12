@@ -544,3 +544,8 @@ Anlage-1-Pflichten unterstützen die separate Teilabnahme einer konkreten STK mi
 ### Fachliche Teilabnahme elektrischer Sicherheit (Schema 29)
 
 Weitere Produktpflichten unterstützen die separate Teilabnahme einer konkreten elektrischen Prüfung mit Protokoll und aktueller ausdrücklich bewerteter Kontrollregel. STK und MTK bleiben getrennt; Gesamtfreigabe offen. [Bedienung und Grenzen](docs/produktpflichten.md). Keine neue Migration.
+
+
+### Fachliche IT-Sicherheitsabnahme (Schema 29)
+
+Produktspezifische externe IT-Prüfungen können mit Softwarestand, Systemumfang, Protokoll, Befunden, Maßnahmenstatus und bestätigter Fälligkeit teilabgenommen werden. Offene Maßnahmen oder nicht bestandene Prüfungen verhindern positive Abnahme. [Bedienung und Grenzen](docs/produktpflichten.md). Keine automatische Softwareprüfung; Gesamtfreigabe offen, keine neue Migration.

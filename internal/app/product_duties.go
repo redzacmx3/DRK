@@ -12,6 +12,7 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
+	SecurityAcceptance    *dutySecurityAcceptance    `json:"security_acceptance,omitempty"`
 	ElectricalAcceptance  *dutyElectricalAcceptance  `json:"electrical_acceptance,omitempty"`
 	STKAcceptance         *dutySTKAcceptance         `json:"stk_acceptance,omitempty"`
 	MTKAcceptance         *dutyMTKAcceptance         `json:"mtk_acceptance,omitempty"`
@@ -43,6 +44,7 @@ type productDutyInput struct {
 	Note                  string            `json:"note"`
 }
 type productDutyEvent struct {
+	SecurityBasis              *dutyBookBasis        `json:"security_basis,omitempty"`
 	ElectricalBasis            *dutyBookBasis        `json:"electrical_basis,omitempty"`
 	STKBasis                   *dutyBookBasis        `json:"stk_basis,omitempty"`
 	MTKBasis                   *dutyBookBasis        `json:"mtk_basis,omitempty"`
@@ -210,6 +212,17 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 			}
 		}
 	}
+	for _, rule := range last.Input.Rules {
+		if rule.Kind == "it_security" && rule.Applicability == "required" {
+			for i := range result.Checks {
+				if result.Checks[i].Kind == "it_security" {
+					if err := checkDutySecurity(ctx, tx, record, rule, last.Input.DocumentID, last.SecurityBasis, now, &result.Checks[i]); err != nil {
+						return result, err
+					}
+				}
+			}
+		}
+	}
 	result.Status = "reviewed"
 	result.Reasons = append(result.Reasons, "Anwendbarkeit und Nachweisreferenzen fachlich dokumentiert; Erfüllung der besonderen Pflichten und Einsatzfreigabe noch gesondert abzunehmen.")
 	return result, nil
@@ -342,6 +355,13 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			}
 			if electricalBasis != nil {
 				event.ElectricalBasis = electricalBasis
+			}
+			securityBasis, err := validateDutySecurity(ctx, tx, record, rule, in.DocumentID, now)
+			if err != nil {
+				return nil, err
+			}
+			if securityBasis != nil {
+				event.SecurityBasis = securityBasis
 			}
 			seen[rule.Kind] = true
 		}
