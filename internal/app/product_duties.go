@@ -12,6 +12,7 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
+	MTKAcceptance         *dutyMTKAcceptance         `json:"mtk_acceptance,omitempty"`
 	BookAcceptance        *dutyBookAcceptance        `json:"book_acceptance,omitempty"`
 	MaintenanceAcceptance *dutyMaintenanceAcceptance `json:"maintenance_acceptance,omitempty"`
 	InstructionAcceptance *dutyInstructionAcceptance `json:"instruction_acceptance,omitempty"`
@@ -40,6 +41,7 @@ type productDutyInput struct {
 	Note                  string            `json:"note"`
 }
 type productDutyEvent struct {
+	MTKBasis                   *dutyBookBasis        `json:"mtk_basis,omitempty"`
 	BookBasis                  *dutyBookBasis        `json:"book_basis,omitempty"`
 	MaintenanceBasis           *dutyMaintenanceBasis `json:"maintenance_basis,omitempty"`
 	InstructionAcceptanceBasis *dutyInstructionBasis `json:"instruction_acceptance_basis,omitempty"`
@@ -149,6 +151,24 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 				if result.Checks[i].Kind == "device_book" {
 					if err := checkDutyBookAcceptance(ctx, tx, record, last.Input.DocumentID, rule, last.BookBasis, &result.Checks[i]); err != nil {
 						return result, err
+					}
+				}
+			}
+		}
+	}
+	for _, rule := range last.Input.Rules {
+		if rule.Kind == "annex_2" && rule.Applicability == "required" {
+			check, err := checkDutyMTK(ctx, tx, record, rule, last.Input.DocumentID, last.MTKBasis)
+			if err != nil {
+				return result, err
+			}
+			result.Checks = append(result.Checks, check)
+			for i := range result.Checks {
+				if result.Checks[i].Kind == "annex_2" {
+					result.Checks[i].Status = check.Status
+					result.Checks[i].Reason = "Anlage-2-MTK separat bewertet; produktspezifische Gesamtpflichten und Einsatzfreigabe bleiben offen."
+					if check.Status == "accepted" {
+						result.Checks[i].Status = "unknown"
 					}
 				}
 			}
@@ -266,6 +286,13 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			if bookBasis != nil {
 				event.BookBasis = bookBasis
 			}
+			mtkBasis, err := validateDutyMTK(ctx, tx, record, rule, in.DocumentID, now)
+			if err != nil {
+				return nil, err
+			}
+			if mtkBasis != nil {
+				event.MTKBasis = mtkBasis
+			}
 			seen[rule.Kind] = true
 		}
 		var status string
@@ -350,8 +377,14 @@ func productDutyRoutes(mux *http.ServeMux, a *authService) {
 				return
 			}
 		}
+		inspections, err := dutyInspectionChoices(r.Context(), tx, record.ID)
+		if err != nil {
+			sendStockError(w, err)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(struct {
+			Inspections  []dutyInspectionChoice `json:"inspections"`
 			BookSnapshot string                 `json:"book_snapshot,omitempty"`
 			LocationID   string                 `json:"location_id"`
 			Assessment   productDutyAssessment  `json:"assessment"`
@@ -360,7 +393,7 @@ func productDutyRoutes(mux *http.ServeMux, a *authService) {
 			Commissions  []dutyCommissionChoice `json:"commissions"`
 			Instructions []instructionProof     `json:"instructions"`
 			People       []dutyPersonChoice     `json:"people"`
-		}{bookSnapshot, record.LocationID, result, manager, record.Maintenances, commissions, record.Instructions, people})
+		}{inspections, bookSnapshot, record.LocationID, result, manager, record.Maintenances, commissions, record.Instructions, people})
 	})
 	mux.HandleFunc("POST /api/v1/devices/{id}/product-duties", func(w http.ResponseWriter, r *http.Request) {
 		actor, ok := writeAuthorized(a, w, r)

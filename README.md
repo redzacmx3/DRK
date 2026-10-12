@@ -529,3 +529,8 @@ Die Produktpflichtenbewertung unterstützt eine ausdrückliche Teilabnahme konkr
 ### Fachliche Buchabnahme (Schema 29)
 
 Medizinproduktebuch, Benutzerzugang und Aufbewahrung können ausdrücklich für einen gebundenen Aktenstand bewertet werden. Neue Geräte-, Dokument- oder Personennachweise erfordern erneute Prüfung; ein veralteter Browserstand wird abgewiesen. Gesamtfreigabe bleibt offen. [Bedienung und Grenzen](docs/produktpflichten.md). Keine neue Migration.
+
+
+### Fachliche MTK-Teilabnahme (Schema 29)
+
+Anlage-2-Pflichten unterstützen die ausdrückliche Teilabnahme einer konkreten MTK mit Protokoll, Prüfumfang, Prüferbefähigung und Kennzeichnung. Fristüberschreitung oder neuere Fehlprüfung verhindern positive Abnahme. [Bedienung und Grenzen](docs/produktpflichten.md). Gesamtfreigabe offen; keine neue Migration.

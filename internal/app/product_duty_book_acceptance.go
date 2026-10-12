@@ -87,9 +87,12 @@ func validateDutyBookAcceptance(ctx context.Context, tx *sql.Tx, rule productDut
 			return nil, adminInvalid("Abnahmekompetenz, Beauftragung, Nachweis, Begründung sowie Vollständigkeit, Benutzerzugang und Aufbewahrung vollständig belegen.")
 		}
 	}
+	return captureDutyDocumentSnapshot(ctx, tx, record, source, a.DocumentID, a.ExpectedSnapshot, "book")
+}
+func captureDutyDocumentSnapshot(ctx context.Context, tx *sql.Tx, record deviceRecord, source, document, expected, kind string) (*dutyBookBasis, error) {
 	basis := &dutyBookBasis{}
 	var status string
-	err = tx.QueryRowContext(ctx, `SELECT status,review_version,sha256 FROM effective_documents WHERE device_id=? AND id=?`, record.ID, a.DocumentID).Scan(&status, &basis.DocumentReviewVersion, &basis.DocumentSHA256)
+	err := tx.QueryRowContext(ctx, `SELECT status,review_version,sha256 FROM effective_documents WHERE device_id=? AND id=?`, record.ID, document).Scan(&status, &basis.DocumentReviewVersion, &basis.DocumentSHA256)
 	if err == sql.ErrNoRows {
 		return nil, scopeError()
 	}
@@ -97,7 +100,7 @@ func validateDutyBookAcceptance(ctx context.Context, tx *sql.Tx, rule productDut
 		return nil, err
 	}
 	if status != "released" {
-		return nil, conflict("book_proof_not_released", "Buchabnahmeunterlage nicht freigegeben.")
+		return nil, conflict(kind+"_proof_not_released", "Abnahmeunterlage nicht freigegeben.")
 	}
 	err = tx.QueryRowContext(ctx, `SELECT status,review_version FROM effective_documents WHERE device_id=? AND id=?`, record.ID, source).Scan(&status, &basis.SourceReviewVersion)
 	if err == sql.ErrNoRows {
@@ -113,8 +116,8 @@ func validateDutyBookAcceptance(ctx context.Context, tx *sql.Tx, rule productDut
 	if err != nil {
 		return nil, err
 	}
-	if a.ExpectedSnapshot == "" || a.ExpectedSnapshot != basis.Snapshot {
-		return nil, conflict("book_snapshot_changed", "Aktenstand seit Laden geändert; Buchabnahme erneut prüfen.")
+	if expected == "" || expected != basis.Snapshot {
+		return nil, conflict(kind+"_snapshot_changed", "Aktenstand seit Laden geändert; Teilabnahme erneut prüfen.")
 	}
 	return basis, nil
 }
