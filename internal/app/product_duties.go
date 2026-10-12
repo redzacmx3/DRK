@@ -12,6 +12,7 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
+	STKAcceptance         *dutySTKAcceptance         `json:"stk_acceptance,omitempty"`
 	MTKAcceptance         *dutyMTKAcceptance         `json:"mtk_acceptance,omitempty"`
 	BookAcceptance        *dutyBookAcceptance        `json:"book_acceptance,omitempty"`
 	MaintenanceAcceptance *dutyMaintenanceAcceptance `json:"maintenance_acceptance,omitempty"`
@@ -41,6 +42,7 @@ type productDutyInput struct {
 	Note                  string            `json:"note"`
 }
 type productDutyEvent struct {
+	STKBasis                   *dutyBookBasis        `json:"stk_basis,omitempty"`
 	MTKBasis                   *dutyBookBasis        `json:"mtk_basis,omitempty"`
 	BookBasis                  *dutyBookBasis        `json:"book_basis,omitempty"`
 	MaintenanceBasis           *dutyMaintenanceBasis `json:"maintenance_basis,omitempty"`
@@ -174,6 +176,22 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 			}
 		}
 	}
+	for _, rule := range last.Input.Rules {
+		if rule.Kind == "annex_1" && rule.Applicability == "required" {
+			check, err := checkDutySTK(ctx, tx, record, rule, last.Input.DocumentID, last.STKBasis)
+			if err != nil {
+				return result, err
+			}
+			result.Checks = append(result.Checks, check)
+			if check.Status == "blocked" {
+				for i := range result.Checks {
+					if result.Checks[i].Kind == "annex_1" {
+						result.Checks[i].Status = "blocked"
+					}
+				}
+			}
+		}
+	}
 	result.Status = "reviewed"
 	result.Reasons = append(result.Reasons, "Anwendbarkeit und Nachweisreferenzen fachlich dokumentiert; Erfüllung der besonderen Pflichten und Einsatzfreigabe noch gesondert abzunehmen.")
 	return result, nil
@@ -292,6 +310,13 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			}
 			if mtkBasis != nil {
 				event.MTKBasis = mtkBasis
+			}
+			stkBasis, err := validateDutySTK(ctx, tx, record, rule, in.DocumentID, now)
+			if err != nil {
+				return nil, err
+			}
+			if stkBasis != nil {
+				event.STKBasis = stkBasis
 			}
 			seen[rule.Kind] = true
 		}

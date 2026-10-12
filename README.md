@@ -534,3 +534,8 @@ Medizinproduktebuch, Benutzerzugang und Aufbewahrung können ausdrücklich für 
 ### Fachliche MTK-Teilabnahme (Schema 29)
 
 Anlage-2-Pflichten unterstützen die ausdrückliche Teilabnahme einer konkreten MTK mit Protokoll, Prüfumfang, Prüferbefähigung und Kennzeichnung. Fristüberschreitung oder neuere Fehlprüfung verhindern positive Abnahme. [Bedienung und Grenzen](docs/produktpflichten.md). Gesamtfreigabe offen; keine neue Migration.
+
+
+### Fachliche STK-Teilabnahme (Schema 29)
+
+Anlage-1-Pflichten unterstützen die separate Teilabnahme einer konkreten STK mit Protokoll, Prüfumfang, Prüferbefähigung und Kennzeichnung. Veraltete Nachweise, Fristüberschreitung oder neuere Fehlprüfung verhindern positive Abnahme. [Bedienung und Grenzen](docs/produktpflichten.md). Gesamtfreigabe bleibt offen; keine neue Migration.
