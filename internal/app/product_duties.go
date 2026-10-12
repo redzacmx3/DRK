@@ -12,6 +12,7 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
+	BookAcceptance        *dutyBookAcceptance        `json:"book_acceptance,omitempty"`
 	MaintenanceAcceptance *dutyMaintenanceAcceptance `json:"maintenance_acceptance,omitempty"`
 	InstructionAcceptance *dutyInstructionAcceptance `json:"instruction_acceptance,omitempty"`
 	FunctionCheck         *dutyFunctionProof         `json:"function_check,omitempty"`
@@ -39,6 +40,7 @@ type productDutyInput struct {
 	Note                  string            `json:"note"`
 }
 type productDutyEvent struct {
+	BookBasis                  *dutyBookBasis        `json:"book_basis,omitempty"`
 	MaintenanceBasis           *dutyMaintenanceBasis `json:"maintenance_basis,omitempty"`
 	InstructionAcceptanceBasis *dutyInstructionBasis `json:"instruction_acceptance_basis,omitempty"`
 	FunctionDocumentSHA256     string                `json:"function_document_sha256,omitempty"`
@@ -140,6 +142,17 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 	result.Checks, err = checkProductDutyProofs(ctx, tx, record, last.Input.Rules, last.FunctionDocumentSHA256, last.InstructionAcceptanceBasis, last.MaintenanceBasis)
 	if err != nil {
 		return result, err
+	}
+	for _, rule := range last.Input.Rules {
+		if rule.Kind == "device_book" && rule.Applicability == "required" {
+			for i := range result.Checks {
+				if result.Checks[i].Kind == "device_book" {
+					if err := checkDutyBookAcceptance(ctx, tx, record, last.Input.DocumentID, rule, last.BookBasis, &result.Checks[i]); err != nil {
+						return result, err
+					}
+				}
+			}
+		}
 	}
 	result.Status = "reviewed"
 	result.Reasons = append(result.Reasons, "Anwendbarkeit und Nachweisreferenzen fachlich dokumentiert; Erfüllung der besonderen Pflichten und Einsatzfreigabe noch gesondert abzunehmen.")
@@ -246,6 +259,13 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			if maintenanceBasis != nil {
 				event.MaintenanceBasis = maintenanceBasis
 			}
+			bookBasis, err := validateDutyBookAcceptance(ctx, tx, rule, record, in.DocumentID, now)
+			if err != nil {
+				return nil, err
+			}
+			if bookBasis != nil {
+				event.BookBasis = bookBasis
+			}
 			seen[rule.Kind] = true
 		}
 		var status string
@@ -322,8 +342,17 @@ func productDutyRoutes(mux *http.ServeMux, a *authService) {
 			sendStockError(w, err)
 			return
 		}
+		bookSnapshot := ""
+		if manager {
+			bookSnapshot, err = currentDutyBookSnapshot(r.Context(), tx, record)
+			if err != nil {
+				sendStockError(w, err)
+				return
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(struct {
+			BookSnapshot string                 `json:"book_snapshot,omitempty"`
 			LocationID   string                 `json:"location_id"`
 			Assessment   productDutyAssessment  `json:"assessment"`
 			Manager      bool                   `json:"manager"`
@@ -331,7 +360,7 @@ func productDutyRoutes(mux *http.ServeMux, a *authService) {
 			Commissions  []dutyCommissionChoice `json:"commissions"`
 			Instructions []instructionProof     `json:"instructions"`
 			People       []dutyPersonChoice     `json:"people"`
-		}{record.LocationID, result, manager, record.Maintenances, commissions, record.Instructions, people})
+		}{bookSnapshot, record.LocationID, result, manager, record.Maintenances, commissions, record.Instructions, people})
 	})
 	mux.HandleFunc("POST /api/v1/devices/{id}/product-duties", func(w http.ResponseWriter, r *http.Request) {
 		actor, ok := writeAuthorized(a, w, r)

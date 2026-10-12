@@ -524,3 +524,8 @@ Eigene personenbezogene Teilabnahmen verbinden die aktuellen Qualifikations-, Ei
 ### Fachliche Herstellerwartungsabnahme (Schema 29)
 
 Die Produktpflichtenbewertung unterstützt eine ausdrückliche Teilabnahme konkreter Herstellerwartungen einschließlich Intervall-, Umfangs- und Befähigungsnachweisen sowie bestätigter nächster Fälligkeit. Die Abnahme bindet die aktuellen Dokumentprüfstände; erneute Dokumentfreigabe reaktiviert sie nicht automatisch. Weitere Produktpflichten und Gesamtfreigabe bleiben offen. [Bedienung und Grenzen](docs/produktpflichten.md). Keine neue Datenbankmigration erforderlich.
+
+
+### Fachliche Buchabnahme (Schema 29)
+
+Medizinproduktebuch, Benutzerzugang und Aufbewahrung können ausdrücklich für einen gebundenen Aktenstand bewertet werden. Neue Geräte-, Dokument- oder Personennachweise erfordern erneute Prüfung; ein veralteter Browserstand wird abgewiesen. Gesamtfreigabe bleibt offen. [Bedienung und Grenzen](docs/produktpflichten.md). Keine neue Migration.

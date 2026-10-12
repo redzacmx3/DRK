@@ -104,3 +104,14 @@ API: Optionales `maintenance_acceptance` in der Regel `manufacturer_maintenance`
 
 
 Eine unabhängige Gerätesperre oder Außerbetriebnahme bleibt auch bei korrigierter oder veralteter Wartungszuordnung blockierend. Eine reine Richtigstellung ohne zusätzliche Sperre bleibt ungeklärt. Fehlende oder fremde Herstellerunterlagen werden als nicht zugänglich abgewiesen; dabei wird keine Bewertung gespeichert.
+
+
+## Medizinproduktebuch, Zugang und Aufbewahrung
+
+Eine erforderliche Buchpflicht kann ausdrücklich fachlich teilabgenommen oder abgelehnt werden. Erforderlich sind Abnahmedatum, Qualifikation / Beauftragung, Nachweis / Begründung sowie Referenzen zur Vollständigkeit der Pflichtinhalte, zum Benutzerzugang während der Arbeitszeit und zur Aufbewahrung mit Zuständigkeit. Eine eigene freigegebene Buchabnahmeunterlage derselben Geräteakte ist zu wählen. Die Anwendung bestätigt weder fachliche Vollständigkeit noch tatsächliche Zugangsmöglichkeiten oder die Einhaltung der Aufbewahrung automatisch. Der vorhandene Aktenexport ersetzt diese Bewertung nicht.
+
+Die Bewertung bindet Geräteereignisversion, aktuelle Dokumente mit Prüfsumme und Prüfversion sowie die aktuellen Versionen gerätespezifischer Personen-, Gebrauchsanweisungszugangs- und Endanwendernachweise an einen Schnappschuss. Neue Ereignisse oder Anhänge erfordern eine erneute Buchprüfung, auch wenn der Inhalt anschließend erneut freigegeben wird. Der Browser sendet den beim Laden erhaltenen `book_snapshot` als `expected_snapshot`; Änderungen seit dem Laden verursachen einen Konflikt ohne Speicherung. Historische Wiederholantworten bleiben identisch. Der Schnappschuss wird nur Geräteverantwortlichen zur Vorbereitung angeboten und enthält keine personenbezogenen Ereignisdetails. Eigene Pflichtbewertungshistorien sind nicht Teil dieses Schnappschusses; eine neue Pflichtbewertung ersetzt den bisherigen Bewertungsstand.
+
+Die Buchabnahme gilt nur während der Befristung der übergeordneten Produktpflichtenbewertung. Gerätesperren und Außerbetriebnahme verhindern keine organisatorische Buchprüfung; sie bleiben unabhängig wirksam. Eine neue Geräteänderung erfordert zunächst eine erneute Bewertung. Die Teilabnahme gibt das Gerät nicht frei und löst keine automatische Löschung nach Aufbewahrungsfrist aus.
+
+API: `book_acceptance` in der erforderlichen Regel `device_book`, mit `reviewed`, `decision` (`accepted` / `rejected`), `performed_on`, `document_id`, `expected_snapshot`, `qualification`, `assignment`, `evidence`, `note`, `completeness_evidence`, `access_evidence`, `retention_evidence`. Der Server speichert `book_basis` unveränderlich. Schema 29 bleibt bestehen; keine zusätzliche Migration.
