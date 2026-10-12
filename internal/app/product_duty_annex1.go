@@ -72,7 +72,7 @@ func validateAnnex1Reference(ctx context.Context, tx *sql.Tx, rule productDutyRu
 	if rule.CommissionVersion < 0 || rule.InstructionVersion < 0 {
 		return adminInvalid("Nachweisversionen dürfen nicht negativ sein.")
 	}
-	if rule.CommissionVersion == 0 && rule.InstructionVersion == 0 && rule.DesignatedUserID == "" && rule.DesignatedAssignment == "" {
+	if rule.CommissionVersion == 0 && rule.InstructionVersion == 0 && rule.DesignatedUserID == "" && rule.DesignatedAssignment == "" && rule.InstructionAcceptance == nil {
 		return nil
 	}
 	if rule.Kind != "annex_1" || rule.Applicability != "required" {
@@ -123,9 +123,10 @@ func correctedDutyEvent(record deviceRecord, version int) bool {
 	}
 	return false
 }
-func checkAnnex1Proofs(ctx context.Context, tx *sql.Tx, record deviceRecord, rule productDutyRule) ([]productDutyCheck, error) {
+func checkAnnex1Proofs(ctx context.Context, tx *sql.Tx, record deviceRecord, rule productDutyRule, basis *dutyInstructionBasis) ([]productDutyCheck, error) {
 	commission := productDutyCheck{Kind: "annex_1_commission", Status: "unknown", EventVersion: rule.CommissionVersion, Reason: "Kein konkreter Inbetriebnahmenachweis zugeordnet; besondere Funktionsprüfung am Betriebsort bleibt offen."}
 	instruction := productDutyCheck{Kind: "annex_1_instruction", Status: "unknown", EventVersion: rule.InstructionVersion, Reason: "Keine konkrete Einweisung und benannte Person ausdrücklich zugeordnet."}
+	var bindingVersion, documentReviewVersion int
 	if rule.CommissionVersion > 0 {
 		var exists bool
 		err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM device_control_events WHERE device_id=? AND version=? AND action='commission')`, record.ID, rule.CommissionVersion).Scan(&exists)
@@ -162,7 +163,7 @@ func checkAnnex1Proofs(ctx context.Context, tx *sql.Tx, record deviceRecord, rul
 					// Read only the latest bind/unbind needed for this organizational prerequisite.
 					// Never expose another person's qualification or private usage history here.
 					var payload string
-					err = tx.QueryRowContext(ctx, `SELECT payload_json FROM usage_events WHERE device_id=? AND subject_id=? AND action IN ('bind','unbind') ORDER BY version DESC LIMIT 1`, record.ID, rule.DesignatedUserID).Scan(&payload)
+					err = tx.QueryRowContext(ctx, `SELECT version,payload_json FROM usage_events WHERE device_id=? AND subject_id=? AND action IN ('bind','unbind') ORDER BY version DESC LIMIT 1`, record.ID, rule.DesignatedUserID).Scan(&bindingVersion, &payload)
 					if err != nil && err != sql.ErrNoRows {
 						return nil, err
 					}
@@ -181,7 +182,7 @@ func checkAnnex1Proofs(ctx context.Context, tx *sql.Tx, record deviceRecord, rul
 							instruction.Reason = "Geräteidentifikation seit der Einweisungszuordnung geändert."
 						} else {
 							var status, sha string
-							err = tx.QueryRowContext(ctx, `SELECT status,sha256 FROM effective_documents WHERE id=? AND device_id=?`, selected.DocumentID, record.ID).Scan(&status, &sha)
+							err = tx.QueryRowContext(ctx, `SELECT status,sha256,review_version FROM effective_documents WHERE id=? AND device_id=?`, selected.DocumentID, record.ID).Scan(&status, &sha, &documentReviewVersion)
 							if err != nil {
 								return nil, err
 							}
@@ -202,10 +203,37 @@ func checkAnnex1Proofs(ctx context.Context, tx *sql.Tx, record deviceRecord, rul
 		}
 	}
 	if len(record.ActiveBlocks) > 0 || record.Decommission != nil {
+		independentBlock := record.Decommission != nil
+		for _, block := range record.ActiveBlocks {
+			correctionBlock := false
+			for _, correction := range record.Corrections {
+				if correction.EventID == block.ID {
+					correctionBlock = true
+					break
+				}
+			}
+			if !correctionBlock {
+				independentBlock = true
+			}
+		}
 		for _, check := range []*productDutyCheck{&commission, &instruction} {
-			if check.Status == "record_found" {
+			if check.Status == "record_found" || check.Status == "unknown" && independentBlock {
 				check.Status = "blocked"
 				check.Reason = "Gerät aktuell gesperrt oder außer Betrieb; keine positive Nachweisvorprüfung."
+			}
+		}
+	}
+	if acceptance := rule.InstructionAcceptance; acceptance != nil && acceptance.Reviewed {
+		if acceptance.Decision == "rejected" {
+			instruction.Status = "blocked"
+			instruction.Reason = "Fachliche Abnahme der Einweisung der benannten Person ausdrücklich abgelehnt."
+		} else if acceptance.Decision == "accepted" && instruction.Status == "record_found" {
+			if basis == nil || basis.BindingVersion <= 0 || basis.BindingVersion != bindingVersion || basis.DocumentReviewVersion <= 0 || basis.DocumentReviewVersion != documentReviewVersion {
+				instruction.Status = "unknown"
+				instruction.Reason = "Kontozuordnung oder Unterlagenbewertung seit der Teilabnahme geändert; ausdrücklich neu abnehmen."
+			} else {
+				instruction.Status = "accepted"
+				instruction.Reason = "Einweisung der benannten Person ausdrücklich fachlich abgenommen; konkrete Einweisung, aktive Kontozuordnung und Unterlagenbindung aktuell. Endanwenderbewertung und Gesamtfreigabe bleiben offen."
 			}
 		}
 	}

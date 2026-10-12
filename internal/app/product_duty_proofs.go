@@ -27,7 +27,7 @@ func validateProductDutyReference(rule productDutyRule, record deviceRecord) err
 	}
 	return adminInvalid("Wartungsereignis aus derselben Geräteakte ausdrücklich auswählen; eine Reparatur ist kein Wartungsnachweis.")
 }
-func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord, rules []productDutyRule, functionSHA string) ([]productDutyCheck, error) {
+func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord, rules []productDutyRule, functionSHA string, instructionBasis *dutyInstructionBasis) ([]productDutyCheck, error) {
 	checks := make([]productDutyCheck, 0, len(rules))
 	for _, rule := range rules {
 		check := productDutyCheck{Kind: rule.Kind, Status: "unknown", EventVersion: rule.EventVersion, Reason: "Automatische Nachweisauflösung für diesen Pflichtbereich noch nicht umgesetzt; fachliche Abnahme offen."}
@@ -92,7 +92,7 @@ func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord
 			}
 		}
 		if rule.Kind == "annex_1" && rule.Applicability == "required" {
-			details, err := checkAnnex1Proofs(ctx, tx, record, rule)
+			details, err := checkAnnex1Proofs(ctx, tx, record, rule, instructionBasis)
 			if err != nil {
 				return nil, err
 			}

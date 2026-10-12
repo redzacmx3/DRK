@@ -12,16 +12,17 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
-	FunctionCheck        *dutyFunctionProof `json:"function_check,omitempty"`
-	CommissionVersion    int                `json:"commission_version,omitempty"`
-	InstructionVersion   int                `json:"instruction_version,omitempty"`
-	DesignatedUserID     string             `json:"designated_user_id,omitempty"`
-	DesignatedAssignment string             `json:"designated_assignment,omitempty"`
-	EventVersion         int                `json:"event_version,omitempty"`
-	Kind                 string             `json:"kind"`
-	Applicability        string             `json:"applicability"`
-	Reason               string             `json:"reason"`
-	Evidence             string             `json:"evidence"`
+	InstructionAcceptance *dutyInstructionAcceptance `json:"instruction_acceptance,omitempty"`
+	FunctionCheck         *dutyFunctionProof         `json:"function_check,omitempty"`
+	CommissionVersion     int                        `json:"commission_version,omitempty"`
+	InstructionVersion    int                        `json:"instruction_version,omitempty"`
+	DesignatedUserID      string                     `json:"designated_user_id,omitempty"`
+	DesignatedAssignment  string                     `json:"designated_assignment,omitempty"`
+	EventVersion          int                        `json:"event_version,omitempty"`
+	Kind                  string                     `json:"kind"`
+	Applicability         string                     `json:"applicability"`
+	Reason                string                     `json:"reason"`
+	Evidence              string                     `json:"evidence"`
 }
 type productDutyInput struct {
 	ExpectedVersion       int               `json:"expected_version"`
@@ -37,14 +38,15 @@ type productDutyInput struct {
 	Note                  string            `json:"note"`
 }
 type productDutyEvent struct {
-	FunctionDocumentSHA256 string           `json:"function_document_sha256,omitempty"`
-	ID                     string           `json:"id"`
-	Version                int              `json:"version"`
-	ActorID                string           `json:"actor_id"`
-	CreatedAt              string           `json:"created_at"`
-	Input                  productDutyInput `json:"input"`
-	Identity               string           `json:"identity_basis"`
-	DocumentSHA256         string           `json:"document_sha256,omitempty"`
+	InstructionAcceptanceBasis *dutyInstructionBasis `json:"instruction_acceptance_basis,omitempty"`
+	FunctionDocumentSHA256     string                `json:"function_document_sha256,omitempty"`
+	ID                         string                `json:"id"`
+	Version                    int                   `json:"version"`
+	ActorID                    string                `json:"actor_id"`
+	CreatedAt                  string                `json:"created_at"`
+	Input                      productDutyInput      `json:"input"`
+	Identity                   string                `json:"identity_basis"`
+	DocumentSHA256             string                `json:"document_sha256,omitempty"`
 }
 type productDutyAssessment struct {
 	Checks        []productDutyCheck `json:"checks,omitempty"`
@@ -133,7 +135,7 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 			return result, nil
 		}
 	}
-	result.Checks, err = checkProductDutyProofs(ctx, tx, record, last.Input.Rules, last.FunctionDocumentSHA256)
+	result.Checks, err = checkProductDutyProofs(ctx, tx, record, last.Input.Rules, last.FunctionDocumentSHA256, last.InstructionAcceptanceBasis)
 	if err != nil {
 		return result, err
 	}
@@ -227,6 +229,13 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			}
 			if sha != "" {
 				event.FunctionDocumentSHA256 = sha
+			}
+			basis, err := validateDutyInstructionAcceptance(ctx, tx, rule, record, now)
+			if err != nil {
+				return nil, err
+			}
+			if basis != nil {
+				event.InstructionAcceptanceBasis = basis
 			}
 			seen[rule.Kind] = true
 		}
