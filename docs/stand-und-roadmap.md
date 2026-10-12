@@ -1,6 +1,6 @@
 # Stand und Roadmap
 
-Aktueller Stand: Schema 28. Diese Seite fasst den heutigen Funktionsumfang zusammen; ältere Meilensteine sind in der [Entwicklungshistorie](entwicklungshistorie.md) dokumentiert. Der [Blueprint](blueprint-v2.md) bleibt die konzeptionelle Grundlage und ist keine Behauptung vollständig umgesetzter Funktionen.
+Aktueller Stand: Schema 29. Diese Seite fasst den heutigen Funktionsumfang zusammen; ältere Meilensteine sind in der [Entwicklungshistorie](entwicklungshistorie.md) dokumentiert. Der [Blueprint](blueprint-v2.md) bleibt die konzeptionelle Grundlage und ist keine Behauptung vollständig umgesetzter Funktionen.
 
 ## Vorhanden
 
@@ -10,7 +10,7 @@ Aktueller Stand: Schema 28. Diese Seite fasst den heutigen Funktionsumfang zusam
 | Verwaltung | Betreiber, Betriebsstätten, Lagerorte und Benutzer; separates Administratorrecht, Versionen und unveränderliche Änderungshistorie |
 | Rechte | Sitzungen, Origin/CSRF, Viewer/Helfer/Materialwart/Geräteverantwortlicher je Betriebsstätte |
 | Material | Eingang, Umlagerung, Entnahme, Gegenbuchung, Inventur, Chargen und Verfall, unveränderliches Journal |
-| Personenbewertung | Gerätespezifische Pflichten, konkrete Kontozuordnung von Einweisungen, befristete Qualifikations- und Gebrauchsanweisungszugangsnachweise, Widerrufe; Gesamtfreigabe weiter ungeklärt |
+| Personenbewertung | Gerätespezifische Pflichten, konkrete Kontozuordnung von Einweisungen, befristete Qualifikations- und Gebrauchsanweisungszugangsnachweise, eigene fachliche Endanwenderabnahme, Widerrufe; Gesamtfreigabe weiter ungeklärt |
 | Produktpflichten | Fachlich dokumentierte Anwendbarkeit von acht besonderen Pflichtbereichen, freigegebene Produktgrundlage, Befristung, Widerruf, ausdrückliche Wartungs-/Inbetriebnahme-/Einweisungsbindung, benannte Person mit fachlicher Einweisungsteilabnahme, besondere Funktionsprüfung mit Betriebsort, Prüfprotokoll und ausdrücklicher fachlicher Teilabnahme sowie aktuelle Nachweisvorprüfung im Archiv; Erfüllungsabnahme noch offen |
 | Geräte | Akten, Stammdaten, Inbetriebnahme, versionierte Fristen, Prüfungen, getrennte Sperren/Freigaben, Einweisung, Instandhaltung, Außerbetriebnahme, ergänzende Richtigstellung |
 | Rückrufe | Produkt-/Chargen-/Gerätebereiche, geprüfte Treffer-Vorschau, unabhängige Sperren, Standortmaßnahmen und kontrollierter Gesamtabschluss |
@@ -24,7 +24,7 @@ Aktueller Stand: Schema 28. Diese Seite fasst den heutigen Funktionsumfang zusam
 
 ## Nächste Umsetzung
 
-1. Vollständige Einsatzfreigabe: Weitere Pflichtnachweise strukturiert erfassen und die Endanwenderanforderungen sowie die Erfüllung der bereits strukturiert bewerteten Produktpflichten fachlich abnehmen; vorhandene Material-, Funktions-, Qualifikations- und Gebrauchsanweisungsnachweise abschließend zusammenführen. Gesamtfreigabe weiterhin `not_assessed`.
+1. Vollständige Einsatzfreigabe: Weitere Pflichtnachweise strukturiert erfassen und die Erfüllung der bereits strukturiert bewerteten Produktpflichten fachlich abnehmen; vorhandene Material-, Funktions-, Qualifikations- und Gebrauchsanweisungsnachweise abschließend zusammenführen. Gesamtfreigabe weiterhin `not_assessed`.
 2. Automatisierte verschlüsselte externe Backups, vollständige Wiederherstellung und Betriebsüberwachung.
 
 ## Weitere offene Funktionen
@@ -37,11 +37,9 @@ Echter ClamAV-Dienst mit aktuellen Signaturen und realer Scannerabnahme, NAS-/Do
 
 ## Zuletzt geprüft
 
-Schema 28, fachliche Teilabnahme der Einweisung der benannten Person: finale vollständige Go-Tests mit Race-Prüfung, `go vet`, Programm-/Docker-Build und Chromium-Prüfungen bestanden. Ausdrückliche Entscheidung und Bestätigung, Abnahmedatum, Abnahmekompetenz / Beauftragung sowie Nachweise zu Ausbilder, benannter Person und Einweisungsumfang geprüft. Der Server bindet die Teilabnahme an konkrete Kontozuordnung und Unterlagenprüfstand; Neuzuordnung oder erneute Unterlagenfreigabe reaktivieren die alte Abnahme nicht automatisch. Fehlende Angaben, fehlende aktuelle Bindung, Richtigstellung und unabhängige Sperren verhindern positive Teilabnahme. Ablehnung blockiert die Vorprüfung. Ausgewähltes Konto oder Ereignis ändern setzt die Browserbestätigung zurück; unbestätigte Antworten behalten ihre vollständige ursprüngliche Anfrage.
+Schema 29, eigenständige fachliche Endanwenderabnahme: vollständige Go-Tests mit Race-Prüfung, `go vet`, Programm-/Docker-Build und Chromium-Prüfungen bestanden. Prüfung konkreter Qualifikations-, Einweisungs- und Gebrauchsanweisungsnachweise, eigene Befristung, nachvollziehbare Nachweisschnappschüsse, ausdrückliche Entscheidung / Bestätigung, atomarer Rollback und unveränderliche Historie geprüft. Unveränderte tägliche Zugangsbestätigung erhält die Abnahme; Änderungen bei anderen Personen beeinflussen sie nicht. Widerrufe, neue erforderliche Qualifikations-/Einweisungsereignisse, geänderte Unterlagenprüfstände, Sprache / Version oder Standort verhindern automatische Reaktivierung. Gerätesperren gelten unabhängig. Eigene private Aktenbereiche und aktuelle Geräteverantwortlichenrechte vor Lese-/Wiederholantwort geprüft; Archive enthalten die erlaubte Historie und den aktuellen Status des exportierenden Kontos.
 
-Verifiziertes HTTPS bestätigte Abnahme, Ablehnung, bewusste Erneuerung, getrennten Unterlagenentzug, fehlende automatische Reaktivierung, Packlisten-Sperrkonsolidierung, Rechte vor alter Wiederholantwort, Neustartpersistenz und sichere Archive samt Manifestprüfsummen. Ein aufgedeckter Vorrangfehler bei Richtigstellung plus zusätzlicher Gerätesperre wurde behoben und durch einen Regressionstest abgesichert; die vollständige Race-Suite und der gesamte HTTPS-Ablauf wurden danach erneut bestanden. Eine zunächst zu breite Sperranpassung wurde anhand bestehender Tests auf die unabhängigen Sperren begrenzt; Richtigstellungsquarantäne und Nachweisunklarheit behalten ihre bisherigen getrennten Bedeutungen. Die finale Lese-Testhilfe wurde für `rules: null` in Widerrufen korrigiert und erneut bestanden. Das finale Image zeigt den aktuellen Bericht und Abnahmehistorie; Viewer erhalten keine Kontenauswahl.
-
-Neue lokale / Docker-Backups, Schema 28, SQLite-Integrität, Fremdschlüssel, unveränderte frühere Daten in 72 Tabellen und vollständige Testkontobereinigung bestätigt. Bei vollem Speicher nur wiederherstellbaren Buildcache entfernt; Images, Volumes und Sicherungen erhalten. Scannerkonfiguration leer, SMTP deaktiviert; ClamAV-Protokoll simuliert. Endanwenderanforderungen und weitere Produktpflichten bleiben offen; Gesamtfreigabe `not_assessed`.
+Lokale und Compose-Datenbanken nach neuen Sicherungen ausdrücklich und wiederholbar von 28 auf 29 migriert. Alte Daten in 72 Tabellen erhalten; drei neue Tabellen ergänzt. SQLite-Integrität, Fremdschlüssel und vollständige Testkontobereinigung bestätigt. Verifiziertes HTTPS prüfte Abnahme, Ablehnung / Widerruf, Qualifikationswiderruf / Erneuerung, getrennten Dokumententzug / erneute Freigabe, Gebrauchsanweisungszugangswiderruf / neue Bestätigung, Sperrkonsolidierung im Packbericht, Neustartpersistenz und exakte historische Wiederholantworten. Eigene / Geräteverantwortlichenarchive samt Manifestprüfsummen und private Bereichsgrenzen bestanden. Finale Leseprüfung bestätigte ausschließlich eigene Bewertung für Viewer, fremde Anfrage abgelehnt und aktuellen Browsercode. Die Testvorbereitung verwendete zunächst zu kurze Idempotenzschlüssel; korrigiert, anschließend gezielte und vollständige Suite bestanden. Scannerkonfiguration leer, SMTP deaktiviert; ClamAV-Protokoll simuliert. Besondere Produktpflichten und gesamte Einsatzfreigabe bleiben offen, `overall_readiness` weiterhin `not_assessed`.
 
 Rückrufbedienung und Berechtigungen: [Rückrufe](rueckrufe.md). Die Kombination aus Administratorrecht und Fachrolle erlaubt ausdrücklich globale Rückrufkoordination; Einzelmaßnahmen bleiben standortgebunden.
 
@@ -52,3 +50,5 @@ Dokumentprüfung: [Bedienung, Scannerkonfiguration und Grenzen](dokumentpruefung
 Gebrauchsanweisungszugang und gemeinsame Bewertung: [Bedienung und Grenzen](gebrauchsanweisungszugang.md).
 
 Besondere Produktpflichten: [Anwendbarkeit, Nachweise und Grenzen](produktpflichten.md).
+
+Endanwenderabnahme: [Bedienung, Bindung und private Aktenbereiche](endanwenderbewertung.md).

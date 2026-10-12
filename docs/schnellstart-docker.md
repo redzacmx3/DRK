@@ -68,7 +68,7 @@ Für reproduzierbare Updates den Commit-Tag statt `latest` verwenden. Bestehende
 
 ## Kontrollerinnerungen
 
-Der vorhandene Container erzeugt automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist optional per SMTP-Overlay verfügbar, siehe [SMTP-Anleitung](smtp-erinnerungen.md). Bestehende Datenbanken vor Update sichern und ausdrücklich auf Schema 28 migrieren; Volumes erhalten.
+Der vorhandene Container erzeugt automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist optional per SMTP-Overlay verfügbar, siehe [SMTP-Anleitung](smtp-erinnerungen.md). Bestehende Datenbanken vor Update sichern und ausdrücklich auf Schema 29 migrieren; Volumes erhalten.
 
 ## Organisatorische Verwaltung
 

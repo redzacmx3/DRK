@@ -37,6 +37,6 @@ Schreiben benötigt `device_manager` an der aktuellen Betriebsstätte des Gerät
 
 Nach unklarer Antwort identischen Inhalt mit demselben Schlüssel wiederholen; aktuelle Rechte werden vor Wiederholantworten geprüft. Nach Versionskonflikt neu laden und abgleichen. Entwürfe liegen nur im Tab-Arbeitsspeicher; nach Neuladen zuerst den tatsächlichen Stand prüfen. Bis zu 2000 Zugangsereignisse je Gerät; weitere Änderungen werden vollständig abgewiesen. Sicherungen umfassen unveränderliche Ereignisse, Outbox und Wiederholantworten.
 
-Vor Upgrade ein neues konsistentes Backup erzeugen und ausdrücklich auf Schema 28 migrieren. Bestehende Unterlagen, Bestände und physische Prüfnachweise bleiben erhalten. Reale Zugangsprüfung am Einsatzort und besondere Produktpflichten müssen vor produktiver Freigabe fachlich abgenommen werden.
+Vor Upgrade ein neues konsistentes Backup erzeugen und ausdrücklich auf Schema 29 migrieren. Bestehende Unterlagen, Bestände und physische Prüfnachweise bleiben erhalten. Reale Zugangsprüfung am Einsatzort und besondere Produktpflichten müssen vor produktiver Freigabe fachlich abgenommen werden.
 
 Die Anwendbarkeit besonderer Produktpflichten und Nachweisreferenzen kann inzwischen [strukturiert dokumentiert](produktpflichten.md) werden. Ihre abschließende Erfüllungsabnahme steht weiter aus.

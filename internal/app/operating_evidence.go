@@ -104,6 +104,22 @@ func consolidateEvidence(result packAssessment) operatingEvidence {
 	add("device_controls", technical, "Inbetriebnahme, bestätigte Kontrollpflichten, Fristen, Sperren und offene Meldebewertungen.")
 	add("user_qualification", usage, "Ausdrückliche Einweisungszuordnung und gültige Qualifikationsnachweise des angemeldeten Kontos.")
 	add("manual_access", manual, "Befristeter Zugang zur passenden freigegebenen Gebrauchsanweisung für diese Person am Geräteort.")
+	endUser := "unknown"
+	if len(result.Devices) > 0 {
+		endUser = "met"
+	}
+	for _, device := range result.Devices {
+		status := "unknown"
+		if device.EndUser != nil {
+			if device.EndUser.Status == "accepted" {
+				status = "met"
+			} else if device.EndUser.Status == "blocked" {
+				status = "blocked"
+			}
+		}
+		merge(&endUser, status)
+	}
+	add("end_user_acceptance", endUser, "Ausdrückliche fachliche Teilabnahme der aktuellen personenbezogenen Endanwendernachweise; keine gesamte Einsatzfreigabe.")
 	duties := "unknown"
 	for _, device := range result.Devices {
 		if device.ProductDuties != nil {

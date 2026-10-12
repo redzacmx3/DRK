@@ -37,7 +37,7 @@ Herstellerwartung kann inzwischen ausdrücklich mit einem vorhandenen Wartungser
 
 Origin, CSRF und gemeinsamer Idempotenzschlüsselraum gelten wie für andere Änderungen. Höchstens 2000 Ereignisse pro Gerät, 16 KiB pro Änderungsanfrage. Ereignis, Outbox und Wiederholantwort werden atomar gespeichert. Der Geräteaktenexport enthält die Ereignisse sowie den aktuellen Vorprüfungsstand in JSON und lesbarem HTML; die bestehenden Exportgrenzen gelten weiterhin, es gibt keine Teilarchive.
 
-Vor Update ein neues konsistentes Backup erzeugen und ausdrücklich auf Schema 28 migrieren. Datenvolumes, frühere Nachweise und Anhänge erhalten. Die Freigabe von Produktunterlagen benötigt weiterhin die dokumentierte Scannerprüfung und eine getrennte fachliche Dokumentfreigabe. Reale Produktklassifizierung, Prüferqualifikation, Auftrag und Pilotabnahme sind betrieblich zu bestätigen.
+Vor Update ein neues konsistentes Backup erzeugen und ausdrücklich auf Schema 29 migrieren. Datenvolumes, frühere Nachweise und Anhänge erhalten. Die Freigabe von Produktunterlagen benötigt weiterhin die dokumentierte Scannerprüfung und eine getrennte fachliche Dokumentfreigabe. Reale Produktklassifizierung, Prüferqualifikation, Auftrag und Pilotabnahme sind betrieblich zu bestätigen.
 
 ## Wartungsnachweise vorprüfen
 
@@ -47,7 +47,7 @@ Bei erforderlicher Herstellerwartung in der Bewertung ein konkretes Wartungserei
 
 **record_found ist keine Abnahme.** Herstellerintervall, passende Maßnahmen und Umfang, Prüferbefähigung und tatsächliche Erfüllung sind anschließend fachlich zu prüfen. Es wird keine Wartungsfrist aus einem Freitextdatum erfunden. Alte Ereignisse werden nicht automatisch dem jüngsten Nachweis zugeordnet. Ein neues `completed`-Ereignis hebt bestehende Gerätesperren nicht auf. Eine Richtigstellung verhindert die positive Auflösung des betroffenen Ursprungsnachweises; ein neuer passender Nachweis und eine neue bewusste Zuordnung sind erforderlich.
 
-Diese Ergänzung bleibt auf Schema 28 und benötigt keine neue Migration. Vor dem Programmupdate trotzdem ein neues Backup erzeugen; vorhandene Ereignisse und exakte Wiederholantworten bleiben erhalten.
+Diese Ergänzung bleibt auf Schema 29 und benötigt keine neue Migration. Vor dem Programmupdate trotzdem ein neues Backup erzeugen; vorhandene Ereignisse und exakte Wiederholantworten bleiben erhalten.
 
 ## Anlage 1: Inbetriebnahme und Einweisung verknüpfen
 
@@ -59,7 +59,7 @@ API-Felder im erforderlichen `annex_1`-Eintrag: optionale positive `commission_v
 
 Die Vorprüfung enthält separate `annex_1_commission`- und `annex_1_instruction`-Zeilen. **record_found** heißt nur, dass der jeweilige Nachweis einschließlich der erforderlichen aktuellen Kontozuordnung beziehungsweise Unterlage aufgelöst ist. Der Inbetriebnahmenachweis ersetzt keine besondere Funktionsprüfung am Betriebsort. Die fachliche Eignung der Einweisung, die tatsächliche Befähigung und Benennung sowie die Einweisung der Endanwender sind gesondert abzunehmen. Der Hauptbereich `annex_1` bleibt deshalb ungeklärt, solange diese Abnahme fehlt; blockierte Teilnachweise blockieren ihn. Auch vollständig aufgelöste Ereignisse erzeugen keine Gesamtfreigabe.
 
-Die Ergänzung bleibt auf Schema 28. Vor Update neue Sicherung anlegen; frühere Bewertungen, Ereignisse und Wiederholantworten erhalten.
+Die Ergänzung bleibt auf Schema 29. Vor Update neue Sicherung anlegen; frühere Bewertungen, Ereignisse und Wiederholantworten erhalten.
 
 ## Besondere Funktionsprüfung am Betriebsort
 

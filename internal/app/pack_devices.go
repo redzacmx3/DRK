@@ -18,6 +18,7 @@ type packDevice struct {
 	Accessories []packAccessory `json:"accessories"`
 }
 type deviceAssessment struct {
+	EndUser       *endUserAssessment     `json:"end_user_acceptance,omitempty"`
 	ProductDuties *productDutyAssessment `json:"product_duties,omitempty"`
 	ManualAccess  *manualAccessSummary   `json:"manual_access,omitempty"`
 	UserUsage     *usageSummary          `json:"user_usage,omitempty"`
@@ -269,6 +270,12 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 		if err != nil {
 			return result, err
 		}
+		endUser, err := assessEndUser(ctx, tx, user, user, result.Devices[i].Device, now)
+		if err != nil {
+			return result, err
+		}
+		endUser.Events = nil
+		result.Devices[i].EndUser = &endUser
 		// History is available in the dedicated endpoint and archive, not each pack response.
 		duties.Events = nil
 		result.Devices[i].ProductDuties = &duties
