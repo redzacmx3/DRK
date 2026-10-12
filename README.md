@@ -519,3 +519,8 @@ Besondere Funktionsprüfungen am Betriebsort können für erforderliche Anlage-1
 ## Fachliche Endanwenderbewertung (Schema 29)
 
 Eigene personenbezogene Teilabnahmen verbinden die aktuellen Qualifikations-, Einweisungs- und Gebrauchsanweisungsnachweise. Unveränderte tägliche Zugangsbestätigungen erhalten die fachliche Abnahme; Widerrufe und relevante Nachweisänderungen verlangen eine neue ausdrückliche Bewertung. Private Bereiche, unveränderliche Nachweisschnappschüsse, sichere Wiederholantworten und aktuelle Packlisten-/Archivberichte sind integriert. Gesamtfreigabe weiterhin offen. Bestehende Datenbank vor Update sichern und ausdrücklich migrieren. Siehe [Bedienung und Grenzen](docs/endanwenderbewertung.md).
+
+
+### Fachliche Herstellerwartungsabnahme (Schema 29)
+
+Die Produktpflichtenbewertung unterstützt eine ausdrückliche Teilabnahme konkreter Herstellerwartungen einschließlich Intervall-, Umfangs- und Befähigungsnachweisen sowie bestätigter nächster Fälligkeit. Die Abnahme bindet die aktuellen Dokumentprüfstände; erneute Dokumentfreigabe reaktiviert sie nicht automatisch. Weitere Produktpflichten und Gesamtfreigabe bleiben offen. [Bedienung und Grenzen](docs/produktpflichten.md). Keine neue Datenbankmigration erforderlich.

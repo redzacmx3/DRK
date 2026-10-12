@@ -27,7 +27,7 @@ func validateProductDutyReference(rule productDutyRule, record deviceRecord) err
 	}
 	return adminInvalid("Wartungsereignis aus derselben Geräteakte ausdrücklich auswählen; eine Reparatur ist kein Wartungsnachweis.")
 }
-func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord, rules []productDutyRule, functionSHA string, instructionBasis *dutyInstructionBasis) ([]productDutyCheck, error) {
+func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord, rules []productDutyRule, functionSHA string, instructionBasis *dutyInstructionBasis, maintenanceBases ...*dutyMaintenanceBasis) ([]productDutyCheck, error) {
 	checks := make([]productDutyCheck, 0, len(rules))
 	for _, rule := range rules {
 		check := productDutyCheck{Kind: rule.Kind, Status: "unknown", EventVersion: rule.EventVersion, Reason: "Automatische Nachweisauflösung für diesen Pflichtbereich noch nicht umgesetzt; fachliche Abnahme offen."}
@@ -63,7 +63,7 @@ func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord
 						check.Reason = "Neuere Wartung vorhanden; Zuordnung neu prüfen."
 					}
 					for _, correction := range record.Corrections {
-						if correction.Target.Version == selected.Version {
+						if correction.Target.Version == selected.Version && check.Status != "blocked" {
 							check.Status = "unknown"
 							check.Reason = "Zugeordneter Wartungsnachweis wurde richtiggestellt; fachlich abgleichen und neuen Nachweis erfassen."
 						}
@@ -89,6 +89,15 @@ func checkProductDutyProofs(ctx context.Context, tx *sql.Tx, record deviceRecord
 						}
 					}
 				}
+			}
+		}
+		if rule.MaintenanceAcceptance != nil {
+			var basis *dutyMaintenanceBasis
+			if len(maintenanceBases) > 0 {
+				basis = maintenanceBases[0]
+			}
+			if err := applyDutyMaintenanceAcceptance(ctx, tx, record, rule, basis, &check); err != nil {
+				return nil, err
 			}
 		}
 		if rule.Kind == "annex_1" && rule.Applicability == "required" {
