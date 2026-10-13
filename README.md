@@ -60,7 +60,7 @@ bin/inventory healthcheck --ca var/tls/cert.pem
 
 Den Dienst im lokalen Browser mit Hostnamen `localhost` und Port `8080` über HTTPS verwenden. Der exakte Browser-Ursprung muss `--origin` entsprechen (Standard: `https://localhost:8080`). Ein anderer Port verlangt einen passenden Origin-Parameter.
 
-`backup` erstellt mit `VACUUM INTO` einen konsistenten SQLite-Snapshot, auch bei WAL. Ein neues Ziel wählen und seine Integrität prüfen. Das ist aktuell eine Datenbanksicherung; koordinierte Dokumentenarchive, verschlüsselte externe Sicherungen und produktive Restore-Abnahme sind noch offen. Niemals nur die laufende `.db`-Datei kopieren.
+`backup` erstellt mit `VACUUM INTO` einen konsistenten SQLite-Snapshot, auch bei WAL. Ein neues Ziel wählen und seine Integrität prüfen. Dokumentinhalte sind in der Datenbank enthalten. Für verschlüsselte externe Sicherungen und isolierte Rücksicherung gibt es den [Restic-Job](docs/verschluesselte-backups.md); die produktive Restore-Abnahme bleibt offen. Niemals nur die laufende `.db`-Datei kopieren.
 
 ## Konten und Bereiche
 

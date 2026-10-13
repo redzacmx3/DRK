@@ -20,12 +20,12 @@ Aktueller Stand: Schema 30. Diese Seite fasst den heutigen Funktionsumfang zusam
 | Scanner | Interne Codes, GTIN/PZN/REF, begrenzte GS1-Auswertung; optionale native Browserkamera |
 | Dokumente/Export | Quarantäneanhänge, optionale ClamAV-Prüfung, getrennte Freigabe/Widerruf und Prüfhistorie, CSV-Übersicht, vollständige Geräteaktenarchive mit Prüfmanifest |
 | Erinnerungen | Arbeitsübersicht, persistente Kontrollerinnerungen, optionaler TLS-SMTP-Transport mit Versuchshistorie und Unsicherheitsbehandlung |
-| Sicherung | Konsistenter SQLite-Snapshot einschließlich Anhängen; synthetische Integritäts-/Restore-Prüfungen |
+| Sicherung | Konsistenter SQLite-Snapshot einschließlich Anhängen; Restic-Job für verschlüsselte externe Sicherung und isolierte, manifest-/integritätsgeprüfte Wiederherstellung |
 
 ## Nächste Umsetzung
 
 1. Vollständige Einsatzfreigabe: Weitere Pflichtnachweise strukturiert erfassen und die Erfüllung der bereits strukturiert bewerteten Produktpflichten fachlich abnehmen; vorhandene Material-, Funktions-, Qualifikations- und Gebrauchsanweisungsnachweise abschließend zusammenführen. Gesamtfreigabe weiterhin `not_assessed`.
-2. Automatisierte verschlüsselte externe Backups, vollständige Wiederherstellung und Betriebsüberwachung.
+2. Restic-Sicherungsjob auf NAS / externem Speicher einrichten, vollständigen Wiederanlauf praktisch abnehmen und Betriebsüberwachung ergänzen. Verschlüsselte Sicherung und isolierte Rücksicherung sind als ausführbare Host-Jobs vorhanden.
 
 ## Weitere offene Funktionen
 
@@ -54,3 +54,7 @@ Endanwenderabnahme: [Bedienung, Bindung und private Aktenbereiche](endanwenderbe
 
 
 Aufbereitungszyklen: [Bedienung, Freigabebindung und Upgrade auf Schema 30](aufbereitungszyklen.md).
+
+Verschlüsselte Backups: [Einrichtung, Zeitplanung und isolierte Wiederherstellung](verschluesselte-backups.md).
+
+Restic-Ergänzung: Echte verschlüsselte Sicherung / isolierte Rücksicherung einer Datenbankkopie mit bestätigten WAL-Daten geprüft; alle Tabellen und BLOBs verglichen. Vorhandenes Ziel, fehlende Quelle, inkonsistentes Manifest und falsches Passwort verweigert; vollständige Repository-Datenprüfung bestanden. Keine Änderung der aktiven Datenbank, des Schemastands oder der laufenden Anwendung. Externes Speicherziel, NAS-Zeitplanung und vollständiger Wiederanlauf bleiben praktisch abzunehmen.
