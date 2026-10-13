@@ -102,7 +102,7 @@ func consolidateEvidence(result packAssessment) operatingEvidence {
 		merge(&manual, status)
 	}
 	add("device_controls", technical, "Inbetriebnahme, bestätigte Kontrollpflichten, Fristen, Sperren und offene Meldebewertungen.")
-	add("user_qualification", usage, "Ausdrückliche Einweisungszuordnung und gültige Qualifikationsnachweise des angemeldeten Kontos.")
+	add("user_qualification", usage, "Ausdrückliche Einweisungszuordnung und gültige Qualifikationsnachweise der konkret bewerteten Person.")
 	add("manual_access", manual, "Befristeter Zugang zur passenden freigegebenen Gebrauchsanweisung für diese Person am Geräteort.")
 	endUser := "unknown"
 	if len(result.Devices) > 0 {

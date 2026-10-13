@@ -29,16 +29,17 @@ type deviceAssessment struct {
 	Reasons        []string                  `json:"reasons"`
 }
 type packAssessment struct {
-	Evidence operatingEvidence  `json:"operating_evidence"`
-	Basis    string             `json:"device_basis_hash"`
-	Check    *deviceCheckProof  `json:"last_device_check"`
-	Scope    string             `json:"scope"`
-	Status   string             `json:"status"`
-	Overall  string             `json:"overall_readiness"`
-	AsOf     string             `json:"data_as_of"`
-	Material materialReadiness  `json:"material"`
-	Devices  []deviceAssessment `json:"devices"`
-	Reasons  []string           `json:"reasons"`
+	Release  *packReleaseAssessment `json:"release,omitempty"`
+	Evidence operatingEvidence      `json:"operating_evidence"`
+	Basis    string                 `json:"device_basis_hash"`
+	Check    *deviceCheckProof      `json:"last_device_check"`
+	Scope    string                 `json:"scope"`
+	Status   string                 `json:"status"`
+	Overall  string                 `json:"overall_readiness"`
+	AsOf     string                 `json:"data_as_of"`
+	Material materialReadiness      `json:"material"`
+	Devices  []deviceAssessment     `json:"devices"`
+	Reasons  []string               `json:"reasons"`
 }
 
 func validatePackDevices(input *publishPackRequest) error {
@@ -108,12 +109,12 @@ func loadPackDevices(ctx context.Context, tx *sql.Tx, id string) ([]packDevice, 
 	}
 	return devices, rows.Err()
 }
-func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now time.Time) (packAssessment, error) {
+func assessPackFor(ctx context.Context, tx *sql.Tx, user, subject string, p packVersion, now time.Time) (packAssessment, error) {
 	material, _, err := calculateMaterial(ctx, tx, p, now)
 	if err != nil {
 		return packAssessment{}, err
 	}
-	result := packAssessment{Scope: "material_and_devices", Status: "needs_device_check", Overall: "not_assessed", AsOf: now.UTC().Format(time.RFC3339Nano), Material: material, Devices: []deviceAssessment{}, Reasons: []string{"Vollständige Einsatzfreigabe einschließlich Nutzerqualifikation noch nicht bewertet."}}
+	result := packAssessment{Scope: "material_and_devices", Status: "needs_device_check", Overall: "not_assessed", AsOf: now.UTC().Format(time.RFC3339Nano), Material: material, Devices: []deviceAssessment{}, Reasons: []string{"Einsatzvoraussetzungen werden vorgeprüft; betriebliche Freigabe gesondert dokumentieren."}}
 	if material.Status == "shortfall" || material.Status == "physical_failed" {
 		result.Status = "blocked"
 	}
@@ -174,7 +175,6 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 				assessed.Reasons = append(assessed.Reasons, "Aktive Sperre: "+block.Reason)
 			}
 		}
-		assessed.Reasons = append(assessed.Reasons, "Einweisungspflicht und konkrete Nutzerqualifikation noch nicht vollständig bewertet.")
 		for _, instruction := range record.Instructions {
 			status, err := currentDocumentStatus(ctx, tx, instruction.DocumentID, record.ID)
 			if err != nil {
@@ -259,11 +259,11 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 		}
 	}
 	for i := range result.Devices {
-		assessment, err := assessUsage(ctx, tx, user, user, result.Devices[i].Device, now)
+		assessment, err := assessUsage(ctx, tx, user, subject, result.Devices[i].Device, now)
 		if err != nil {
 			return result, err
 		}
-		access, err := assessManualAccess(ctx, tx, user, user, result.Devices[i].Device, now)
+		access, err := assessManualAccess(ctx, tx, user, subject, result.Devices[i].Device, now)
 		if err != nil {
 			return result, err
 		}
@@ -271,9 +271,12 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 		if err != nil {
 			return result, err
 		}
-		endUser, err := assessEndUser(ctx, tx, user, user, result.Devices[i].Device, now)
+		endUser, err := assessEndUser(ctx, tx, user, subject, result.Devices[i].Device, now)
 		if err != nil {
 			return result, err
+		}
+		if assessment.Status != "recorded_requirements_met" || access.Status != "confirmed" || endUser.Status != "accepted" {
+			result.Devices[i].Reasons = append(result.Devices[i].Reasons, "Personenbezogene Einweisung, Qualifikation oder Endanwenderabnahme noch nicht vollständig aktuell.")
 		}
 		endUser.Events = nil
 		result.Devices[i].EndUser = &endUser
@@ -305,6 +308,24 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 		result.Status = "obsolete"
 	}
 	result.Evidence = consolidateEvidence(result)
+	return result, nil
+}
+func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now time.Time) (packAssessment, error) {
+	result, err := assessPackFor(ctx, tx, user, user, p, now)
+	if err != nil {
+		return result, err
+	}
+	release, err := assessPackReleaseWith(ctx, tx, user, p, result, now)
+	if err != nil {
+		return result, err
+	}
+	release.Events = nil
+	release.Basis = ""
+	result.Release = &release
+	result.Overall = release.Overall
+	if release.Status == "released" {
+		result.Reasons[0] = "Betriebliche Einsatzfreigabe für das angemeldete Konto und dokumentierten Einsatzumfang aktuell."
+	}
 	return result, nil
 }
 func packAssessmentRoutes(mux *http.ServeMux, a *authService) {

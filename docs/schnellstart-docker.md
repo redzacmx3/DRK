@@ -68,10 +68,10 @@ Für reproduzierbare Updates den Commit-Tag statt `latest` verwenden. Bestehende
 
 ## Kontrollerinnerungen
 
-Der vorhandene Container erzeugt automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist optional per SMTP-Overlay verfügbar, siehe [SMTP-Anleitung](smtp-erinnerungen.md). Bestehende Datenbanken vor Update sichern und ausdrücklich auf Schema 31 migrieren; Volumes erhalten.
+Der vorhandene Container erzeugt automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist optional per SMTP-Overlay verfügbar, siehe [SMTP-Anleitung](smtp-erinnerungen.md). Bestehende Datenbanken vor Update sichern und ausdrücklich auf Schema 32 migrieren; Volumes erhalten.
 
 ## Organisatorische Verwaltung
 
 Betreiber, Betriebsstätten, Lagerorte und Benutzer lassen sich jetzt mit einem eigenen Administratorkonto über die Oberfläche einrichten. Für eine leere Installation ist `seed-demo` nicht erforderlich. Konto ohne automatische Fachrechte ausdrücklich lokal anlegen, siehe [Verwaltung](administration.md). Fachrechte je Betriebsstätte anschließend bewusst vergeben.
 
-Aktueller Schemastand 31: [Sicherung und ausdrückliche Migration](erfuellungsabnahme.md#upgrade-auf-schema-31). Neue Installationen werden direkt initialisiert.
+Aktueller Schemastand 32: [Sicherung und ausdrückliche Migration](einsatzfreigabe.md#upgrade-auf-schema-32). Neue Installationen werden direkt initialisiert.

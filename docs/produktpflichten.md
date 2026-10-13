@@ -1,6 +1,6 @@
 # Besondere Produktpflichten (Schema 28)
 
-Aktueller Betriebsstand: Schema 31. Frühere Schemaangaben bei einzelnen Modulergänzungen beschreiben deren Einführungsstand. Für bestehende Installationen gelten die aktuellen [Upgrade-Schritte](erfuellungsabnahme.md#upgrade-auf-schema-31).
+Aktueller Betriebsstand: Schema 32. Frühere Schemaangaben bei einzelnen Modulergänzungen beschreiben deren Einführungsstand. Für bestehende Installationen gelten die aktuellen [Upgrade-Schritte](einsatzfreigabe.md#upgrade-auf-schema-32).
 
 Die neue Bewertung dokumentiert pro Gerät, welche besonderen Pflichten anwendbar sind und auf welche Nachweise sich die fachliche Prüfung bezieht. Eine Produktklassifizierung wird niemals aus Namen, Modell, Berufsbezeichnung oder Benutzerrolle abgeleitet. Die Erfüllung der Pflichten und die vollständige Einsatzfreigabe bleiben gesondert abzunehmen.
 
@@ -187,3 +187,5 @@ Erforderliche `other`-Regeln unterstützen zusätzlich `other_acceptance` mit vo
 ## Separate fachliche Erfüllungsabnahme (Schema 31)
 
 Die acht Pflichtbereiche können nun gesondert auf Grundlage ihrer aktuellen Teilnachweise und ausdrücklich bestätigter vollständiger Bereiche fachlich abgenommen, abgelehnt oder widerrufen werden. Diese Abnahme hat eine eigene unveränderliche Historie und Geräteakten-/Packlistenbewertung; Anwendbarkeit und Teilabnahmen bleiben getrennte Ausgangsnachweise. Aktuelle Erfüllung kann die Teilkomponente `product_duties` erfüllen, die gesamte Einsatzfreigabe bleibt offen. [Bedienung und Upgrade](erfuellungsabnahme.md).
+
+Die Erfüllungsabnahme ist seit Schema 32 eine Teilvoraussetzung der [personenbezogenen Packlisten-Einsatzfreigabe](einsatzfreigabe.md); eigenständige Geräte-/Produktbewertungen bleiben gesondert.
