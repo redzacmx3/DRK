@@ -177,3 +177,8 @@ Die Anwendung bewertet die Validierung nicht technisch selbst und ersetzt kein A
 Aktenstand und Dokumentprüfversionen werden gebunden. Änderungen am Gerät und an maßgeblichen Prozessunterlagen erfordern erneute Bewertung; zusätzliche Zyklusunterlagen verwerfen eine unveränderte Prozesseignung nicht. Veralteter Browserstand wird ohne Speicherung abgewiesen; erneute Dokumentfreigabe reaktiviert keine alte Teilabnahme. Externe Prozess-/Parameter-/Validierungsänderungen müssen organisatorisch als neue Bewertung oder Geräteänderung erfasst werden. Die technische Befristung der übergeordneten Pflichtbewertung gilt weiterhin. Gesamtfreigabe bleibt offen.
 
 API: `reprocessing_acceptance` in erforderlicher Regel `reprocessing`, mit `reviewed`, `decision`, `performed_on`, `process_description`, `process_version`, `manufacturer_evidence`, `classification_evidence`, `validation_evidence`, `executor_evidence`, `release_procedure_evidence`, `storage_evidence`, ausdrücklich booleschen `requirements_met` und `process_validated`, `document_id`, `expected_snapshot`, `qualification`, `assignment`, `evidence`, `note`. Servernachweis `reprocessing_basis`; Detailstatus `reprocessing_process`. Nach Prozess-/Versions-/Dokumentauswahländerungen ist erneut zu bestätigen. Datum UTC. Schema 29 unverändert, keine neue Migration.
+
+
+## Weitere produktspezifische Einzelpflichten
+
+Erforderliche `other`-Regeln unterstützen zusätzlich `other_acceptance` mit vollständig bewertetem Umfang und bis zu zwölf ausdrücklich geprüften Einzelpflichten. Elektrische Sicherheitsabnahme und Gesamtfreigabe bleiben getrennt. Bedienung, API und Bindungsregeln: [Weitere Produktpflichten](weitere-produktpflichten.md). Schema 30 unverändert.

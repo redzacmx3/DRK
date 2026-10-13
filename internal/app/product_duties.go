@@ -12,6 +12,7 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
+	OtherAcceptance        *dutyOtherAcceptance        `json:"other_acceptance,omitempty"`
 	ReprocessingAcceptance *dutyReprocessingAcceptance `json:"reprocessing_acceptance,omitempty"`
 	UserGroupAcceptance    *dutyUserGroupAcceptance    `json:"user_group_acceptance,omitempty"`
 	SecurityAcceptance     *dutySecurityAcceptance     `json:"security_acceptance,omitempty"`
@@ -46,6 +47,7 @@ type productDutyInput struct {
 	Note                  string            `json:"note"`
 }
 type productDutyEvent struct {
+	OtherBasis                 *dutyBookBasis        `json:"other_basis,omitempty"`
 	ReprocessingBasis          *dutyBookBasis        `json:"reprocessing_basis,omitempty"`
 	UserGroupBasis             *dutyBookBasis        `json:"user_group_basis,omitempty"`
 	SecurityBasis              *dutyBookBasis        `json:"security_basis,omitempty"`
@@ -264,6 +266,20 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 			}
 		}
 	}
+	for _, rule := range last.Input.Rules {
+		if rule.Kind == "other" && rule.Applicability == "required" {
+			check := productDutyCheck{Kind: "other_requirements", Status: "unknown"}
+			if err := checkDutyOther(ctx, tx, record, rule, last.Input.DocumentID, last.OtherBasis, &check); err != nil {
+				return result, err
+			}
+			result.Checks = append(result.Checks, check)
+			for i := range result.Checks {
+				if result.Checks[i].Kind == "other" && check.Status == "blocked" {
+					result.Checks[i].Status = "blocked"
+				}
+			}
+		}
+	}
 	result.Status = "reviewed"
 	result.Reasons = append(result.Reasons, "Anwendbarkeit und Nachweisreferenzen fachlich dokumentiert; Erfüllung der besonderen Pflichten und Einsatzfreigabe noch gesondert abzunehmen.")
 	return result, nil
@@ -417,6 +433,13 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			}
 			if reprocessingBasis != nil {
 				event.ReprocessingBasis = reprocessingBasis
+			}
+			otherBasis, err := validateDutyOther(ctx, tx, record, rule, in.DocumentID, now)
+			if err != nil {
+				return nil, err
+			}
+			if otherBasis != nil {
+				event.OtherBasis = otherBasis
 			}
 			seen[rule.Kind] = true
 		}
