@@ -67,6 +67,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 		return err
 	}
 	defer rows.Close()
+	record.Reprocessing = nil
 	record.Incidents = nil
 	record.Reports = nil
 	record.Corrections = nil
@@ -240,7 +241,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 		return err
 	}
 	if record.Version == 0 {
-		return nil
+		return projectReprocessing(ctx, tx, record, now)
 	}
 	record.Reasons = []string{"Vollständige Gerätefreigabe noch nicht bewertet"}
 	if record.Decommission != nil {
@@ -276,7 +277,7 @@ func projectDevice(ctx context.Context, tx *sql.Tx, record *deviceRecord, now ti
 			record.Reasons = append(record.Reasons, kind+": Kontrolle überfällig")
 		}
 	}
-	return nil
+	return projectReprocessing(ctx, tx, record, now)
 }
 func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action string, input deviceControlInput, now time.Time) ([]byte, error) {
 	bad := func(message string) ([]byte, error) { return nil, &stockError{400, "invalid_device_control", message} }

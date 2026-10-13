@@ -37,6 +37,7 @@ type instructionProof struct {
 	DocumentStatus  string `json:"document_status"`
 }
 type deviceRecord struct {
+	Reprocessing   *cycleAssessment   `json:"reprocessing,omitempty"`
 	RecallRevision int64              `json:"recall_revision,omitempty"`
 	Incidents      []incidentProof    `json:"incidents,omitempty"`
 	Reports        []reportProof      `json:"reports,omitempty"`

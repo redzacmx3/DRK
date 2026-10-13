@@ -112,6 +112,9 @@ func validateDeviceAction(ctx context.Context, tx *sql.Tx, user, action string, 
 		for _, block := range record.ActiveBlocks {
 			if block.ID == input.BlockID {
 				found = true
+				if strings.HasPrefix(block.ID, "reprocessing:") {
+					return conflict("cycle_release_required", "Aufbereitungssperre ausschließlich über die passende Zyklusfreigabe aufheben.")
+				}
 				if strings.HasPrefix(block.ID, "recall:") {
 					return conflict("central_recall", "Diese Sperre wird ausschließlich im zentralen Rückrufworkflow geschlossen.")
 				}

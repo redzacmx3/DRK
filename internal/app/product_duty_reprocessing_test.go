@@ -105,8 +105,8 @@ func TestProductDutyReprocessingAcceptanceSnapshotAndRevocation(t *testing.T) {
 	policy.Codes = []string{"basic_competence"}
 	policy.ExpectedDeviceVersion = 1
 	usagePost(t, f, id, "reprocessing-acceptance-new-person-policy", policy)
-	if reprocessingDutyStatus(t, f, id) != "unknown" {
-		t.Fatal("person proof change not invalidated")
+	if reprocessingDutyStatus(t, f, id) != "accepted" {
+		t.Fatal("unrelated person proof invalidated process suitability")
 	}
 	a.ExpectedSnapshot = bookSnapshot(t, f, id)
 	in.ExpectedVersion = 4

@@ -32,6 +32,7 @@ type bookIntakeProvenance struct {
 }
 
 type deviceBookExport struct {
+	Reprocessing      []bookExportEvent      `json:"reprocessing_events"`
 	EndUser           []bookExportEvent      `json:"end_user_acceptance_events"`
 	EndUserReview     *endUserAssessment     `json:"end_user_acceptance_assessment,omitempty"`
 	IntakeProvenance  *bookIntakeProvenance  `json:"intake_provenance,omitempty"`
@@ -186,7 +187,7 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 			sendExportError(w, err)
 			return
 		}
-		for _, query := range []string{`SELECT count(*) FROM device_events WHERE device_id=?`, `SELECT count(*) FROM device_control_events WHERE device_id=?`, `SELECT count(*) FROM device_documents WHERE device_id=?`, `SELECT count(*) FROM document_events e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM document_reviews e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM manual_access_events WHERE device_id=?`, `SELECT count(*) FROM product_duty_events WHERE device_id=?`, `SELECT count(*) FROM end_user_acceptance_events WHERE device_id=?`} {
+		for _, query := range []string{`SELECT count(*) FROM device_events WHERE device_id=?`, `SELECT count(*) FROM device_control_events WHERE device_id=?`, `SELECT count(*) FROM device_documents WHERE device_id=?`, `SELECT count(*) FROM document_events e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM document_reviews e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM manual_access_events WHERE device_id=?`, `SELECT count(*) FROM product_duty_events WHERE device_id=?`, `SELECT count(*) FROM end_user_acceptance_events WHERE device_id=?`, `SELECT count(*) FROM reprocessing_events WHERE device_id=?`} {
 			var count int
 			if err = tx.QueryRowContext(ctx, query, id).Scan(&count); err != nil {
 				sendExportError(w, err)
@@ -214,6 +215,11 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 			return
 		}
 		book.Registration, err = bookEvents(ctx, tx, `SELECT id,0,'registration',actor_id,created_at,snapshot_json FROM device_events WHERE device_id=? ORDER BY created_at,id`, id)
+		if err != nil {
+			sendExportError(w, err)
+			return
+		}
+		book.Reprocessing, err = bookEvents(ctx, tx, `SELECT id,version,action,actor_id,created_at,payload_json FROM reprocessing_events WHERE device_id=? ORDER BY version`, id)
 		if err != nil {
 			sendExportError(w, err)
 			return

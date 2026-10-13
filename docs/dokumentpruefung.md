@@ -32,6 +32,6 @@ Das Geräteaktenarchiv enthält aktuelle Dokumentmetadaten sowie die vollständi
 
 `GET /api/v1/devices/{id}/documents` enthält `status` und `review_version`. `GET .../documents/{document}/reviews` liefert die letzten 100 Prüfereignisse. `POST` auf denselben Review-Pfad erwartet `action=scan|release|reject|quarantine`, `expected_version`, den angezeigten `sha256`, `evidence`, `qualification`, `assignment` und `note`, Origin/CSRF sowie einen Idempotenzschlüssel. Maximal 1000 Prüfereignisse je Dokument; weitere Änderungen werden vollständig abgelehnt. Die unveränderlichen Originalbytes bleiben erhalten.
 
-Vor einem Upgrade ein neues konsistentes Backup erzeugen und ausdrücklich auf Schema 29 migrieren. Sicherungen umfassen Anhänge, Prüfereignisse, Outbox und Wiederholantworten. Vorhandene Anhänge bleiben beim Upgrade in Quarantäne. Scannerkonfiguration und aktuelle Signaturen sind außerhalb der SQLite-Sicherung zu betreuen.
+Vor einem Upgrade ein neues konsistentes Backup erzeugen und ausdrücklich auf Schema 30 migrieren. Sicherungen umfassen Anhänge, Prüfereignisse, Outbox und Wiederholantworten. Vorhandene Anhänge bleiben beim Upgrade in Quarantäne. Scannerkonfiguration und aktuelle Signaturen sind außerhalb der SQLite-Sicherung zu betreuen.
 
 Die automatisierten Entwicklungstests verwenden einen kontrollierten ClamAV-Protokoll-Testserver, einschließlich sauberer/infizierter/fehlerhafter und veralteter Befunde. Sie ersetzen keine Prüfung mit einem echten ClamAV-Dienst und aktuellen Signaturen auf dem Zielsystem.

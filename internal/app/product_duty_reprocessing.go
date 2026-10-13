@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"time"
 )
 
@@ -44,11 +45,17 @@ func validateDutyReprocessing(ctx context.Context, tx *sql.Tx, record deviceReco
 		if !*a.RequirementsMet || !*a.ProcessValidated {
 			return nil, adminInvalid("Nicht erfüllte Bedingungen oder fehlende Prozessvalidierung erlauben keine positive Aufbereitungsprozessabnahme.")
 		}
-		if len(record.ActiveBlocks) > 0 || record.Decommission != nil {
+		if independentReprocessingBlock(record) {
 			return nil, conflict("reprocessing_acceptance_not_current", "Gerät gesperrt oder außer Betrieb; keine positive Aufbereitungsprozessabnahme.")
 		}
 	}
-	return captureDutyDocumentSnapshot(ctx, tx, record, source, a.DocumentID, a.ExpectedSnapshot, "reprocessing")
+	basis, err := captureDutyDocumentSnapshot(ctx, tx, record, source, a.DocumentID, a.ExpectedSnapshot, "reprocessing")
+	if err != nil {
+		return nil, err
+	}
+	basis.Snapshot, err = currentReprocessingProcessSnapshot(ctx, tx, record, source, a.DocumentID)
+	basis.Domain = "reprocessing_v1"
+	return basis, err
 }
 func checkDutyReprocessing(ctx context.Context, tx *sql.Tx, record deviceRecord, rule productDutyRule, source string, basis *dutyBookBasis, check *productDutyCheck) error {
 	a := rule.ReprocessingAcceptance
@@ -61,12 +68,26 @@ func checkDutyReprocessing(ctx context.Context, tx *sql.Tx, record deviceRecord,
 		check.Reason = "Aufbereitungsbedingungen nicht erfüllt, Prozess nicht validiert oder fachliche Abnahme abgelehnt."
 		return nil
 	}
-	if len(record.ActiveBlocks) > 0 || record.Decommission != nil {
+	if independentReprocessingBlock(record) {
 		check.Status = "blocked"
 		check.Reason = "Gerät gesperrt oder außer Betrieb; Prozessbewertung hebt keine Sperre auf."
 		return nil
 	}
 	if !a.Reviewed || a.Decision != "accepted" || a.RequirementsMet == nil || a.ProcessValidated == nil || basis == nil {
+		return nil
+	}
+	if basis.Domain == "reprocessing_v1" {
+		snapshot, err := currentReprocessingProcessSnapshot(ctx, tx, record, source, a.DocumentID)
+		if err != nil {
+			return err
+		}
+		if snapshot != basis.Snapshot {
+			check.Status = "unknown"
+			check.Reason = "Geräte-, Prozess- oder Unterlagenstand geändert; Prozesseignung erneut prüfen."
+			return nil
+		}
+		check.Status = "accepted"
+		check.Reason = "Aufbereitungsprozess ausdrücklich fachlich bewertet; Zyklus und Ergebnisfreigabe separat prüfen."
 		return nil
 	}
 	candidate := productDutyRule{BookAcceptance: &dutyBookAcceptance{Reviewed: true, Decision: "accepted", DocumentID: a.DocumentID}}
@@ -79,4 +100,36 @@ func checkDutyReprocessing(ctx context.Context, tx *sql.Tx, record deviceRecord,
 		check.Reason = "Aktenstand oder Dokumentprüfung seit Aufbereitungsprozessbewertung geändert; erneut fachlich prüfen."
 	}
 	return nil
+}
+
+func independentReprocessingBlock(record deviceRecord) bool {
+	if record.Decommission != nil {
+		return true
+	}
+	for _, b := range record.ActiveBlocks {
+		if b.Reason != "reprocessing_required" {
+			return true
+		}
+	}
+	return false
+}
+func currentReprocessingProcessSnapshot(ctx context.Context, tx *sql.Tx, record deviceRecord, source, document string) (string, error) {
+	identity, err := manualIdentity(ctx, tx, record)
+	if err != nil {
+		return "", err
+	}
+	basis := record.ID + ":" + identity + ":" + strconv.Itoa(record.Version)
+	for _, id := range []string{source, document} {
+		var status, sha string
+		var version int
+		err := tx.QueryRowContext(ctx, `SELECT status,sha256,review_version FROM effective_documents WHERE device_id=? AND id=?`, record.ID, id).Scan(&status, &sha, &version)
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		if err != nil {
+			return "", err
+		}
+		basis += ":" + id + ":" + status + ":" + sha + ":" + strconv.Itoa(version)
+	}
+	return digest("reprocessing_process:" + basis), nil
 }

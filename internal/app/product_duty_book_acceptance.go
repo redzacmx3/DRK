@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strconv"
 	"time"
 )
 
@@ -23,6 +24,8 @@ type dutyBookAcceptance struct {
 	RetentionEvidence    string `json:"retention_evidence"`
 }
 type dutyBookBasis struct {
+	Domain                string `json:"domain,omitempty"`
+	CycleVersion          int    `json:"cycle_version,omitempty"`
 	Snapshot              string `json:"snapshot"`
 	SourceReviewVersion   int    `json:"source_review_version"`
 	DocumentReviewVersion int    `json:"document_review_version"`
@@ -87,7 +90,14 @@ func validateDutyBookAcceptance(ctx context.Context, tx *sql.Tx, rule productDut
 			return nil, adminInvalid("Abnahmekompetenz, Beauftragung, Nachweis, Begründung sowie Vollständigkeit, Benutzerzugang und Aufbewahrung vollständig belegen.")
 		}
 	}
-	return captureDutyDocumentSnapshot(ctx, tx, record, source, a.DocumentID, a.ExpectedSnapshot, "book")
+	basis, err := captureDutyDocumentSnapshot(ctx, tx, record, source, a.DocumentID, a.ExpectedSnapshot, "book")
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM reprocessing_events WHERE device_id=?`, record.ID).Scan(&basis.CycleVersion); err != nil {
+		return nil, err
+	}
+	return basis, nil
 }
 func captureDutyDocumentSnapshot(ctx context.Context, tx *sql.Tx, record deviceRecord, source, document, expected, kind string) (*dutyBookBasis, error) {
 	basis := &dutyBookBasis{}
@@ -116,7 +126,11 @@ func captureDutyDocumentSnapshot(ctx context.Context, tx *sql.Tx, record deviceR
 	if err != nil {
 		return nil, err
 	}
-	if expected == "" || expected != basis.Snapshot {
+	preparation, err := currentDutyPreparationSnapshot(ctx, tx, record)
+	if err != nil {
+		return nil, err
+	}
+	if expected == "" || expected != preparation {
 		return nil, conflict(kind+"_snapshot_changed", "Aktenstand seit Laden geändert; Teilabnahme erneut prüfen.")
 	}
 	return basis, nil
@@ -133,6 +147,17 @@ func checkDutyBookAcceptance(ctx context.Context, tx *sql.Tx, record deviceRecor
 	}
 	if !a.Reviewed || a.Decision != "accepted" || basis == nil {
 		return nil
+	}
+	if rule.Kind == "device_book" {
+		var version int
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM reprocessing_events WHERE device_id=?`, record.ID).Scan(&version); err != nil {
+			return err
+		}
+		if version != basis.CycleVersion {
+			check.Status = "unknown"
+			check.Reason = "Neue Aufbereitungsereignisse seit Buchabnahme; Vollständigkeit erneut prüfen."
+			return nil
+		}
 	}
 	snapshot, err := currentDutyBookSnapshot(ctx, tx, record)
 	if err != nil {
@@ -162,4 +187,16 @@ func checkDutyBookAcceptance(ctx context.Context, tx *sql.Tx, record deviceRecor
 	check.Status = "accepted"
 	check.Reason = "Buchvollständigkeit, Benutzerzugang und Aufbewahrung für den gebundenen Aktenstand ausdrücklich fachlich abgenommen; Gesamtfreigabe offen."
 	return nil
+}
+
+func currentDutyPreparationSnapshot(ctx context.Context, tx *sql.Tx, record deviceRecord) (string, error) {
+	snapshot, err := currentDutyBookSnapshot(ctx, tx, record)
+	if err != nil {
+		return "", err
+	}
+	var version int
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM reprocessing_events WHERE device_id=?`, record.ID).Scan(&version); err != nil {
+		return "", err
+	}
+	return digest("duty_preparation:" + snapshot + ":" + strconv.Itoa(version)), nil
 }

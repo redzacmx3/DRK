@@ -248,6 +248,15 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 			for i := range result.Checks {
 				if result.Checks[i].Kind == "reprocessing" {
 					result.Checks[i].Reason = "Prozesseignung und konkrete Aufbereitungszyklen separat prüfen; Ergebnisfreigaben bleiben offen."
+					if check.Status == "accepted" && record.Reprocessing != nil {
+						if record.Reprocessing.Status == "released" {
+							result.Checks[i].Status = "accepted"
+							result.Checks[i].Reason = "Aktuelle Prozesseignung und ausdrücklich freigegebenes Aufbereitungsergebnis vorhanden; Gesamtfreigabe offen."
+						} else {
+							result.Checks[i].Status = "blocked"
+							result.Checks[i].Reason = record.Reprocessing.Reason
+						}
+					}
 					if check.Status == "blocked" {
 						result.Checks[i].Status = "blocked"
 					}
@@ -487,7 +496,7 @@ func productDutyRoutes(mux *http.ServeMux, a *authService) {
 		}
 		bookSnapshot := ""
 		if manager {
-			bookSnapshot, err = currentDutyBookSnapshot(r.Context(), tx, record)
+			bookSnapshot, err = currentDutyPreparationSnapshot(r.Context(), tx, record)
 			if err != nil {
 				sendStockError(w, err)
 				return
