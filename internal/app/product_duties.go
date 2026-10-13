@@ -12,24 +12,25 @@ import (
 var productDutyKinds = []string{"annex_1", "annex_2", "device_book", "manufacturer_maintenance", "it_security", "reprocessing", "special_user_group", "other"}
 
 type productDutyRule struct {
-	UserGroupAcceptance   *dutyUserGroupAcceptance   `json:"user_group_acceptance,omitempty"`
-	SecurityAcceptance    *dutySecurityAcceptance    `json:"security_acceptance,omitempty"`
-	ElectricalAcceptance  *dutyElectricalAcceptance  `json:"electrical_acceptance,omitempty"`
-	STKAcceptance         *dutySTKAcceptance         `json:"stk_acceptance,omitempty"`
-	MTKAcceptance         *dutyMTKAcceptance         `json:"mtk_acceptance,omitempty"`
-	BookAcceptance        *dutyBookAcceptance        `json:"book_acceptance,omitempty"`
-	MaintenanceAcceptance *dutyMaintenanceAcceptance `json:"maintenance_acceptance,omitempty"`
-	InstructionAcceptance *dutyInstructionAcceptance `json:"instruction_acceptance,omitempty"`
-	FunctionCheck         *dutyFunctionProof         `json:"function_check,omitempty"`
-	CommissionVersion     int                        `json:"commission_version,omitempty"`
-	InstructionVersion    int                        `json:"instruction_version,omitempty"`
-	DesignatedUserID      string                     `json:"designated_user_id,omitempty"`
-	DesignatedAssignment  string                     `json:"designated_assignment,omitempty"`
-	EventVersion          int                        `json:"event_version,omitempty"`
-	Kind                  string                     `json:"kind"`
-	Applicability         string                     `json:"applicability"`
-	Reason                string                     `json:"reason"`
-	Evidence              string                     `json:"evidence"`
+	ReprocessingAcceptance *dutyReprocessingAcceptance `json:"reprocessing_acceptance,omitempty"`
+	UserGroupAcceptance    *dutyUserGroupAcceptance    `json:"user_group_acceptance,omitempty"`
+	SecurityAcceptance     *dutySecurityAcceptance     `json:"security_acceptance,omitempty"`
+	ElectricalAcceptance   *dutyElectricalAcceptance   `json:"electrical_acceptance,omitempty"`
+	STKAcceptance          *dutySTKAcceptance          `json:"stk_acceptance,omitempty"`
+	MTKAcceptance          *dutyMTKAcceptance          `json:"mtk_acceptance,omitempty"`
+	BookAcceptance         *dutyBookAcceptance         `json:"book_acceptance,omitempty"`
+	MaintenanceAcceptance  *dutyMaintenanceAcceptance  `json:"maintenance_acceptance,omitempty"`
+	InstructionAcceptance  *dutyInstructionAcceptance  `json:"instruction_acceptance,omitempty"`
+	FunctionCheck          *dutyFunctionProof          `json:"function_check,omitempty"`
+	CommissionVersion      int                         `json:"commission_version,omitempty"`
+	InstructionVersion     int                         `json:"instruction_version,omitempty"`
+	DesignatedUserID       string                      `json:"designated_user_id,omitempty"`
+	DesignatedAssignment   string                      `json:"designated_assignment,omitempty"`
+	EventVersion           int                         `json:"event_version,omitempty"`
+	Kind                   string                      `json:"kind"`
+	Applicability          string                      `json:"applicability"`
+	Reason                 string                      `json:"reason"`
+	Evidence               string                      `json:"evidence"`
 }
 type productDutyInput struct {
 	ExpectedVersion       int               `json:"expected_version"`
@@ -45,6 +46,7 @@ type productDutyInput struct {
 	Note                  string            `json:"note"`
 }
 type productDutyEvent struct {
+	ReprocessingBasis          *dutyBookBasis        `json:"reprocessing_basis,omitempty"`
 	UserGroupBasis             *dutyBookBasis        `json:"user_group_basis,omitempty"`
 	SecurityBasis              *dutyBookBasis        `json:"security_basis,omitempty"`
 	ElectricalBasis            *dutyBookBasis        `json:"electrical_basis,omitempty"`
@@ -236,6 +238,23 @@ func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record dev
 			}
 		}
 	}
+	for _, rule := range last.Input.Rules {
+		if rule.Kind == "reprocessing" && rule.Applicability == "required" {
+			check := productDutyCheck{Kind: "reprocessing_process", Status: "unknown"}
+			if err := checkDutyReprocessing(ctx, tx, record, rule, last.Input.DocumentID, last.ReprocessingBasis, &check); err != nil {
+				return result, err
+			}
+			result.Checks = append(result.Checks, check)
+			for i := range result.Checks {
+				if result.Checks[i].Kind == "reprocessing" {
+					result.Checks[i].Reason = "Prozesseignung und konkrete Aufbereitungszyklen separat prüfen; Ergebnisfreigaben bleiben offen."
+					if check.Status == "blocked" {
+						result.Checks[i].Status = "blocked"
+					}
+				}
+			}
+		}
+	}
 	result.Status = "reviewed"
 	result.Reasons = append(result.Reasons, "Anwendbarkeit und Nachweisreferenzen fachlich dokumentiert; Erfüllung der besonderen Pflichten und Einsatzfreigabe noch gesondert abzunehmen.")
 	return result, nil
@@ -382,6 +401,13 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 			}
 			if groupBasis != nil {
 				event.UserGroupBasis = groupBasis
+			}
+			reprocessingBasis, err := validateDutyReprocessing(ctx, tx, record, rule, in.DocumentID, now)
+			if err != nil {
+				return nil, err
+			}
+			if reprocessingBasis != nil {
+				event.ReprocessingBasis = reprocessingBasis
 			}
 			seen[rule.Kind] = true
 		}

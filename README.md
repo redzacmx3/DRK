@@ -554,3 +554,8 @@ Produktspezifische externe IT-Prüfungen können mit Softwarestand, Systemumfang
 ### Besondere Anwendergruppen (Schema 29)
 
 Personenkreis, Nutzungsumfang, produktspezifische Bedingungen und Ausnahmegrundlagen können ausdrücklich fachlich bewertet werden. Gruppenabnahme verleiht keine Kontorechte oder individuelle Eignung. [Bedienung und Grenzen](docs/produktpflichten.md). Gesamtfreigabe offen; keine neue Migration.
+
+
+### Aufbereitungsprozess (Schema 29)
+
+Die Eignung eines externen gerätebezogenen Aufbereitungsprozesses kann mit Herstellervorgaben, Klassifizierung, Validierung, Zuständigkeit und Lagerung fachlich bewertet werden. Einzelne Zyklen und Ergebnisfreigaben bleiben offen. [Bedienung und Grenzen](docs/produktpflichten.md). Kein Aufbereitungs-QM oder automatische Sterilgutverwaltung; keine neue Migration.
