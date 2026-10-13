@@ -121,19 +121,41 @@ func consolidateEvidence(result packAssessment) operatingEvidence {
 	}
 	add("end_user_acceptance", endUser, "Ausdrückliche fachliche Teilabnahme der aktuellen personenbezogenen Endanwendernachweise; keine gesamte Einsatzfreigabe.")
 	duties := "unknown"
+	if len(result.Devices) > 0 {
+		duties = "met"
+	}
 	for _, device := range result.Devices {
+		status := "unknown"
+		if device.DutyFulfilment != nil {
+			if device.DutyFulfilment.Status == "accepted" && device.ProductDuties != nil && device.ProductDuties.Status == "reviewed" {
+				status = "met"
+			}
+			if device.DutyFulfilment.Status == "blocked" {
+				status = "blocked"
+			}
+		}
 		if device.ProductDuties != nil {
 			if device.ProductDuties.Status == "blocked" {
-				duties = "blocked"
+				status = "blocked"
 			}
 			for _, check := range device.ProductDuties.Checks {
 				if check.Status == "blocked" {
-					duties = "blocked"
+					status = "blocked"
 				}
 			}
 		}
+		merge(&duties, status)
 	}
-	add("product_duties", duties, "Anwendbarkeit besonderer Produktpflichten und Nachweisreferenzen dokumentieren; ihre Erfüllung und vollständige Einsatzfreigabe bleiben gesondert abzunehmen.")
+	add("product_duties", duties, "Aktuelle ausdrückliche fachliche Erfüllungsabnahme aller acht Produktpflichtbereiche; konkrete Endanwender und gesamte Einsatzfreigabe bleiben getrennt.")
+	allMet := len(evidence.Components) > 0
+	for _, component := range evidence.Components {
+		if component.Status != "met" {
+			allMet = false
+		}
+	}
+	if allMet {
+		evidence.Status = "recorded_prerequisites_met"
+	}
 	if !result.Material.CurrentVersion {
 		evidence.Status = "obsolete"
 	}

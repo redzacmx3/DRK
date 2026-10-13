@@ -32,25 +32,27 @@ type bookIntakeProvenance struct {
 }
 
 type deviceBookExport struct {
-	Reprocessing      []bookExportEvent      `json:"reprocessing_events"`
-	EndUser           []bookExportEvent      `json:"end_user_acceptance_events"`
-	EndUserReview     *endUserAssessment     `json:"end_user_acceptance_assessment,omitempty"`
-	IntakeProvenance  *bookIntakeProvenance  `json:"intake_provenance,omitempty"`
-	FormatVersion     int                    `json:"format_version"`
-	GeneratedAt       string                 `json:"generated_at"`
-	Operator          string                 `json:"operator"`
-	Site              string                 `json:"site"`
-	Location          string                 `json:"location"`
-	Device            deviceRecord           `json:"device"`
-	Registration      []bookExportEvent      `json:"registration_events"`
-	Controls          []bookExportEvent      `json:"control_events"`
-	Documents         []documentRecord       `json:"documents"`
-	ProductDutyReview *productDutyAssessment `json:"product_duty_assessment,omitempty"`
-	ProductDuties     []bookExportEvent      `json:"product_duty_events"`
-	ManualAccess      []bookExportEvent      `json:"manual_access_events"`
-	DocumentReviews   []bookExportEvent      `json:"document_reviews"`
-	DocumentEvents    []bookExportEvent      `json:"document_events"`
-	Warnings          []string               `json:"warnings"`
+	DutyFulfilmentEvents []bookExportEvent         `json:"duty_fulfilment_events"`
+	DutyFulfilment       *dutyFulfilmentAssessment `json:"duty_fulfilment_assessment,omitempty"`
+	Reprocessing         []bookExportEvent         `json:"reprocessing_events"`
+	EndUser              []bookExportEvent         `json:"end_user_acceptance_events"`
+	EndUserReview        *endUserAssessment        `json:"end_user_acceptance_assessment,omitempty"`
+	IntakeProvenance     *bookIntakeProvenance     `json:"intake_provenance,omitempty"`
+	FormatVersion        int                       `json:"format_version"`
+	GeneratedAt          string                    `json:"generated_at"`
+	Operator             string                    `json:"operator"`
+	Site                 string                    `json:"site"`
+	Location             string                    `json:"location"`
+	Device               deviceRecord              `json:"device"`
+	Registration         []bookExportEvent         `json:"registration_events"`
+	Controls             []bookExportEvent         `json:"control_events"`
+	Documents            []documentRecord          `json:"documents"`
+	ProductDutyReview    *productDutyAssessment    `json:"product_duty_assessment,omitempty"`
+	ProductDuties        []bookExportEvent         `json:"product_duty_events"`
+	ManualAccess         []bookExportEvent         `json:"manual_access_events"`
+	DocumentReviews      []bookExportEvent         `json:"document_reviews"`
+	DocumentEvents       []bookExportEvent         `json:"document_events"`
+	Warnings             []string                  `json:"warnings"`
 }
 
 type limitedExportBuffer struct {
@@ -187,7 +189,7 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 			sendExportError(w, err)
 			return
 		}
-		for _, query := range []string{`SELECT count(*) FROM device_events WHERE device_id=?`, `SELECT count(*) FROM device_control_events WHERE device_id=?`, `SELECT count(*) FROM device_documents WHERE device_id=?`, `SELECT count(*) FROM document_events e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM document_reviews e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM manual_access_events WHERE device_id=?`, `SELECT count(*) FROM product_duty_events WHERE device_id=?`, `SELECT count(*) FROM end_user_acceptance_events WHERE device_id=?`, `SELECT count(*) FROM reprocessing_events WHERE device_id=?`} {
+		for _, query := range []string{`SELECT count(*) FROM device_events WHERE device_id=?`, `SELECT count(*) FROM device_control_events WHERE device_id=?`, `SELECT count(*) FROM device_documents WHERE device_id=?`, `SELECT count(*) FROM document_events e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM document_reviews e JOIN device_documents d ON d.id=e.document_id WHERE d.device_id=?`, `SELECT count(*) FROM manual_access_events WHERE device_id=?`, `SELECT count(*) FROM product_duty_events WHERE device_id=?`, `SELECT count(*) FROM end_user_acceptance_events WHERE device_id=?`, `SELECT count(*) FROM reprocessing_events WHERE device_id=?`, `SELECT count(*) FROM duty_fulfilment_events WHERE device_id=?`} {
 			var count int
 			if err = tx.QueryRowContext(ctx, query, id).Scan(&count); err != nil {
 				sendExportError(w, err)
@@ -276,6 +278,19 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 			return
 		}
 		dutyReview, err := assessProductDuty(ctx, tx, user.ID, book.Device, a.now())
+		if err != nil {
+			sendExportError(w, err)
+			return
+		}
+		fulfilment, err := assessDutyFulfilmentWith(ctx, tx, book.Device, dutyReview, a.now())
+		if err != nil {
+			sendExportError(w, err)
+			return
+		}
+		fulfilment.Events = nil
+		fulfilment.Basis = ""
+		book.DutyFulfilment = &fulfilment
+		book.DutyFulfilmentEvents, err = bookEvents(ctx, tx, `SELECT id,version,action,actor_id,created_at,payload_json FROM duty_fulfilment_events WHERE device_id=? ORDER BY version`, id)
 		if err != nil {
 			sendExportError(w, err)
 			return

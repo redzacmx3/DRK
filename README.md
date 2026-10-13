@@ -479,7 +479,7 @@ SMTP-Annahme ist keine Bestätigung der Postfachzustellung. Temporäre Fehler we
 
 `GET /api/v1/devices/reminder-mail` und die Oberfläche zeigen die letzten 200 Zustellungen im berechtigten Bereich, Status, Versuche und Message-ID, ohne Empfängeradressen oder Zugangsdaten auszugeben. Weitere Einträge werden ausdrücklich angekündigt. Der Status bleibt auch nach Außerbetriebnahme sichtbar. Wiederaufnahme erfolgt über die lokale CLI; bei unklarer Annahme ist nach externer Prüfung eine ausdrückliche Bestätigung des Doppelmail-Risikos erforderlich. SMTP-Protokolltexte, Passwörter und Mailinhalte werden nicht geloggt. Die bisherigen Bewegungs-/Prüf-Outboxen werden nicht per E-Mail versendet. Bestände, Fristen, Sperren und Prüfnachweise bleiben von Zustellfehlern unabhängig.
 
-Bestehende Installation vor Update sichern, ausdrücklich auf Schema 30 migrieren und anschließend starten. Sicherungen umfassen Warteschlange, Versuchshistorien und Empfängerbindungen; SMTP-Dateien/Secrets separat geschützt sichern.
+Bestehende Installation vor Update sichern, ausdrücklich auf Schema 31 migrieren und anschließend starten. Sicherungen umfassen Warteschlange, Versuchshistorien und Empfängerbindungen; SMTP-Dateien/Secrets separat geschützt sichern.
 
 Geprüft: vollständige Go-Race-Suite, Vet/Build, echte lokale TLS-/STARTTLS-Verbindungen einschließlich Anmeldung, geprüfte Zertifikate, fehlendes STARTTLS, Header-/Konfigurationsprüfung, 4xx/5xx, verlorene DATA-Antwort und QUIT-Abbruch nach Annahme. Warteschlange prüft Rollback, konkurrierende Worker, abgelaufene Leases, begrenzte Wiederholungen, stabile Message-IDs, manuelle Freigabe und Empfänger-/Fristenänderungen. Browser prüft Versandstatus, sichere Texte, Fehlerbereinigung und verspätete Antworten nach Abmeldung. HTTPS-Compose-Test mit lokalem TLS-SMTP-Testserver bestand einschließlich Backup/Migration 21→22, Standard ohne Versand, aktivem Overlay, Wiederholschutz, Neustartpersistenz, Snapshot-Integrität und Bereichsrechten. Frühere Bestände, Dokumente, Nachweise und Geräte-/Materialprüfbasiswerte blieben unverändert. Lokale Backup-/Migrationsprüfung bestand. Die Entwicklungsinstanz läuft wieder ohne SMTP-Konfiguration; reale SMTP-Konten und Postfachzustellung sind nicht geprüft.
 
@@ -564,3 +564,8 @@ Die Eignung eines externen gerätebezogenen Aufbereitungsprozesses kann mit Hers
 ### Aufbereitungszyklen und Ergebnisfreigaben (Schema 30)
 
 Gerätebezogener Bedarf, tatsächlicher Zyklus, getrennte Ergebnisfreigabe, Ablehnung und Widerruf werden unveränderlich dokumentiert. Neue Bedarfe, Fehlversuche, Protokolländerungen oder Ablauf blockieren den bisherigen Freigabestand. Andere Gerätesperren bleiben unabhängig. [Bedienung, Grenzen und Migration](docs/aufbereitungszyklen.md). Bestehende Installationen sichern und ausdrücklich migrieren; Gesamtfreigabe weiterhin offen.
+
+
+### Fachliche Erfüllungsabnahme der Produktpflichten (Schema 31)
+
+Die acht Pflichtbereiche werden mit aktuellen Teilnachweisen, vollständiger fachlicher Umfangsprüfung, freigegebener Erfüllungsunterlage und eigener unveränderlicher Abnahme-/Ablehnungs-/Widerrufshistorie zusammengeführt. Packlisten können dadurch die Produktpflichten-Teilkomponente erfüllen; gesamte Einsatzfreigabe bleibt offen. Bestehende Installationen vor Update sichern und ausdrücklich migrieren. [Bedienung und Upgrade](docs/erfuellungsabnahme.md).

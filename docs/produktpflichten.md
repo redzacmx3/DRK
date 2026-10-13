@@ -1,6 +1,6 @@
 # Besondere Produktpflichten (Schema 28)
 
-Aktueller Betriebsstand: Schema 30. Frühere Schemaangaben bei einzelnen Modulergänzungen beschreiben deren Einführungsstand. Für bestehende Installationen gelten die aktuellen [Upgrade-Schritte](aufbereitungszyklen.md#upgrade-auf-schema-30).
+Aktueller Betriebsstand: Schema 31. Frühere Schemaangaben bei einzelnen Modulergänzungen beschreiben deren Einführungsstand. Für bestehende Installationen gelten die aktuellen [Upgrade-Schritte](erfuellungsabnahme.md#upgrade-auf-schema-31).
 
 Die neue Bewertung dokumentiert pro Gerät, welche besonderen Pflichten anwendbar sind und auf welche Nachweise sich die fachliche Prüfung bezieht. Eine Produktklassifizierung wird niemals aus Namen, Modell, Berufsbezeichnung oder Benutzerrolle abgeleitet. Die Erfüllung der Pflichten und die vollständige Einsatzfreigabe bleiben gesondert abzunehmen.
 
@@ -182,3 +182,8 @@ API: `reprocessing_acceptance` in erforderlicher Regel `reprocessing`, mit `revi
 ## Weitere produktspezifische Einzelpflichten
 
 Erforderliche `other`-Regeln unterstützen zusätzlich `other_acceptance` mit vollständig bewertetem Umfang und bis zu zwölf ausdrücklich geprüften Einzelpflichten. Elektrische Sicherheitsabnahme und Gesamtfreigabe bleiben getrennt. Bedienung, API und Bindungsregeln: [Weitere Produktpflichten](weitere-produktpflichten.md). Schema 30 unverändert.
+
+
+## Separate fachliche Erfüllungsabnahme (Schema 31)
+
+Die acht Pflichtbereiche können nun gesondert auf Grundlage ihrer aktuellen Teilnachweise und ausdrücklich bestätigter vollständiger Bereiche fachlich abgenommen, abgelehnt oder widerrufen werden. Diese Abnahme hat eine eigene unveränderliche Historie und Geräteakten-/Packlistenbewertung; Anwendbarkeit und Teilabnahmen bleiben getrennte Ausgangsnachweise. Aktuelle Erfüllung kann die Teilkomponente `product_duties` erfüllen, die gesamte Einsatzfreigabe bleibt offen. [Bedienung und Upgrade](erfuellungsabnahme.md).

@@ -18,14 +18,15 @@ type packDevice struct {
 	Accessories []packAccessory `json:"accessories"`
 }
 type deviceAssessment struct {
-	EndUser       *endUserAssessment     `json:"end_user_acceptance,omitempty"`
-	ProductDuties *productDutyAssessment `json:"product_duties,omitempty"`
-	ManualAccess  *manualAccessSummary   `json:"manual_access,omitempty"`
-	UserUsage     *usageSummary          `json:"user_usage,omitempty"`
-	Requirement   packDevice             `json:"requirement"`
-	Device        deviceRecord           `json:"device"`
-	Status        string                 `json:"status"`
-	Reasons       []string               `json:"reasons"`
+	DutyFulfilment *dutyFulfilmentAssessment `json:"duty_fulfilment,omitempty"`
+	EndUser        *endUserAssessment        `json:"end_user_acceptance,omitempty"`
+	ProductDuties  *productDutyAssessment    `json:"product_duties,omitempty"`
+	ManualAccess   *manualAccessSummary      `json:"manual_access,omitempty"`
+	UserUsage      *usageSummary             `json:"user_usage,omitempty"`
+	Requirement    packDevice                `json:"requirement"`
+	Device         deviceRecord              `json:"device"`
+	Status         string                    `json:"status"`
+	Reasons        []string                  `json:"reasons"`
 }
 type packAssessment struct {
 	Evidence operatingEvidence  `json:"operating_evidence"`
@@ -277,6 +278,13 @@ func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now
 		endUser.Events = nil
 		result.Devices[i].EndUser = &endUser
 		// History is available in the dedicated endpoint and archive, not each pack response.
+		fulfilment, err := assessDutyFulfilmentWith(ctx, tx, result.Devices[i].Device, duties, now)
+		if err != nil {
+			return result, err
+		}
+		fulfilment.Events = nil
+		fulfilment.Basis = ""
+		result.Devices[i].DutyFulfilment = &fulfilment
 		duties.Events = nil
 		result.Devices[i].ProductDuties = &duties
 		result.Devices[i].ManualAccess = &manualAccessSummary{access.UserID, access.Version, access.Status, access.Reasons}
