@@ -301,6 +301,16 @@ func controlDevice(ctx context.Context, db *sql.DB, user, token, key, id, action
 	if !allowed {
 		return nil, scopeError()
 	}
+	if action != "details" && action != "master_data" {
+		if err = requireModule(ctx, tx, "devices"); err != nil {
+			return nil, err
+		}
+	}
+	if action == "instruction" || input.DocumentID != "" {
+		if err = requireModule(ctx, tx, "documents"); err != nil {
+			return nil, err
+		}
+	}
 	if err = rejectOtherKey(ctx, tx, user, key, "device_control_requests"); err != nil {
 		return nil, err
 	}

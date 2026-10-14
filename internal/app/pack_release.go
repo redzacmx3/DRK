@@ -110,12 +110,17 @@ func packReleaseBasis(ctx context.Context, tx *sql.Tx, subject string, p packVer
 	if result.Check != nil {
 		deviceCheck = result.Check.ID
 	}
+	_, moduleRevision, err := currentModules(ctx, tx)
+	if err != nil {
+		return "", err
+	}
 	value, err := json.Marshal(struct {
 		Pack, Subject, Site, Operator, Material, Devices, MaterialCheck, DeviceCheck string
+		ModuleRevision                                                               int
 		Versions                                                                     []int
 		Sources                                                                      []deviceSource
 		Evidence                                                                     operatingEvidence
-	}{p.ID, subject, site, operator, result.Material.Basis, result.Basis, materialCheck, deviceCheck, versions, sources, result.Evidence})
+	}{p.ID, subject, site, operator, result.Material.Basis, result.Basis, materialCheck, deviceCheck, moduleRevision, versions, sources, result.Evidence})
 	if err != nil {
 		return "", err
 	}
@@ -173,6 +178,14 @@ func assessPackReleaseWith(ctx context.Context, tx *sql.Tx, subject string, p pa
 		assessment.Reasons = append(assessment.Reasons, "Einsatzfreigabe ausdrücklich abgelehnt oder widerrufen.")
 		return assessment, nil
 	}
+	configuration, _, err := currentModules(ctx, tx)
+	if err != nil {
+		return assessment, err
+	}
+	if !configuration.Enabled("release") {
+		assessment.Reasons = append(assessment.Reasons, "Einsatzfreigabe-Modul deaktiviert. Historische Freigaben gelten nicht als aktuelle Freigabe.")
+		return assessment, nil
+	}
 	stamp, err := time.Parse(time.RFC3339Nano, last.CreatedAt)
 	if err != nil {
 		return assessment, err
@@ -199,7 +212,7 @@ func assessPackReleaseWith(ctx context.Context, tx *sql.Tx, subject string, p pa
 		return assessment, err
 	}
 	if result.Evidence.Status != "recorded_prerequisites_met" || last.Basis != assessment.Basis || last.ActorVersion != actorVersion {
-		assessment.Reasons = append(assessment.Reasons, "Sollversion, Bestände, Prüfungen, Personen-, Produkt- oder Verwaltungsnachweise geändert / unvollständig; keine automatische Wiederfreigabe.")
+		assessment.Reasons = append(assessment.Reasons, "Sollversion, Bestände, Prüfungen, Personen-, Produkt-, Verwaltungsnachweise oder Modulkonfiguration geändert / unvollständig; keine automatische Wiederfreigabe.")
 		return assessment, nil
 	}
 	assessment.Status = "released"

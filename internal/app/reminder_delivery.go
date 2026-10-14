@@ -46,6 +46,9 @@ func enqueueReminderMail(ctx context.Context, db *sql.DB, config *SMTPConfig, no
 	}
 	defer tx.Rollback()
 	type target struct{ id, site string }
+	if err = requireModule(ctx, tx, "reminders"); err != nil {
+		return err
+	}
 	targets := []target{}
 	rows, err := tx.QueryContext(ctx, `SELECT m.id,l.site_id FROM device_reminders m JOIN devices d ON d.id=m.device_id JOIN locations l ON l.id=d.location_id WHERE m.active=1 ORDER BY m.created_at,m.id LIMIT 3001`)
 	if err != nil {
@@ -132,6 +135,9 @@ func claimReminderMail(ctx context.Context, db *sql.DB, now time.Time) (*leasedR
 		return nil, err
 	}
 	defer tx.Rollback()
+	if err = requireModule(ctx, tx, "reminders"); err != nil {
+		return nil, err
+	}
 	var item leasedReminderMail
 	var created string
 	stamp := now.UTC().Format(time.RFC3339Nano)
@@ -167,6 +173,9 @@ func currentReminderMail(ctx context.Context, db *sql.DB, config *SMTPConfig, it
 		return nil, err
 	}
 	defer tx.Rollback()
+	if err = requireModule(ctx, tx, "reminders"); err != nil {
+		return nil, err
+	}
 	var id, kind, due, basis, site, actor, created string
 	var threshold int
 	var input deviceInput
@@ -331,6 +340,9 @@ func RetryReminderMail(ctx context.Context, db *sql.DB, id string, allowUncertai
 		return err
 	}
 	defer tx.Rollback()
+	if err = requireModule(ctx, tx, "reminders"); err != nil {
+		return err
+	}
 	var state string
 	if err = tx.QueryRowContext(ctx, `SELECT state FROM device_reminder_deliveries WHERE id=?`, id).Scan(&state); err != nil {
 		return err

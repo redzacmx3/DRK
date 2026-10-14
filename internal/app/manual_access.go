@@ -65,8 +65,13 @@ func manualEligible(ctx context.Context, tx *sql.Tx, user string, record deviceR
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users u JOIN role_assignments a ON a.user_id=u.id JOIN locations l ON l.site_id=a.site_id WHERE u.id=? AND u.active=1 AND l.id=?)`, user, record.LocationID).Scan(&eligible)
 	return eligible, err
 }
-func assessManualAccess(ctx context.Context, tx *sql.Tx, actor, subject string, record deviceRecord, now time.Time) (manualAccessAssessment, error) {
-	result := manualAccessAssessment{UserID: subject, DeviceVersion: record.Version, Status: "unknown", Reasons: []string{}, Events: []manualAccessEvent{}, Overall: "not_assessed"}
+func assessManualAccess(ctx context.Context, tx *sql.Tx, actor, subject string, record deviceRecord, now time.Time) (result manualAccessAssessment, assessmentErr error) {
+	result = manualAccessAssessment{UserID: subject, DeviceVersion: record.Version, Status: "unknown", Reasons: []string{}, Events: []manualAccessEvent{}, Overall: "not_assessed"}
+	defer func() {
+		if assessmentErr == nil {
+			_, assessmentErr = maskModuleAssessment(ctx, tx, "documents", &result.Status, &result.Reasons)
+		}
+	}()
 	manager, err := usageManager(ctx, tx, actor, record.ID)
 	if err != nil {
 		return result, err
@@ -170,6 +175,9 @@ func (a *authService) mutateManualAccess(ctx context.Context, user, token, key, 
 	}
 	defer tx.Rollback()
 	if err = activeStockSession(ctx, tx, user, token, a.now()); err != nil {
+		return nil, err
+	}
+	if err = a.activeModule(ctx, tx, "documents"); err != nil {
 		return nil, err
 	}
 	manager, err := usageManager(ctx, tx, user, id)

@@ -12,11 +12,14 @@ x-app: &app
 services:
   init:
     <<: *app
+    environment:
+      DRK_MODULES: ${DRK_MODULES:-all}
     command: ["init", "--db", "/data/inventory.db"]
     restart: "no"
   inventory:
     environment:
       DRK_CLAMD_ADDRESS: ${DRK_CLAMD_ADDRESS:-}
+      DRK_MODULES: ${DRK_MODULES:-all}
     <<: *app
     depends_on:
       init:

@@ -56,8 +56,13 @@ func usageManager(ctx context.Context, tx *sql.Tx, user, device string) (bool, e
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM devices d JOIN locations l ON l.id=d.location_id JOIN role_assignments a ON a.site_id=l.site_id WHERE d.id=? AND a.user_id=? AND a.role='device_manager')`, device, user).Scan(&ok)
 	return ok, err
 }
-func assessUsage(ctx context.Context, tx *sql.Tx, actor, subject string, record deviceRecord, now time.Time) (usageAssessment, error) {
-	result := usageAssessment{DeviceVersion: record.Version, UserID: subject, Status: "unknown", InstructionMode: "unknown", Codes: []string{}, Reasons: []string{}, Events: []usageEvent{}, AsOf: now.UTC().Format(time.RFC3339Nano), Overall: "not_assessed"}
+func assessUsage(ctx context.Context, tx *sql.Tx, actor, subject string, record deviceRecord, now time.Time) (result usageAssessment, assessmentErr error) {
+	result = usageAssessment{DeviceVersion: record.Version, UserID: subject, Status: "unknown", InstructionMode: "unknown", Codes: []string{}, Reasons: []string{}, Events: []usageEvent{}, AsOf: now.UTC().Format(time.RFC3339Nano), Overall: "not_assessed"}
+	defer func() {
+		if assessmentErr == nil {
+			_, assessmentErr = maskModuleAssessment(ctx, tx, "compliance", &result.Status, &result.Reasons)
+		}
+	}()
 	manager, err := usageManager(ctx, tx, actor, record.ID)
 	if err != nil {
 		return result, err
@@ -212,6 +217,9 @@ func mutateUsage(ctx context.Context, a *authService, user, token, key, device s
 	}
 	defer tx.Rollback()
 	if err = activeStockSession(ctx, tx, user, token, a.now()); err != nil {
+		return nil, err
+	}
+	if err = a.activeModule(ctx, tx, "compliance"); err != nil {
 		return nil, err
 	}
 	manager, err := usageManager(ctx, tx, user, device)

@@ -93,6 +93,9 @@ func uploadDocument(ctx context.Context, db *sql.DB, user, token, key, id string
 	if err = activeStockSession(ctx, tx, user, token, now); err != nil {
 		return nil, err
 	}
+	if err = requireModule(ctx, tx, "documents"); err != nil {
+		return nil, err
+	}
 	var allowed bool
 	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM devices d JOIN locations l ON l.id=d.location_id JOIN role_assignments a ON a.site_id=l.site_id WHERE d.id=? AND a.user_id=? AND a.role='device_manager')`, id, user).Scan(&allowed); err != nil {
 		return nil, err

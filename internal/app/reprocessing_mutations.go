@@ -39,6 +39,9 @@ func (a *authService) mutateCycle(ctx context.Context, user, token, key, id stri
 	if err := activeStockSession(ctx, tx, user, token, now); err != nil {
 		return nil, err
 	}
+	if err := a.activeModule(ctx, tx, "reprocessing"); err != nil {
+		return nil, err
+	}
 	manager, err := usageManager(ctx, tx, user, id)
 	if err != nil {
 		return nil, err

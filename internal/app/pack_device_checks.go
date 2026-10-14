@@ -92,6 +92,12 @@ func recordDeviceCheck(ctx context.Context, db *sql.DB, user, token, key, id str
 	if err = activeStockSession(ctx, tx, user, token, now); err != nil {
 		return nil, err
 	}
+	if err = requireModule(ctx, tx, "packs"); err != nil {
+		return nil, err
+	}
+	if err = requireModule(ctx, tx, "devices"); err != nil {
+		return nil, err
+	}
 	p, err := loadPack(ctx, tx, user, id, "check")
 	if err != nil {
 		return nil, err

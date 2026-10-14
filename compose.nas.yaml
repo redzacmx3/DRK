@@ -21,6 +21,7 @@ services:
   inventory:
     environment:
       DRK_CLAMD_ADDRESS: ${DRK_CLAMD_ADDRESS:-}
+      DRK_MODULES: ${DRK_MODULES:-all}
     <<: *inventory
     restart: unless-stopped
     command: ["serve", "--db", "/data/inventory.db", "--device-reminders=${DRK_DEVICE_REMINDERS:-true}", "--reminder-days", "${DRK_REMINDER_DAYS:-60,30,7}", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--origin", "${DRK_ORIGIN:?Set the exact public HTTPS origin}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
@@ -36,6 +37,8 @@ services:
   # Explicit one-shot CLI, excluded from normal Dockhand stack startup.
   maintenance:
     <<: *inventory
+    environment:
+      DRK_MODULES: ${DRK_MODULES:-all}
     profiles: [maintenance]
     command: ["migrate", "--db", "/data/inventory.db"]
     restart: "no"

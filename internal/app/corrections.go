@@ -60,6 +60,11 @@ func nullableString(s string) any {
 	return s
 }
 func activeStockSession(ctx context.Context, tx *sql.Tx, user, tokenHash string, now time.Time) error {
+	if configuration, ok := ctx.Value(moduleGuardContextKey{}).(ModuleConfig); ok {
+		if err := matchingModuleConfiguration(ctx, tx, configuration); err != nil {
+			return err
+		}
+	}
 	var active bool
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.id=? AND u.active=1 AND s.token_hash=? AND s.created_at>? AND s.last_seen>?)`, user, tokenHash, now.Add(-absoluteLifetime).Unix(), now.Add(-idleLifetime).Unix()).Scan(&active)
 	if err != nil {

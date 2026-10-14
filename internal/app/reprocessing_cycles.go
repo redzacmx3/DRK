@@ -124,8 +124,18 @@ func cycleDocumentCurrent(ctx context.Context, tx *sql.Tx, id string, event cycl
 	}
 	return status == "released" && sha == event.DocumentSHA256 && version == event.DocumentReviewVersion && version > 0, nil
 }
-func assessCycles(ctx context.Context, tx *sql.Tx, record deviceRecord, now time.Time) (cycleAssessment, error) {
-	result := cycleAssessment{DeviceVersion: record.Version, Status: "unknown", Reason: "Kein Aufbereitungszyklus erfasst.", Overall: "not_assessed"}
+func assessCycles(ctx context.Context, tx *sql.Tx, record deviceRecord, now time.Time) (result cycleAssessment, assessmentErr error) {
+	result = cycleAssessment{DeviceVersion: record.Version, Status: "unknown", Reason: "Kein Aufbereitungszyklus erfasst.", Overall: "not_assessed"}
+	defer func() {
+		if assessmentErr == nil {
+			reasons := []string{}
+			var inactive bool
+			inactive, assessmentErr = maskModuleAssessment(ctx, tx, "reprocessing", &result.Status, &reasons)
+			if inactive {
+				result.Reason += " " + reasons[0]
+			}
+		}
+	}()
 	var count int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(MAX(version),0) FROM reprocessing_events WHERE device_id=?`, record.ID).Scan(&count, &result.Version); err != nil {
 		return result, err

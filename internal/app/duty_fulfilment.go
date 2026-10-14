@@ -149,8 +149,21 @@ func dutyFulfilmentBasis(ctx context.Context, tx *sql.Tx, record deviceRecord, d
 	}
 	return digest("duty_fulfilment:" + record.ID + ":" + string(value)), nil
 }
-func assessDutyFulfilmentWith(ctx context.Context, tx *sql.Tx, record deviceRecord, duties productDutyAssessment, now time.Time) (dutyFulfilmentAssessment, error) {
-	result := dutyFulfilmentAssessment{DeviceVersion: record.Version, Status: "unknown", Reasons: []string{}, Events: []dutyFulfilmentEvent{}, Overall: "not_assessed"}
+func assessDutyFulfilmentWith(ctx context.Context, tx *sql.Tx, record deviceRecord, duties productDutyAssessment, now time.Time) (result dutyFulfilmentAssessment, assessmentErr error) {
+	result = dutyFulfilmentAssessment{DeviceVersion: record.Version, Status: "unknown", Reasons: []string{}, Events: []dutyFulfilmentEvent{}, Overall: "not_assessed"}
+	defer func() {
+		if assessmentErr == nil {
+			var inactive bool
+			inactive, assessmentErr = maskModuleAssessment(ctx, tx, "compliance", &result.Status, &result.Reasons)
+			if inactive {
+				for i := range result.Prerequisites {
+					if result.Prerequisites[i].Status != "blocked" {
+						result.Prerequisites[i].Status = "unknown"
+					}
+				}
+			}
+		}
+	}()
 	state, sources := dutyFulfilmentPrerequisites(record, duties)
 	result.Prerequisites = sources
 	var err error

@@ -193,8 +193,13 @@ func assessEndUserPrerequisites(ctx context.Context, tx *sql.Tx, actor, subject 
 	return result, nil
 }
 
-func assessEndUser(ctx context.Context, tx *sql.Tx, actor, subject string, record deviceRecord, now time.Time) (endUserAssessment, error) {
-	result := endUserAssessment{UserID: subject, DeviceVersion: record.Version, Status: "unknown", Reasons: []string{}, Events: []endUserEvent{}, Overall: "not_assessed"}
+func assessEndUser(ctx context.Context, tx *sql.Tx, actor, subject string, record deviceRecord, now time.Time) (result endUserAssessment, assessmentErr error) {
+	result = endUserAssessment{UserID: subject, DeviceVersion: record.Version, Status: "unknown", Reasons: []string{}, Events: []endUserEvent{}, Overall: "not_assessed"}
+	defer func() {
+		if assessmentErr == nil {
+			_, assessmentErr = maskModuleAssessment(ctx, tx, "compliance", &result.Status, &result.Reasons)
+		}
+	}()
 	prerequisites, err := assessEndUserPrerequisites(ctx, tx, actor, subject, record, now)
 	if err != nil {
 		return result, err

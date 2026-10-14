@@ -76,8 +76,33 @@ type productDutyAssessment struct {
 	Overall       string             `json:"overall_readiness"`
 }
 
-func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record deviceRecord, now time.Time) (productDutyAssessment, error) {
-	result := productDutyAssessment{DeviceVersion: record.Version, Status: "unknown", Reasons: []string{}, Events: []productDutyEvent{}, Overall: "not_assessed"}
+func assessProductDuty(ctx context.Context, tx *sql.Tx, actor string, record deviceRecord, now time.Time) (result productDutyAssessment, assessmentErr error) {
+	result = productDutyAssessment{DeviceVersion: record.Version, Status: "unknown", Reasons: []string{}, Events: []productDutyEvent{}, Overall: "not_assessed"}
+	defer func() {
+		if assessmentErr == nil {
+			var inactive bool
+			inactive, assessmentErr = maskModuleAssessment(ctx, tx, "compliance", &result.Status, &result.Reasons)
+			if inactive {
+				for i := range result.Checks {
+					if result.Checks[i].Status != "blocked" {
+						result.Checks[i].Status = "unknown"
+					}
+				}
+			}
+			if assessmentErr == nil {
+				var configuration ModuleConfig
+				configuration, _, assessmentErr = currentModules(ctx, tx)
+				if assessmentErr == nil && !configuration.Enabled("reprocessing") {
+					for i := range result.Checks {
+						if (result.Checks[i].Kind == "reprocessing" || result.Checks[i].Kind == "reprocessing_process") && result.Checks[i].Status != "blocked" {
+							result.Checks[i].Status = "unknown"
+							result.Checks[i].Reason = "Aufbereitungsmodul deaktiviert; keine aktive Erfüllungsbewertung."
+						}
+					}
+				}
+			}
+		}
+	}()
 	var err error
 	var count int
 	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0),COUNT(*) FROM product_duty_events WHERE device_id=?`, record.ID).Scan(&result.Version, &count); err != nil {
@@ -307,6 +332,16 @@ func (a *authService) mutateProductDuty(ctx context.Context, user, token, key, i
 	}
 	if !manager {
 		return nil, scopeError()
+	}
+	if err = requireModule(ctx, tx, "compliance"); err != nil {
+		return nil, err
+	}
+	for _, rule := range in.Rules {
+		if rule.ReprocessingAcceptance != nil {
+			if err = requireModule(ctx, tx, "reprocessing"); err != nil {
+				return nil, err
+			}
+		}
 	}
 	record, err := readDevice(ctx, tx, user, id, a.now())
 	if err != nil {

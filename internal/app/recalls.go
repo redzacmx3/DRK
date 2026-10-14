@@ -226,6 +226,9 @@ func changeRecall(ctx context.Context, a *authService, user, token, key string, 
 			return nil, err
 		}
 	}
+	if err = requireModule(ctx, tx, "recalls"); err != nil {
+		return nil, err
+	}
 	global, err := recallGlobal(ctx, tx, user, record.Kind)
 	if err != nil {
 		return nil, err

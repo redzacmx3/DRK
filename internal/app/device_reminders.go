@@ -85,6 +85,9 @@ func ReconcileDeviceReminders(ctx context.Context, db *sql.DB, now time.Time, th
 		return err
 	}
 	defer tx.Rollback()
+	if err = requireModule(ctx, tx, "reminders"); err != nil {
+		return err
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT id,location_id,inventory_number,name,manufacturer,model,serial_or_lot,created_by,created_at,note FROM devices ORDER BY id LIMIT 1001`)
 	if err != nil {
 		return err

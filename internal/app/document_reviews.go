@@ -134,6 +134,9 @@ func (a *authService) reviewDocument(ctx context.Context, user, token, key, devi
 	if err = activeStockSession(ctx, tx, user, token, a.now()); err != nil {
 		return nil, err
 	}
+	if err = a.activeModule(ctx, tx, "documents"); err != nil {
+		return nil, err
+	}
 	manager, err := usageManager(ctx, tx, user, device)
 	if err != nil {
 		return nil, err

@@ -164,6 +164,7 @@ type attemptWindow struct {
 	Count int
 }
 type authService struct {
+	modules       ModuleConfig
 	clamdAddress  string
 	documentSlots chan struct{}
 	db            *sql.DB
@@ -178,7 +179,7 @@ type authService struct {
 }
 
 func newAuth(db *sql.DB, origin string) *authService {
-	return &authService{clamdAddress: os.Getenv("DRK_CLAMD_ADDRESS"), documentSlots: make(chan struct{}, 1), db: db, origin: origin, now: time.Now, dummy: passwordHash(randomToken()), attempts: map[string]attemptWindow{}, loginSlots: make(chan struct{}, 2), exportSlots: make(chan struct{}, 2)}
+	return &authService{modules: allModules(), clamdAddress: os.Getenv("DRK_CLAMD_ADDRESS"), documentSlots: make(chan struct{}, 1), db: db, origin: origin, now: time.Now, dummy: passwordHash(randomToken()), attempts: map[string]attemptWindow{}, loginSlots: make(chan struct{}, 2), exportSlots: make(chan struct{}, 2)}
 }
 func (a *authService) cookieName() string {
 	if a.localHTTP {

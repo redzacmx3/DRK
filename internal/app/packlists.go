@@ -305,6 +305,22 @@ func publishPack(ctx context.Context, db *sql.DB, user, token, key string, input
 	if err = packScope(ctx, tx, user, input.Location, "publish"); err != nil {
 		return nil, err
 	}
+	configuration, _, err := currentModules(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	if !configuration.Enabled("packs") {
+		return nil, moduleDisabled("packs")
+	}
+	if !configuration.Enabled("devices") {
+		var deviceRequirements bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM packlist_devices d JOIN packlist_versions p ON p.id=d.packlist_id WHERE p.location_id=? AND p.version=(SELECT MAX(version) FROM packlist_versions WHERE location_id=?))`, input.Location, input.Location).Scan(&deviceRequirements); err != nil {
+			return nil, err
+		}
+		if len(input.Devices) > 0 || deviceRequirements {
+			return nil, moduleDisabled("devices")
+		}
+	}
 	if replay, err := packReplay(ctx, tx, user, key, hash); err != nil || replay != nil {
 		return replay, err
 	}
@@ -348,6 +364,9 @@ func recordMaterialCheck(ctx context.Context, db *sql.DB, user, token, key, id s
 	}
 	defer tx.Rollback()
 	if err = activeStockSession(ctx, tx, user, token, now); err != nil {
+		return nil, err
+	}
+	if err = requireModule(ctx, tx, "packs"); err != nil {
 		return nil, err
 	}
 	p, err := loadPack(ctx, tx, user, id, "check")

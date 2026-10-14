@@ -2,6 +2,8 @@
 
 `compose.local.yaml` startet eine lokale Testinstanz ohne Zertifikatsvorbereitung. Ein Image enthält Programm und Oberfläche; SQLite liegt im separaten persistenten Volume. Die Ugreen DXP2800 nutzt die unterstützte Plattform `linux/amd64`.
 
+Für die erste Inventarisierung in der Stack-Konfiguration `DRK_MODULES=inventory` setzen; mit optionalen Geräteakten `DRK_MODULES=inventory,devices`. Ohne Einstellung bleibt der bisherige volle Funktionsumfang aktiv. [Module und Abhängigkeiten](module.md).
+
 ## Sofort aus dem GitHub-Download testen
 
 Im entpackten Projektordner:

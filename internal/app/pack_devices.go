@@ -308,6 +308,9 @@ func assessPackFor(ctx context.Context, tx *sql.Tx, user, subject string, p pack
 		result.Status = "obsolete"
 	}
 	result.Evidence = consolidateEvidence(result)
+	if err := maskOperatingEvidence(ctx, tx, &result.Evidence); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 func assessPack(ctx context.Context, tx *sql.Tx, user string, p packVersion, now time.Time) (packAssessment, error) {
