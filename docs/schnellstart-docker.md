@@ -2,7 +2,7 @@
 
 `compose.local.yaml` startet eine lokale Testinstanz ohne Zertifikatsvorbereitung. Ein Image enthält Programm und Oberfläche; SQLite liegt im separaten persistenten Volume. Die Ugreen DXP2800 nutzt die unterstützte Plattform `linux/amd64`.
 
-Für die erste Inventarisierung in der Stack-Konfiguration `DRK_MODULES=inventory` setzen; mit optionalen Geräteakten `DRK_MODULES=inventory,devices`. Ohne Einstellung bleibt der bisherige volle Funktionsumfang aktiv. [Module und Abhängigkeiten](module.md).
+Die erste Einrichtung erfolgt im Browser: Administratorkonto, Organisation und benötigte Module auswählen. Inventarisierung ist voreingestellt; optionale Geräteakten später in der Verwaltung zuschalten. `DRK_MODULES` bleibt als Startvorgabe verfügbar und überschreibt Web-Änderungen bei unverändertem Neustart nicht. [Module und Abhängigkeiten](module.md).
 
 ## Sofort aus dem GitHub-Download testen
 
@@ -10,19 +10,15 @@ Im entpackten Projektordner:
 
 ```sh
 docker compose -f compose.local.yaml up -d --build --wait
-docker compose -f compose.local.yaml run --rm init seed-demo --db /data/inventory.db
 ```
 
-Ein Testkonto anlegen (eigenes Passwort eingeben):
+`http://localhost:8080` öffnen. Bei neuer Datenbank erscheint die Ersteinrichtung. Den privaten Einrichtungscode über die Konsole des Containers auslesen:
 
 ```sh
-read -r -s -p 'Passwort: ' DRK_TEST_PASSWORD
-printf '\n'
-printf '%s\n' "$DRK_TEST_PASSWORD" | docker compose -f compose.local.yaml run --rm -T init create-user --db /data/inventory.db --username test-geraete --site 00000000-0000-4000-8000-000000000002 --role device_manager
-unset DRK_TEST_PASSWORD
+docker compose -f compose.local.yaml exec -T inventory cat /data/setup-code.txt
 ```
 
-`http://localhost:8080` öffnen. `seed-demo` ist ausschließlich für synthetische Tests gedacht. Für Materialbuchungen ein weiteres Konto mit `--role material_manager` anlegen. Die Rolle bestimmt weiterhin die fachlichen Schreibrechte.
+In Dockhand dazu die Konsole des `inventory`-Containers öffnen und `cat /data/setup-code.txt` ausführen. Im Browser Code eingeben, Prüfhinweise lesen, Administratorkonto mit Passwort, Betreiber, Betriebsstätte und Lagerort anlegen, Fachrechte ausdrücklich auswählen und Module festlegen. Anschließend normal anmelden. Ein separater `create-admin`-Befehl ist für die neue Instanz nicht nötig. [Schritte und Sicherheitsgrenzen](ersteinrichtung.md).
 
 `init` migriert nur eine noch nicht vorhandene Datenbank. Eine bestehende Datenbank wird lediglich auf Bereitschaft geprüft; erforderliche Upgrades müssen nach einem Backup ausdrücklich über `migrate` ausgeführt werden. Nie Datenvolumes löschen, um ein Upgrade zu erzwingen.
 
@@ -70,10 +66,10 @@ Für reproduzierbare Updates den Commit-Tag statt `latest` verwenden. Bestehende
 
 ## Kontrollerinnerungen
 
-Der vorhandene Container erzeugt automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist optional per SMTP-Overlay verfügbar, siehe [SMTP-Anleitung](smtp-erinnerungen.md). Bestehende Datenbanken vor Update sichern und ausdrücklich auf Schema 32 migrieren; Volumes erhalten.
+Bei aktivem Modul `reminders` erzeugt der vorhandene Container automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist optional per SMTP-Overlay verfügbar, siehe [SMTP-Anleitung](smtp-erinnerungen.md). Ein abgeschaltetes Modul erhält Warteschlange und Historie; erneute Aktivierung weckt konfigurierte Worker innerhalb einer Minute. Während der Ersteinrichtung bleiben beide Hintergrundjobs still.
 
 ## Organisatorische Verwaltung
 
-Betreiber, Betriebsstätten, Lagerorte und Benutzer lassen sich jetzt mit einem eigenen Administratorkonto über die Oberfläche einrichten. Für eine leere Installation ist `seed-demo` nicht erforderlich. Konto ohne automatische Fachrechte ausdrücklich lokal anlegen, siehe [Verwaltung](administration.md). Fachrechte je Betriebsstätte anschließend bewusst vergeben.
+Betreiber, Betriebsstätten, Lagerorte, Benutzer und Module lassen sich mit einem Administratorkonto über die Oberfläche verwalten. Die neue Installation wird im Browser eingerichtet; `seed-demo` ist nicht erforderlich. Fachrechte je Betriebsstätte bewusst auswählen und später vergeben, siehe [Verwaltung](administration.md). Vorhandene Daten oder Konten öffnen den Assistenten nicht; für die ausdrückliche lokale Wiederherstellung bleibt die Konten-CLI verfügbar.
 
-Aktueller Schemastand 32: [Sicherung und ausdrückliche Migration](einsatzfreigabe.md#upgrade-auf-schema-32). Neue Installationen werden direkt initialisiert.
+Aktueller Schemastand 34: [Sicherung und ausdrückliche Migration](module.md#bestehende-instanz-auf-schema-34-aktualisieren). Neue Installationen werden direkt initialisiert. Datenvolumes, TLS-Schlüssel und Sicherungen erhalten.

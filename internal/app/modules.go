@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 )
 
 type moduleDefinition struct {
@@ -35,6 +34,13 @@ var moduleDefinitions = []moduleDefinition{
 type ModuleConfig struct{ bits uint16 }
 
 type moduleGuardContextKey struct{}
+
+// Captured by the route guard and checked again in the write transaction.
+// A disable/re-enable transition must invalidate an in-flight mutation too.
+type moduleGuardSnapshot struct {
+	Config   ModuleConfig
+	Revision int
+}
 
 func allModules() ModuleConfig { return ModuleConfig{bits: (1 << len(moduleDefinitions)) - 1} }
 
@@ -128,15 +134,9 @@ func ConfigureModules(ctx context.Context, db *sql.DB, c ModuleConfig) (int, err
 		return 0, err
 	}
 	defer tx.Rollback()
-	old, revision, err := currentModules(ctx, tx)
+	revision, err := configureModulesTx(ctx, tx, c, "", "environment", "Lokale Modulkonfiguration")
 	if err != nil {
 		return 0, err
-	}
-	if revision == 0 || old != c {
-		revision++
-		if _, err := tx.ExecContext(ctx, `INSERT INTO module_configuration_events(version,modules,created_at) VALUES(?,?,?)`, revision, strings.Join(c.names(), ","), time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
-			return 0, err
-		}
 	}
 	return revision, tx.Commit()
 }
@@ -183,6 +183,13 @@ func requireModule(ctx context.Context, tx *sql.Tx, id string) error {
 func (a *authService) activeModule(ctx context.Context, tx *sql.Tx, id string) error {
 	if err := requireModule(ctx, tx, id); err != nil {
 		return err
+	}
+	return a.matchingModules(ctx, tx)
+}
+
+func (a *authService) matchingModules(ctx context.Context, tx *sql.Tx) error {
+	if a.dynamicModules {
+		return nil
 	}
 	return matchingModuleConfiguration(ctx, tx, a.modules)
 }
@@ -255,7 +262,7 @@ func mutationModule(pattern string) string {
 }
 
 func (a *authService) moduleGuard(w http.ResponseWriter, r *http.Request, pattern string) bool {
-	if !strings.HasPrefix(pattern, "POST /api/v1/") || strings.HasPrefix(pattern, "POST /api/v1/auth/") || pattern == "POST /api/v1/scanner/resolve" {
+	if !strings.HasPrefix(pattern, "POST /api/v1/") || strings.HasPrefix(pattern, "POST /api/v1/auth/") || strings.HasPrefix(pattern, "POST /api/v1/setup/") || pattern == "POST /api/v1/scanner/resolve" {
 		return true
 	}
 	if _, err := a.session(r); err != nil {
@@ -268,7 +275,7 @@ func (a *authService) moduleGuard(w http.ResponseWriter, r *http.Request, patter
 		return false
 	}
 	defer tx.Rollback()
-	err = matchingModuleConfiguration(r.Context(), tx, a.modules)
+	err = a.matchingModules(r.Context(), tx)
 	if err == nil {
 		err = requireModule(r.Context(), tx, mutationModule(pattern))
 	}
@@ -284,13 +291,23 @@ func (a *authService) moduleGuard(w http.ResponseWriter, r *http.Request, patter
 		return false
 	}
 	// Recheck this trusted selection inside the actual write transaction too.
-	*r = *r.WithContext(context.WithValue(r.Context(), moduleGuardContextKey{}, a.modules))
+	if a.dynamicModules {
+		c, revision, e := currentModules(r.Context(), tx)
+		if e != nil {
+			sendStockError(w, e)
+			return false
+		}
+		*r = *r.WithContext(context.WithValue(r.Context(), moduleGuardContextKey{}, moduleGuardSnapshot{c, revision}))
+	} else {
+		*r = *r.WithContext(context.WithValue(r.Context(), moduleGuardContextKey{}, a.modules))
+	}
 	return true
 }
 
 func moduleRoutes(mux *http.ServeMux, a *authService) {
 	mux.HandleFunc("GET /api/v1/modules", func(w http.ResponseWriter, r *http.Request) {
-		if _, err := a.session(r); err != nil {
+		user, err := a.session(r)
+		if err != nil {
 			a.sessionError(w, err)
 			return
 		}
@@ -300,7 +317,7 @@ func moduleRoutes(mux *http.ServeMux, a *authService) {
 			return
 		}
 		defer tx.Rollback()
-		if err := matchingModuleConfiguration(r.Context(), tx, a.modules); err != nil {
+		if err := a.matchingModules(r.Context(), tx); err != nil {
 			sendStockError(w, err)
 			return
 		}
@@ -313,11 +330,18 @@ func moduleRoutes(mux *http.ServeMux, a *authService) {
 		for i := range definitions {
 			definitions[i].Enabled = c.Enabled(definitions[i].ID)
 		}
+		var administrator bool
+		if err := tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM administrators a JOIN users u ON u.id=a.user_id WHERE a.user_id=? AND u.active=1)`, user.ID).Scan(&administrator); err != nil {
+			sendStockError(w, err)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(struct {
 			Revision int                `json:"revision"`
 			Enabled  []string           `json:"enabled_modules"`
 			Modules  []moduleDefinition `json:"modules"`
-		}{revision, c.names(), definitions})
+			Editable bool               `json:"editable"`
+		}{revision, c.names(), definitions, administrator && a.dynamicModules})
 	})
+	moduleManagementRoutes(mux, a)
 }

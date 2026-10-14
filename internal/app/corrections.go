@@ -60,6 +60,15 @@ func nullableString(s string) any {
 	return s
 }
 func activeStockSession(ctx context.Context, tx *sql.Tx, user, tokenHash string, now time.Time) error {
+	if snapshot, ok := ctx.Value(moduleGuardContextKey{}).(moduleGuardSnapshot); ok {
+		configuration, revision, err := currentModules(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if configuration != snapshot.Config || revision != snapshot.Revision {
+			return &stockError{409, "module_configuration_changed", "Funktionsumfang während des Vorgangs geändert. Neu laden und prüfen."}
+		}
+	}
 	if configuration, ok := ctx.Value(moduleGuardContextKey{}).(ModuleConfig); ok {
 		if err := matchingModuleConfiguration(ctx, tx, configuration); err != nil {
 			return err

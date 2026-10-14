@@ -2,7 +2,7 @@
 
 Einfacher HTTP/HTTPS-Teststart: [Docker-Schnellstart](docs/schnellstart-docker.md).
 
-Inventarisierung von Geräten, Equipment und Material ist der dauerhaft aktive Kern. Zusätzliche Geräteakten und weitere Funktionsgruppen lassen sich je Installation per `DRK_MODULES` zuschalten, etwa `DRK_MODULES=inventory,devices`. Ohne Einstellung bleiben alle bisherigen Funktionen aktiv. [Module, Abhängigkeiten und Umstellung](docs/module.md).
+Inventarisierung von Geräten, Equipment und Material ist der dauerhaft aktive Kern. Die [erste Einrichtung im Browser](docs/ersteinrichtung.md) legt Administratorkonto, Organisation und benötigte Module fest. Zusätzliche Geräteakten und weitere Funktionsgruppen lassen sich danach in der Verwaltung zuschalten. `DRK_MODULES` bleibt als Startvorgabe verfügbar; unveränderte Neustarts bewahren spätere Web-Änderungen. [Module, Abhängigkeiten und Umstellung](docs/module.md).
 
 Administrative Verwaltung von Medizinprodukten, Sanitätsmaterial und mobilen Packlisten. Fachliche Grundlage: [Architektur-Blueprint v2](docs/blueprint-v2.md). Seine rechtlichen Quellen wurden beim Umgebungsetup nicht erneut geprüft.
 
@@ -12,7 +12,7 @@ Aktueller Gesamtstand und offene Punkte: [Stand und Roadmap](docs/stand-und-road
 
 Modularer Go-Dienst mit eingebetteter HTML/JS-Oberfläche, SQLite und expliziten Migrationen. Synthetische Betreiber, Betriebsstätte und Lagerorte. HTTPS-Anmeldung, widerrufbare Sessions und Rechte je Betriebsstätte. Die Oberfläche zeigt Lagerorte und Materialbestand im zugewiesenen Bereich und bietet Wareneingang, Umlagerung, Entnahme, Gegenbuchung und Inventur. Das Bewegungsjournal zeigt frühere Einträge und deren Korrekturbezüge.
 
-Geräteakten mit Kontrollen, Sperren, Einweisungen und Anhängen in Quarantäne sind vorhanden. Sollpacklisten erfassen Geräte und Zubehör sowie getrennte physische Material- und Geräteprüfnachweise. Noch offen: weitere Rollen/Aktionen und Geräteabläufe, Nutzerqualifikation und vollständige Einsatzfreigabe, Malwareprüfung und Dokumentfreigabe, vollständige PWA, produktive Proxy-Konfiguration und vollständige Backup-/Restore-Verfahren. Nur synthetische Daten verwenden. Der Entwicklungsserver bindet standardmäßig an Loopback; die separate NAS-Konfiguration aktiviert eine Netzwerkbindung ausdrücklich. Forwarded-Header werden nicht vertraut.
+Geräteakten mit Kontrollen, Sperren, Einweisungen und Anhängen in Quarantäne sind vorhanden. Sollpacklisten erfassen Geräte und Zubehör sowie getrennte physische Material- und Geräteprüfnachweise. Qualifikations-/Produktnachweise, kontrollierte Dokumentfreigabe mit Scanneranbindung, ausdrücklich personenbezogene Einsatzfreigabe und verschlüsselte Sicherungs-/Rücksicherungswerkzeuge sind implementiert. Produktive Erprobung mit tatsächlichem NAS, Scanner, SMTP und externer Sicherung sowie weitere Abläufe bleiben offen; siehe [Stand und Roadmap](docs/stand-und-roadmap.md). Nur synthetische Daten verwenden. Der Entwicklungsserver bindet standardmäßig an Loopback; die separate NAS-Konfiguration aktiviert eine Netzwerkbindung ausdrücklich. Forwarded-Header werden nicht vertraut.
 
 ## Schnelle Erstinventarisierung
 
@@ -66,7 +66,7 @@ Den Dienst im lokalen Browser mit Hostnamen `localhost` und Port `8080` über HT
 
 ## Konten und Bereiche
 
-Kein Standardkonto und kein Standardpasswort werden erzeugt. Konten werden ausschließlich lokal über die CLI angelegt. Passwörter (12–256 Bytes) kommen über stdin; niemals als Kommandozeilenargument oder im Repository speichern.
+Kein Standardkonto und kein Standardpasswort werden erzeugt. Eine neue, leere Installation erstellt das erste Administratorkonto über die [geschützte Ersteinrichtung](docs/ersteinrichtung.md). Anschließend lassen sich Benutzer, Aktivstatus, Passwörter und Standortrollen über die [Verwaltung](docs/administration.md) steuern. Die lokale CLI bleibt für Entwicklung und Wiederherstellung verfügbar; dabei kommen Passwörter (12–256 Bytes) über stdin, niemals als Kommandozeilenargument oder aus dem Repository.
 
 Beispiel für die synthetische Betriebsstätte in einer Bash-Sitzung:
 
@@ -296,7 +296,7 @@ Aktuelle Prioritäten stehen in [Stand und Roadmap](docs/stand-und-roadmap.md). 
 
 Die Zustände sind `UNKNOWN`, `NOT_APPLICABLE`, `CURRENT`, `DUE_SOON` und `OVERDUE`. Eine Frist gilt bis einschließlich des fachlichen Tages in `Europe/Berlin`; die Vorwarnschwelle ist ein expliziter Parameter. Fehlendes Basisdatum bleibt ungeklärt. Die Funktion beurteilt keine Gerätesperren und erteilt keine Einsatzfreigabe.
 
-Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Wiederkehrende Prüfungen und Instandhaltungsnachweise sind integriert. Datenbankschema: Version 33.
+Die Berechnungsgrundlage ist getestet. Registrierte Geräteakten sind inzwischen vorhanden; versionierte Kontrollregeln und Inbetriebnahme sind integriert. Wiederkehrende Prüfungen und Instandhaltungsnachweise sind integriert. Datenbankschema: Version 34.
 
 
 ### Registrierte Geräteakten
@@ -481,13 +481,17 @@ SMTP-Annahme ist keine Bestätigung der Postfachzustellung. Temporäre Fehler we
 
 `GET /api/v1/devices/reminder-mail` und die Oberfläche zeigen die letzten 200 Zustellungen im berechtigten Bereich, Status, Versuche und Message-ID, ohne Empfängeradressen oder Zugangsdaten auszugeben. Weitere Einträge werden ausdrücklich angekündigt. Der Status bleibt auch nach Außerbetriebnahme sichtbar. Wiederaufnahme erfolgt über die lokale CLI; bei unklarer Annahme ist nach externer Prüfung eine ausdrückliche Bestätigung des Doppelmail-Risikos erforderlich. SMTP-Protokolltexte, Passwörter und Mailinhalte werden nicht geloggt. Die bisherigen Bewegungs-/Prüf-Outboxen werden nicht per E-Mail versendet. Bestände, Fristen, Sperren und Prüfnachweise bleiben von Zustellfehlern unabhängig.
 
-Bestehende Installation vor Update sichern, ausdrücklich auf Schema 33 migrieren und anschließend starten. Sicherungen umfassen Warteschlange, Versuchshistorien und Empfängerbindungen; SMTP-Dateien/Secrets separat geschützt sichern.
+Bestehende Installation vor Update sichern, ausdrücklich auf Schema 34 migrieren und anschließend starten. Sicherungen umfassen Warteschlange, Versuchshistorien und Empfängerbindungen; SMTP-Dateien/Secrets separat geschützt sichern.
 
 Geprüft: vollständige Go-Race-Suite, Vet/Build, echte lokale TLS-/STARTTLS-Verbindungen einschließlich Anmeldung, geprüfte Zertifikate, fehlendes STARTTLS, Header-/Konfigurationsprüfung, 4xx/5xx, verlorene DATA-Antwort und QUIT-Abbruch nach Annahme. Warteschlange prüft Rollback, konkurrierende Worker, abgelaufene Leases, begrenzte Wiederholungen, stabile Message-IDs, manuelle Freigabe und Empfänger-/Fristenänderungen. Browser prüft Versandstatus, sichere Texte, Fehlerbereinigung und verspätete Antworten nach Abmeldung. HTTPS-Compose-Test mit lokalem TLS-SMTP-Testserver bestand einschließlich Backup/Migration 21→22, Standard ohne Versand, aktivem Overlay, Wiederholschutz, Neustartpersistenz, Snapshot-Integrität und Bereichsrechten. Frühere Bestände, Dokumente, Nachweise und Geräte-/Materialprüfbasiswerte blieben unverändert. Lokale Backup-/Migrationsprüfung bestand. Die Entwicklungsinstanz läuft wieder ohne SMTP-Konfiguration; reale SMTP-Konten und Postfachzustellung sind nicht geprüft.
 
 ## Organisatorische Verwaltung (Schema 23)
 
-Betreiber, Betriebsstätten, Lagerorte und Benutzer lassen sich über die Oberfläche verwalten. Das erste Administratorrecht wird ausdrücklich lokal eingerichtet; es verleiht keine Material- oder Gerätefachrechte. Änderungen erhalten Versionsprüfung und unveränderliche Vorher-/Nachher-Nachweise; Rechte-/Passwortänderungen widerrufen Sitzungen. Anleitung und API: [Verwaltung](docs/administration.md). Vor Update sichern und ausdrücklich migrieren. Aktueller Funktionsumfang und verbleibende Arbeit: [Stand und Roadmap](docs/stand-und-roadmap.md).
+Betreiber, Betriebsstätten, Lagerorte und Benutzer lassen sich über die Oberfläche verwalten. Eine neue, leere Installation richtet das erste Administratorkonto seit Schema 34 im Browser ein; Fachrechte werden ausdrücklich gewählt. Lokale CLI-Wiederherstellung bleibt möglich. Änderungen erhalten Versionsprüfung und unveränderliche Vorher-/Nachher-Nachweise; Rechte-/Passwortänderungen widerrufen Sitzungen. Anleitung und API: [Verwaltung](docs/administration.md). Vor Update sichern und ausdrücklich migrieren. Aktueller Funktionsumfang und verbleibende Arbeit: [Stand und Roadmap](docs/stand-und-roadmap.md).
+
+## Web-Einrichtung und Modulverwaltung (Schema 34)
+
+Eine neue Datenbank wird über einen einmaligen, lokal aus der privaten Codedatei gelesenen Einrichtungscode im Browser eingerichtet. Der Assistent zeigt Umgebungsprüfungen und erfasst Administratorkonto, Organisation, Standortrechte und Module. Vorhandene Konten oder Fachdaten öffnen den Assistenten nicht. Danach können Administratoren Module mit Abhängigkeits-, Versions- und Wiederholprüfung unmittelbar ändern. Der unveränderte Compose-Startwert bewahrt diese Auswahl über Neustarts. Daten und Fachhistorien bleiben beim Abschalten erhalten. [Ersteinrichtung](docs/ersteinrichtung.md), [Modulverwaltung und Upgrade](docs/module.md).
 
 ## Zentrale Rückrufe (Schema 24)
 

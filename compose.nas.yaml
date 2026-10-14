@@ -18,13 +18,21 @@ x-inventory: &inventory
   stop_grace_period: 10s
 
 services:
+  init:
+    <<: *inventory
+    command: ["init", "--db", "/data/inventory.db"]
+    restart: "no"
   inventory:
     environment:
       DRK_CLAMD_ADDRESS: ${DRK_CLAMD_ADDRESS:-}
+      # Startup default; setup/admin choices survive unchanged restarts.
       DRK_MODULES: ${DRK_MODULES:-all}
     <<: *inventory
+    depends_on:
+      init:
+        condition: service_completed_successfully
     restart: unless-stopped
-    command: ["serve", "--db", "/data/inventory.db", "--device-reminders=${DRK_DEVICE_REMINDERS:-true}", "--reminder-days", "${DRK_REMINDER_DAYS:-60,30,7}", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--origin", "${DRK_ORIGIN:?Set the exact public HTTPS origin}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
+    command: ["serve", "--db", "/data/inventory.db", "--setup-code-file", "/data/setup-code.txt", "--device-reminders=${DRK_DEVICE_REMINDERS:-true}", "--reminder-days", "${DRK_REMINDER_DAYS:-60,30,7}", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--origin", "${DRK_ORIGIN:?Set the exact public HTTPS origin}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
     ports:
       - "${DRK_BIND_IP:?Set the NAS Tailscale IPv4 address}:${DRK_HTTPS_PORT:-8443}:8080"
     healthcheck:

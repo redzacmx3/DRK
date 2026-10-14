@@ -19,12 +19,13 @@ services:
   inventory:
     environment:
       DRK_CLAMD_ADDRESS: ${DRK_CLAMD_ADDRESS:-}
+      # Startup default; setup/admin choices survive unchanged restarts.
       DRK_MODULES: ${DRK_MODULES:-all}
     <<: *app
     depends_on:
       init:
         condition: service_completed_successfully
-    command: ["serve", "--db", "/data/inventory.db", "--device-reminders=${DRK_DEVICE_REMINDERS:-true}", "--reminder-days", "${DRK_REMINDER_DAYS:-60,30,7}", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--http=${DRK_HTTP:-true}", "--origin", "${DRK_ORIGIN:-http://localhost:8080}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
+    command: ["serve", "--db", "/data/inventory.db", "--setup-code-file", "/data/setup-code.txt", "--device-reminders=${DRK_DEVICE_REMINDERS:-true}", "--reminder-days", "${DRK_REMINDER_DAYS:-60,30,7}", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--http=${DRK_HTTP:-true}", "--origin", "${DRK_ORIGIN:-http://localhost:8080}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
     ports:
       - "${DRK_BIND_IP:-127.0.0.1}:${DRK_PORT:-8080}:8080"
     restart: unless-stopped

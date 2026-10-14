@@ -1,6 +1,6 @@
 # Auf Ugreen DXP2800 mit Dockhand testen
 
-Diese Konfiguration baut das Projekt direkt aus dem GitHub-Repository und startet es auf dem NAS. Ein fertiges Containerimage ist derzeit nicht in einer Registry veröffentlicht. Den ganzen Checkout herunterladen, nicht nur die Compose-Datei: Dockerfile, Go-Code und `vendor/` werden zum Build benötigt. Keine Go-Installation auf dem NAS nötig. Voraussetzung ist Docker mit aktuellem Compose v2 (mindestens 2.20.2).
+Diese Konfiguration baut das Projekt direkt aus dem GitHub-Repository und startet es auf dem NAS. Den ganzen Checkout herunterladen, nicht nur die Compose-Datei: Dockerfile, Go-Code und `vendor/` werden zum Build benötigt. Keine Go-Installation auf dem NAS nötig. Voraussetzung ist Docker mit aktuellem Compose v2 (mindestens 2.20.2). Ein Registry-Workflow ist vorhanden; für die Alternative mit fertigem Image zuerst dessen tatsächliche Veröffentlichung prüfen, siehe [Docker-Schnellstart](schnellstart-docker.md).
 
 Der Aufbau ist:
 
@@ -54,39 +54,28 @@ Das Skript erstellt ein selbst signiertes Zertifikat für **`drk-nas.internal`**
 
 Nur **`cert.pem`** zum VPS kopieren. Der private **`key.pem`** bleibt auf dem NAS. Traefik vertraut genau diesem Backend-Zertifikat. Vor Ablauf bewusst ein neues Zertifikatspaar in einem neuen Ordner erzeugen und den Traefik-Vertrauensanker sowie den NAS-Mount koordiniert aktualisieren.
 
-## 4. Bauen und einmalig initialisieren
+## 4. Starten und im Browser einrichten
 
-Für den ersten Start eine NAS-SSH-Sitzung im Projektordner verwenden. Dockhand anschließend denselben Stack/dasselbe Volume verwalten lassen; keinen zweiten gleichzeitigen Dienst auf demselben Port starten.
-
-```bash
-docker compose -p drk-nas --env-file .env.nas -f compose.nas.yaml build inventory
-docker compose -p drk-nas --env-file .env.nas -f compose.nas.yaml run --rm maintenance migrate --db /data/inventory.db
-# Nur für eine neue Testinstallation mit synthetischen Daten:
-docker compose -p drk-nas --env-file .env.nas -f compose.nas.yaml run --rm maintenance seed-demo --db /data/inventory.db
-```
-
-`maintenance` ist ein einmaliger CLI-Dienst mit Profil und startet nicht automatisch im normalen Stack. Vor Migration einer bestehenden Datenbank zuerst ein neues Backup anlegen, siehe unten.
-
-Es gibt kein Standardkonto. Für Material/Verbrauchsmaterial einen Materialwart anlegen; das Passwort wird verdeckt eingegeben und nur per stdin übergeben:
+In Dockhand den Stack bereitstellen oder für den ersten Start eine NAS-SSH-Sitzung im Projektordner verwenden. Anschließend denselben Stack/dasselbe Volume verwalten lassen; keinen zweiten gleichzeitigen Dienst auf demselben Port starten.
 
 ```bash
-read -r -s -p 'Passwort für test-material (mindestens 12 Zeichen): ' DRK_TEST_PASSWORD
-printf '\n'
-printf '%s\n' "$DRK_TEST_PASSWORD" | docker compose -p drk-nas --env-file .env.nas -f compose.nas.yaml run --rm -T maintenance create-user --db /data/inventory.db --username test-material --site 00000000-0000-4000-8000-000000000002 --role material_manager
-unset DRK_TEST_PASSWORD
-```
-
-Für Geräte einen separaten Benutzer `test-geraete` mit **`--role device_manager`** auf dieselbe Weise anlegen. Die Betriebsstätten-ID oben gehört ausschließlich zu den synthetischen Demodaten. `set-sites` ersetzt sämtliche Rollen/Zuweisungen eines Kontos und widerruft seine Sitzungen; damit lässt sich nicht einfach eine zweite Rolle ergänzen.
-
-Dann in Dockhand deployen oder per CLI starten:
-
-```bash
-docker compose -p drk-nas --env-file .env.nas -f compose.nas.yaml up -d --wait --wait-timeout 60
+docker compose -p drk-nas --env-file .env.nas -f compose.nas.yaml up -d --build --wait --wait-timeout 60
 docker compose -p drk-nas --env-file .env.nas -f compose.nas.yaml ps
-docker compose -p drk-nas --env-file .env.nas -f compose.nas.yaml logs --tail 50 inventory
 ```
 
-Der Dienst soll **healthy** melden. Er bindet im Container an `0.0.0.0`, wird auf dem NAS aber nur an der angegebenen Tailscale-IP veröffentlicht. Die Standard-Datei `compose.yaml` bleibt eine eigene Loopback-Entwicklungsumgebung.
+Der einmalige `init`-Dienst initialisiert nur eine noch nicht vorhandene Datenbank und prüft vorhandene Datenbanken auf Bereitschaft. Er aktualisiert bestehende Datenbanken nicht automatisch. Vor einem erforderlichen Upgrade zuerst ein neues Backup anlegen und ausdrücklich migrieren, siehe unten. `maintenance` bleibt ein gesonderter CLI-Dienst mit Profil für diese bewussten Schritte.
+
+Der laufende App-Dienst soll **healthy** melden. Er bindet im Container an `0.0.0.0`, wird auf dem NAS aber nur an der angegebenen Tailscale-IP veröffentlicht. Die Standard-Datei `compose.yaml` bleibt eine eigene Loopback-Entwicklungsumgebung.
+
+Nach Einrichtung der Traefik-Verbindung aus Schritt 5 die öffentliche Subdomain öffnen. Bei einer neuen, leeren Instanz erscheint der Einrichtungsassistent. Den einmaligen Code in der Dockhand-Konsole des `inventory`-Containers mit `cat /data/setup-code.txt` auslesen. Alternativ:
+
+```sh
+docker compose -p drk-nas --env-file .env.nas -f compose.nas.yaml exec -T inventory cat /data/setup-code.txt
+```
+
+Code im Browser eingeben, Umgebungsprüfungen lesen, Administratorkonto, Betreiber, Betriebsstätte und Lagerort erfassen und Fachrechte sowie Module ausdrücklich auswählen. Für den Start reicht Inventarisierung; Geräteakten später bei Bedarf ergänzen. Es gibt kein Standardpasswort und kein notwendiges CLI-Anlegen des ersten Administrators. Weitere Benutzer danach in der Verwaltung anlegen. [Ersteinrichtung](ersteinrichtung.md), [Verwaltung](administration.md) und [Module](module.md).
+
+Keine Demodaten oder Konten vor dem Assistenten anlegen: vorhandene Fachdaten/Konten schließen die Ersteinrichtung zum Schutz einer bestehenden Instanz. `seed-demo` bleibt für ausdrückliche Entwicklungstests verfügbar, ist für die Einrichtung aber nicht erforderlich. Bestehende Instanzen ohne Administrator lokal über die CLI wiederherstellen; Datenbank und Volume erhalten.
 
 ## 5. Traefik/Dokploy auf dem VPS anbinden
 
@@ -110,11 +99,11 @@ Vom VPS mit dem kopierten Backend-Zertifikat prüfen:
 curl --cacert /PFAD/ZUM/NAS-cert.pem --resolve drk-nas.internal:8443:NAS-TAILSCALE-IP https://drk-nas.internal:8443/health/ready
 ```
 
-Bei anderem Port beide Portangaben ändern. Dieselbe Route muss auch aus dem Traefik-Netzwerk funktionieren. Danach die öffentliche Subdomain öffnen und anmelden. Direkter HTTP-Zugriff wird nicht unterstützt. Direkter Zugriff über eine andere HTTPS-Adresse erlaubt wegen der Origin-Prüfung ebenfalls keine Anmeldung.
+Bei anderem Port beide Portangaben ändern. Dieselbe Route muss auch aus dem Traefik-Netzwerk funktionieren. Danach die öffentliche Subdomain öffnen und die Ersteinrichtung abschließen beziehungsweise anmelden. Diese NAS-Datei verwendet ausdrücklich HTTPS; für einen einfachen lokalen HTTP-Test [compose.local.yaml](schnellstart-docker.md) verwenden. Direkter Zugriff über eine andere HTTPS-Adresse erlaubt wegen der Origin-Prüfung ebenfalls keine Anmeldung.
 
 ## 6. Test und spätere Updates
 
-Mit `test-material` Material/Bestandsbuchungen und den Verbrauchsmaterial-CSV-Import testen; mit `test-geraete` Geräteakten und Geräte-CSV. Zunächst nur synthetische Daten. Die Excel-Listen können schon unabhängig vom laufenden Programm benutzt werden.
+Mit einem bewusst angelegten Materialwart Material/Bestandsbuchungen und den Verbrauchsmaterial-CSV-Import testen; mit der Geräteverantwortlichenrolle Gerätegrunddaten und bei aktiviertem Modul die Geräteakten. Fachrechte in der Verwaltung ausdrücklich pro Betriebsstätte vergeben. Zunächst nur synthetische Daten. Die Excel-Listen können schon unabhängig vom laufenden Programm benutzt werden.
 
 Bei Updates den Checkout von GitHub aktualisieren und das Image neu bauen. Datenvolume und Zertifikate behalten. Dienst stoppen, Backup mit neuem Dateinamen erstellen, anschließend migrieren und neu starten:
 
@@ -134,10 +123,10 @@ Go-Tests und ein Docker-Test mit echtem Traefik 3.6 prüfen die ausdrücklich ak
 
 ## Kontrollerinnerungen
 
-Der vorhandene Container erzeugt automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist optional per SMTP-Overlay verfügbar, siehe [SMTP-Anleitung](smtp-erinnerungen.md). Bestehende Datenbanken vor Update sichern und ausdrücklich auf Schema 32 migrieren; Volumes erhalten.
+Bei aktivem Modul `reminders` erzeugt der vorhandene Container automatisch gespeicherte Hinweise; kein zusätzlicher Dienst nötig. `DRK_REMINDER_DAYS=60,30,7` legt Vorwarnzeiten fest, `DRK_DEVICE_REMINDERS=false` schaltet den Hintergrundlauf ab. Die Oberfläche zeigt den letzten erfolgreichen Lauf. E-Mail-Versand ist optional per SMTP-Overlay verfügbar, siehe [SMTP-Anleitung](smtp-erinnerungen.md). Während der offenen Ersteinrichtung und bei ausgeschaltetem Modul bleiben die Hintergrundjobs still; beim Einschalten reagieren konfigurierte Worker innerhalb einer Minute. Bestehende Datenbanken vor Update sichern und ausdrücklich auf Schema 34 migrieren; Volumes erhalten.
 
 ## Organisatorische Verwaltung
 
-Betreiber, Betriebsstätten, Lagerorte und Benutzer lassen sich jetzt mit einem eigenen Administratorkonto über die Oberfläche einrichten. Für eine leere Installation ist `seed-demo` nicht erforderlich. Konto ohne automatische Fachrechte ausdrücklich lokal anlegen, siehe [Verwaltung](administration.md). Fachrechte je Betriebsstätte anschließend bewusst vergeben.
+Betreiber, Betriebsstätten, Lagerorte, Benutzer und Module lassen sich mit einem Administratorkonto über die Oberfläche verwalten. Eine neue, leere Installation wird über den geschützten Web-Assistenten eingerichtet; Fachrechte je Betriebsstätte bewusst auswählen und später zuweisen. Vorhandene Instanzen öffnen keine neue Ersteinrichtung. [Verwaltung](administration.md).
 
-Aktueller Schemastand 32: [Sicherung und ausdrückliche Migration](einsatzfreigabe.md#upgrade-auf-schema-32). Neue Installationen werden direkt initialisiert.
+Aktueller Schemastand 34: [Sicherung und ausdrückliche Migration](module.md#bestehende-instanz-auf-schema-34-aktualisieren). Neue Installationen werden automatisch vom einmaligen `init`-Dienst initialisiert.

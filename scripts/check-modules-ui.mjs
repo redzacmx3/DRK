@@ -56,7 +56,8 @@ try {
  window.visible=(selector)=>{const node=document.querySelector(selector);return Boolean(node&&!node.hidden&&node.getClientRects().length);};
  window.fetch=async(input,options={})=>{
   const path=typeof input==='string'?input:input.url;window.requests.push({path,method:options.method||'GET'});let data;
-  if(path==='/api/v1/me')data={id:'synthetic-user',username:window.userName,administrator:false,csrf_token:'synthetic',rights:[{site_id:'site',role:'material_manager'},{site_id:'site',role:'device_manager'}]};
+  if(path==='/api/v1/setup/status')data={pending:false};
+  else if(path==='/api/v1/me')data={id:'synthetic-user',username:window.userName,administrator:false,csrf_token:'synthetic',rights:[{site_id:'site',role:'material_manager'},{site_id:'site',role:'device_manager'}]};
   else if(path==='/api/v1/modules'){if(window.failModules)return new Response(JSON.stringify({message:'Configuration unavailable'}),{status:503});data=structuredClone(window.config);if(window.holdModules){window.holdModules=false;await new Promise(resolve=>window.releaseModules=resolve);}}
   else if(path.startsWith('/api/v1/auth/'))data={csrf_token:'synthetic'};
   else if(path==='/api/v1/locations')data=[{id:'warehouse',name:'Lager',site_id:'site',site:'Demo',operator:'Demo'}];

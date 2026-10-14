@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -83,30 +84,32 @@ func run() error {
 	duplicateRisk := flags.Bool("accept-duplicate-risk", false, "allow retry after uncertain SMTP acceptance")
 	reminderDays := flags.String("reminder-days", "60,30,7", "device reminder thresholds in days")
 	reminders := flags.Bool("device-reminders", true, "run hourly local device reminders")
+	setupCodeFile := flags.String("setup-code-file", "", "private first-start setup code file; defaults to setup-code.txt beside the database")
 	moduleDefault := "all"
 	if value, present := os.LookupEnv("DRK_MODULES"); present {
 		moduleDefault = value
 	}
-	modules := flags.String("modules", moduleDefault, "enabled modules (all or comma-separated module IDs), also DRK_MODULES")
+	modules := flags.String("modules", moduleDefault, "startup module selection (all or comma-separated IDs), also DRK_MODULES; explicit expectation for manual reminder commands")
 	allowNetwork := flags.Bool("allow-network-listen", false, "allow an explicit non-loopback HTTPS listener behind a protected network")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
 	}
 	var moduleConfig app.ModuleConfig
-	moduleCommand := os.Args[1] == "serve" || os.Args[1] == "remind-devices" || os.Args[1] == "deliver-reminders" || os.Args[1] == "retry-reminder-mail"
-	if moduleCommand {
+	modulesExplicit := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "modules" {
+			modulesExplicit = true
+		}
+	})
+	manualReminder := os.Args[1] == "remind-devices" || os.Args[1] == "deliver-reminders" || os.Args[1] == "retry-reminder-mail"
+	if os.Args[1] == "serve" || (manualReminder && modulesExplicit) {
 		var err error
 		moduleConfig, err = app.ParseModules(*modules)
 		if err != nil {
 			return fmt.Errorf("invalid module configuration: %w", err)
 		}
-		if !moduleConfig.Enabled("reminders") {
-			if os.Args[1] != "serve" {
-				return fmt.Errorf("%s requires the reminders module", os.Args[1])
-			}
-			if *smtpPath != "" {
-				return fmt.Errorf("SMTP configuration requires the reminders module")
-			}
+		if manualReminder && !moduleConfig.Enabled("reminders") {
+			return fmt.Errorf("%s requires the reminders module", os.Args[1])
 		}
 	}
 	if os.Args[1] == "serve" {
@@ -184,6 +187,25 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	if manualReminder {
+		if err := app.Ready(context.Background(), db); err != nil {
+			return err
+		}
+		// DRK_MODULES is a startup bootstrap value. An administrator may have
+		// changed the persisted selection since the container was started.
+		if modulesExplicit {
+			if err := app.RequireModuleConfiguration(context.Background(), db, moduleConfig); err != nil {
+				return err
+			}
+		}
+		active, _, err := app.ActiveModules(context.Background(), db)
+		if err != nil {
+			return err
+		}
+		if !active.Enabled("reminders") {
+			return fmt.Errorf("%s requires the reminders module", os.Args[1])
+		}
+	}
 	switch os.Args[1] {
 	case "init":
 		if freshDatabase {
@@ -209,28 +231,10 @@ func run() error {
 		_, err := db.Exec(`VACUUM INTO ?`, *out)
 		return err
 	case "retry-reminder-mail":
-		if err := app.Ready(context.Background(), db); err != nil {
-			return err
-		}
-		if err := app.RequireModuleConfiguration(context.Background(), db, moduleConfig); err != nil {
-			return err
-		}
 		return app.RetryReminderMail(context.Background(), db, *deliveryID, *duplicateRisk, time.Now())
 	case "deliver-reminders":
-		if err := app.Ready(context.Background(), db); err != nil {
-			return err
-		}
-		if err := app.RequireModuleConfiguration(context.Background(), db, moduleConfig); err != nil {
-			return err
-		}
 		return app.DispatchReminderMail(context.Background(), db, smtpConfig, smtpConfig, time.Now)
 	case "remind-devices":
-		if err := app.Ready(context.Background(), db); err != nil {
-			return err
-		}
-		if err := app.RequireModuleConfiguration(context.Background(), db, moduleConfig); err != nil {
-			return err
-		}
 		return app.ReconcileDeviceReminders(context.Background(), db, time.Now(), thresholds)
 	case "migrate":
 		return app.Migrate(db)
@@ -266,17 +270,30 @@ func run() error {
 		if err := app.Ready(context.Background(), db); err != nil {
 			return fmt.Errorf("run migrate first: %w", err)
 		}
-		if err := app.ValidateSMTPRecipients(context.Background(), db, smtpConfig); err != nil {
+		if *setupCodeFile == "" {
+			*setupCodeFile = filepath.Join(filepath.Dir(*path), "setup-code.txt")
+		}
+		pending, err := app.PrepareWebSetup(context.Background(), db, *setupCodeFile)
+		if err != nil {
 			return err
 		}
-		if _, err := app.ConfigureModules(context.Background(), db, moduleConfig); err != nil {
+		if !pending {
+			if err := app.ValidateSMTPRecipients(context.Background(), db, smtpConfig); err != nil {
+				return err
+			}
+		}
+		if _, _, err := app.InitializeModules(context.Background(), db, moduleConfig); err != nil {
 			return err
 		}
-		srv := &http.Server{Addr: *addr, Handler: app.HandlerWithModules(db, *origin, *localHTTP, moduleConfig), TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+		if pending {
+			log.Printf("First-start web setup is pending; retrieve the private setup code from %s", *setupCodeFile)
+		}
+		runtime := app.RuntimeOptions{Modules: moduleConfig, DataDir: filepath.Dir(*path), TLSCert: *cert, TLSKey: *key, SMTPConfigured: smtpConfig != nil, RemindersEnabled: *reminders, SetupCodeFile: *setupCodeFile}
+		srv := &http.Server{Addr: *addr, Handler: app.HandlerWithRuntime(db, *origin, *localHTTP, runtime), TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		workerDone := make(chan struct{})
-		if *reminders && moduleConfig.Enabled("reminders") {
+		if *reminders {
 			go func() {
 				defer close(workerDone)
 				app.RunDeviceReminderWorker(ctx, db, thresholds, func(error) { log.Print("Device reminder job failed; last successful reminders retained") })
@@ -285,7 +302,7 @@ func run() error {
 			close(workerDone)
 		}
 		mailDone := make(chan struct{})
-		if smtpConfig != nil && moduleConfig.Enabled("reminders") {
+		if smtpConfig != nil {
 			go func() {
 				defer close(mailDone)
 				app.RunReminderMailWorker(ctx, db, smtpConfig, func(error) { log.Print("Reminder mail job failed; inspect delivery status") })

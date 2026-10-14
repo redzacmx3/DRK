@@ -63,11 +63,11 @@ func Migrate(db *sql.DB) (migrationErr error) {
 	if err = tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 33 {
+	if version > 34 {
 		return fmt.Errorf("unsupported schema version %d", version)
 	}
-	for next := version + 1; next <= 33; next++ {
-		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_auth.sql", 3: "migrations/003_stock.sql", 4: "migrations/004_corrections.sql", 5: "migrations/005_packlists.sql", 6: "migrations/006_identifiers.sql", 7: "migrations/007_devices.sql", 8: "migrations/008_device_controls.sql", 9: "migrations/009_device_inspections.sql", 10: "migrations/010_device_documents.sql", 11: "migrations/011_packlist_devices.sql", 12: "migrations/012_pack_device_checks.sql", 13: "migrations/013_device_intake.sql", 14: "migrations/014_stock_intake.sql", 15: "migrations/015_device_details.sql", 16: "migrations/016_device_master_data.sql", 17: "migrations/017_device_maintenance.sql", 18: "migrations/018_device_decommission.sql", 19: "migrations/019_device_corrections.sql", 20: "migrations/020_device_incidents.sql", 21: "migrations/021_device_reminders.sql", 22: "migrations/022_reminder_mail.sql", 23: "migrations/023_administration.sql", 24: "migrations/024_recalls.sql", 25: "migrations/025_user_usage.sql", 26: "migrations/026_document_reviews.sql", 27: "migrations/027_manual_access.sql", 28: "migrations/028_product_duties.sql", 29: "migrations/029_end_user_acceptance.sql", 30: "migrations/030_reprocessing_cycles.sql", 31: "migrations/031_duty_fulfilment.sql", 32: "migrations/032_pack_release.sql", 33: "migrations/033_modules.sql"}[next]
+	for next := version + 1; next <= 34; next++ {
+		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_auth.sql", 3: "migrations/003_stock.sql", 4: "migrations/004_corrections.sql", 5: "migrations/005_packlists.sql", 6: "migrations/006_identifiers.sql", 7: "migrations/007_devices.sql", 8: "migrations/008_device_controls.sql", 9: "migrations/009_device_inspections.sql", 10: "migrations/010_device_documents.sql", 11: "migrations/011_packlist_devices.sql", 12: "migrations/012_pack_device_checks.sql", 13: "migrations/013_device_intake.sql", 14: "migrations/014_stock_intake.sql", 15: "migrations/015_device_details.sql", 16: "migrations/016_device_master_data.sql", 17: "migrations/017_device_maintenance.sql", 18: "migrations/018_device_decommission.sql", 19: "migrations/019_device_corrections.sql", 20: "migrations/020_device_incidents.sql", 21: "migrations/021_device_reminders.sql", 22: "migrations/022_reminder_mail.sql", 23: "migrations/023_administration.sql", 24: "migrations/024_recalls.sql", 25: "migrations/025_user_usage.sql", 26: "migrations/026_document_reviews.sql", 27: "migrations/027_manual_access.sql", 28: "migrations/028_product_duties.sql", 29: "migrations/029_end_user_acceptance.sql", 30: "migrations/030_reprocessing_cycles.sql", 31: "migrations/031_duty_fulfilment.sql", 32: "migrations/032_pack_release.sql", 33: "migrations/033_modules.sql", 34: "migrations/034_web_setup.sql"}[next]
 		script, err := assets.ReadFile(name)
 		if err != nil {
 			return err
@@ -129,11 +129,11 @@ func Ready(ctx context.Context, db *sql.DB) error {
 	if err := db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version != 33 {
+	if version != 34 {
 		return fmt.Errorf("schema migration required")
 	}
 	var moduleRevision int
-	if err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM module_configuration_events`).Scan(&moduleRevision); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(e.version),0) FROM module_configuration_events e LEFT JOIN module_startup_selection s ON 1=0 LEFT JOIN module_management_events m ON 1=0 LEFT JOIN module_management_requests r ON 1=0 LEFT JOIN web_setup_state w ON 1=0`).Scan(&moduleRevision); err != nil {
 		return err
 	}
 	var count int
@@ -164,11 +164,22 @@ func HandlerWithTransport(db *sql.DB, origin string, localHTTP bool) http.Handle
 }
 
 func HandlerWithModules(db *sql.DB, origin string, localHTTP bool, modules ModuleConfig) http.Handler {
+	return handlerWithRuntime(db, origin, localHTTP, RuntimeOptions{Modules: modules}, false)
+}
+
+func HandlerWithRuntime(db *sql.DB, origin string, localHTTP bool, options RuntimeOptions) http.Handler {
+	return handlerWithRuntime(db, origin, localHTTP, options, true)
+}
+
+func handlerWithRuntime(db *sql.DB, origin string, localHTTP bool, options RuntimeOptions, dynamic bool) http.Handler {
 	auth := newAuth(db, origin)
 	auth.localHTTP = localHTTP
-	auth.modules = modules
+	auth.modules = options.Modules
+	auth.dynamicModules = dynamic
+	auth.runtime = options
 	mux := http.NewServeMux()
 	auth.routes(mux)
+	webSetupRoutes(mux, auth)
 	moduleRoutes(mux, auth)
 	stockRoutes(mux, auth)
 	stockImportRoutes(mux, auth)

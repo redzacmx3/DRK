@@ -8,3 +8,5 @@ var
 .env
 .env.nas
 **/*.pem
+setup-code.txt
+**/setup-code.txt

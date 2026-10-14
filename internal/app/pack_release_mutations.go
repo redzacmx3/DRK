@@ -39,7 +39,7 @@ func (a *authService) mutatePackRelease(ctx context.Context, user, token, key, i
 	if err = requireModule(ctx, tx, "release"); err != nil {
 		return nil, err
 	}
-	if err = matchingModuleConfiguration(ctx, tx, a.modules); err != nil {
+	if err = a.matchingModules(ctx, tx); err != nil {
 		return nil, err
 	}
 	if err = rejectOtherKey(ctx, tx, user, key, "pack_release_requests"); err != nil {

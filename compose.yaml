@@ -3,11 +3,12 @@ services:
   inventory:
     environment:
       DRK_CLAMD_ADDRESS: ${DRK_CLAMD_ADDRESS:-}
+      # Startup default; saved web administration survives unchanged restarts.
       DRK_MODULES: ${DRK_MODULES:-all}
     build: .
     image: drk-inventory:dev
     network_mode: host
-    command: ["serve", "--db", "/data/inventory.db", "--device-reminders=${DRK_DEVICE_REMINDERS:-true}", "--reminder-days", "${DRK_REMINDER_DAYS:-60,30,7}", "--listen", "127.0.0.1:8080", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
+    command: ["serve", "--db", "/data/inventory.db", "--setup-code-file", "/data/setup-code.txt", "--device-reminders=${DRK_DEVICE_REMINDERS:-true}", "--reminder-days", "${DRK_REMINDER_DAYS:-60,30,7}", "--listen", "127.0.0.1:8080", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
     user: "1000:1000"
     read_only: true
     init: true

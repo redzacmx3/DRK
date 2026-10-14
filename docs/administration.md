@@ -1,10 +1,12 @@
-# Verwaltung (Schema 23)
+# Verwaltung und Benutzerkonten
 
-Die Verwaltungsoberfläche erscheint nach Anmeldung mit eigenständigem Administratorrecht. Sie verwaltet Betreiber, Betriebsstätten, Lagerorte und Benutzer. Fachrechte für Material oder Geräte ergeben sich ausschließlich aus den ausgewählten Rollen je Betriebsstätte. Mehrere Rollen sind möglich; ohne Zuordnung besteht kein fachlicher Zugriff. Das Administratorrecht umfasst die organisatorische Verwaltung der gesamten Installation. Es ist keine fachliche Qualifikation.
+Die Verwaltungsoberfläche erscheint nach Anmeldung mit eigenständigem Administratorrecht. Sie verwaltet Betreiber, Betriebsstätten, Lagerorte, Benutzer und die [aktivierten Module](module.md). Benutzer lassen sich anlegen, aktivieren/deaktivieren, mit Rollen je Betriebsstätte ausstatten und mit einem neuen Passwort versehen. Fachrechte für Material oder Geräte ergeben sich ausschließlich aus den ausgewählten Rollen je Betriebsstätte. Mehrere Rollen sind möglich; ohne Zuordnung besteht kein fachlicher Zugriff. Das Administratorrecht umfasst die organisatorische Verwaltung der gesamten Installation. Es ist keine fachliche Qualifikation.
 
 ## Erstes Administratorkonto
 
-Neue Datenbank zunächst initialisieren. Bei bestehender Installation zuerst konsistent sichern und ausdrücklich `migrate` ausführen. Weder Datenbank noch Volume ersetzen. Es gibt kein Standardpasswort; die Oberfläche vergibt keine Administratorrechte.
+Eine neue, leere Installation führt beim ersten Browseraufruf durch die [Ersteinrichtung](ersteinrichtung.md). Dort das erste Administratorkonto, Organisation und Modulauswahl anlegen; der private Einrichtungscode schützt die Übernahme. Es gibt kein Standardpasswort. Nach Abschluss bleibt die Ersteinrichtung geschlossen.
+
+Bei bestehender Installation zuerst konsistent sichern und ausdrücklich auf Schema 34 migrieren. Weder Datenbank noch Volume ersetzen. Vorhandene Konten oder Fachdaten öffnen keine Ersteinrichtung. Für eine bestehende Instanz ohne verfügbares Administratorkonto oder eine ausdrückliche lokale Wiederherstellung bleibt die CLI verfügbar:
 
 Für die einfache Compose-Installation (`compose.local.yaml`, HTTP oder HTTPS per `.env`):
 
@@ -36,8 +38,12 @@ Bei unklarer Antwort bleiben Daten und Idempotenzschlüssel für das erneute Sen
 
 Die letzten 200 Verwaltungsänderungen werden angezeigt; ältere unveränderliche Ereignisse bleiben in der gesicherten Datenbank. Vorher-/Nachher-Zustände enthalten keine Passwörter oder Passwort-Hashes. Die Verwaltungsübersicht verweigert mehr als 1000 Objekte je Typ vollständig, statt unbemerkt Teile auszublenden. Pagination und administrative MFA sind spätere Erweiterungen.
 
+Module mit dem Administratorkonto in derselben Oberfläche ändern. Die Inventarisierung bleibt aktiv; Geräteakten und weitere Gruppen sind zuschaltbar. Änderungen benötigen eine Begründung und aktuelle Revision, gelten unmittelbar serverseitig und bleiben bei unverändertem Compose-Startwert über Neustarts erhalten. Historische Nachweise werden nicht entfernt; eine Konfigurationsänderung erfordert die erneute Prüfung bisheriger Einsatzfreigaben. [Auswahl, Abhängigkeiten und Grenzen](module.md).
+
 ## API
 
 `GET /api/v1/me` enthält `administrator`; `GET /api/v1/admin` liefert Objekte mit `kind`, `id`, `version`, festen Zuordnungen und Benutzerrechten sowie die letzten Ereignisse. Beide administrativen Endpunkte prüfen das eigenständige Recht; Fachrollen verleihen es nicht.
 
 `POST /api/v1/admin/changes` benötigt Sitzung, Origin, CSRF und Idempotenzschlüssel. Aktionen: `create_operator`, `update_operator`, `create_site`, `update_site`, `create_location`, `update_location`, `create_user`, `update_user`, `reset_password`. Updates benötigen `id` und `expected_version`; jedes Objekt hat eine separate Verwaltungsrevision, die auch lokale Rechteänderungen berücksichtigt. Alle Aktionen benötigen `note`. Rechte sind eine ausdrückliche Liste `{site_id,role}` einschließlich einer leeren Liste für keinerlei Fachrechte. Nach Wiederholungen werden Sitzung und Administratorrecht erneut geprüft. Revision, Ereignis, Sitzungssperre und Antwortspeicherung werden gemeinsam in einer Transaktion geschrieben.
+
+`GET /api/v1/admin/modules` liefert aktuelle Auswahl, Revision, Abhängigkeiten und Konfigurationshistorie. `POST /api/v1/admin/modules` benötigt ebenfalls Administratorrecht, Sitzung, Origin, CSRF und Idempotenzschlüssel sowie `expected_revision`, `enabled_modules` und `note`. Konflikte oder fehlende Abhängigkeiten verändern die Konfiguration nicht. Die bisherigen Fachrollen erlauben keine Modulverwaltung.

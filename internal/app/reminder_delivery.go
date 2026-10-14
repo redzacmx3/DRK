@@ -322,7 +322,15 @@ func RunReminderMailWorker(ctx context.Context, db *sql.DB, config *SMTPConfig, 
 		if ctx.Err() != nil {
 			return
 		}
-		if err := DispatchReminderMail(ctx, db, config, config, time.Now); err != nil && ctx.Err() == nil && report != nil {
+		pending, err := WebSetupPending(ctx, db)
+		var active ModuleConfig
+		if err == nil && !pending {
+			active, _, err = ActiveModules(ctx, db)
+		}
+		if err == nil && !pending && active.Enabled("reminders") {
+			err = DispatchReminderMail(ctx, db, config, config, time.Now)
+		}
+		if err != nil && err.Error() != "module_disabled" && err.Error() != "module_configuration_changed" && ctx.Err() == nil && report != nil {
 			report(err)
 		}
 		select {

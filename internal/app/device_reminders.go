@@ -163,16 +163,33 @@ func ReconcileDeviceReminders(ctx context.Context, db *sql.DB, now time.Time, th
 	return tx.Commit()
 }
 
-// RunDeviceReminderWorker checks immediately and then hourly. Errors are reported
-// without record contents. Cancellation rolls back an unfinished job.
+// RunDeviceReminderWorker reconciles immediately, hourly, and after a module
+// configuration change. The cheap minute poll lets administrators enable the
+// worker without restarting the server; a disabled module stays dormant.
+// Errors are reported without record contents. Cancellation rolls back a job.
 func RunDeviceReminderWorker(ctx context.Context, db *sql.DB, thresholds []int, report func(error)) {
-	ticker := time.NewTicker(time.Hour)
+	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
+	lastRun := time.Time{}
+	lastRevision := -1
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		if err := ReconcileDeviceReminders(ctx, db, time.Now(), thresholds); err != nil && ctx.Err() == nil && report != nil {
+		pending, err := WebSetupPending(ctx, db)
+		var config ModuleConfig
+		var revision int
+		if err == nil && !pending {
+			config, revision, err = ActiveModules(ctx, db)
+		}
+		now := time.Now()
+		if err == nil && (pending || !config.Enabled("reminders")) {
+			lastRun = time.Time{}
+		} else if err == nil && (lastRun.IsZero() || lastRevision != revision || now.Sub(lastRun) >= time.Hour) {
+			lastRun, lastRevision = now, revision
+			err = ReconcileDeviceReminders(ctx, db, now, thresholds)
+		}
+		if err != nil && err.Error() != "module_disabled" && err.Error() != "module_configuration_changed" && ctx.Err() == nil && report != nil {
 			report(err)
 		}
 		select {

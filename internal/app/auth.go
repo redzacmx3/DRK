@@ -164,18 +164,20 @@ type attemptWindow struct {
 	Count int
 }
 type authService struct {
-	modules       ModuleConfig
-	clamdAddress  string
-	documentSlots chan struct{}
-	db            *sql.DB
-	origin        string
-	localHTTP     bool
-	now           func() time.Time
-	dummy         string
-	mu            sync.Mutex
-	attempts      map[string]attemptWindow
-	loginSlots    chan struct{}
-	exportSlots   chan struct{}
+	modules        ModuleConfig
+	dynamicModules bool
+	runtime        RuntimeOptions
+	clamdAddress   string
+	documentSlots  chan struct{}
+	db             *sql.DB
+	origin         string
+	localHTTP      bool
+	now            func() time.Time
+	dummy          string
+	mu             sync.Mutex
+	attempts       map[string]attemptWindow
+	loginSlots     chan struct{}
+	exportSlots    chan struct{}
 }
 
 func newAuth(db *sql.DB, origin string) *authService {
