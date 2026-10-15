@@ -30,6 +30,8 @@ Aktueller Stand: Schema 34. Diese Seite fasst den heutigen Funktionsumfang zusam
 1. Betriebsabsicherung und Pilotvorbereitung: Vorhandene rollen- und personenbezogene Packlistenfreigabe praktisch abnehmen; weitere Einsatzumfänge, insbesondere reine Materialpacklisten und Teamfreigaben, gesondert modellieren. Keine pauschale Freigabe aller Geräte / Personen.
 2. Restic-Sicherungsjob auf NAS / externem Speicher einrichten, vollständigen Wiederanlauf praktisch abnehmen und Betriebsüberwachung ergänzen. Verschlüsselte Sicherung und isolierte Rücksicherung sind als ausführbare Host-Jobs vorhanden.
 
+Gestaltungsvorschlag für die weitere Bedienungsentwicklung: [Vergleich mit InvenTree und OpenBoxes](design-referenzanalyse.md). Die dort beschriebenen Erweiterungen sind Empfehlungen, keine bereits implementierten Funktionen.
+
 ## Weitere offene Funktionen
 
 Packlistenalternativen, FEFO-Auswahlhilfen, differenzierte Anbruch-/Verfallsregeln, erweiterte Geräte-/Serienzuordnung über Scans, weitere Such-/Blätterfunktionen, administrative MFA und Auditorrechte. Spätere Pilotverbesserungen: PWA/Offline, OIDC, erweiterte GS1/UDI-Felder, signierte Archive und Beschaffung. Mehrmandantenbetrieb/PostgreSQL und spezielle Fachmodule sind gesonderte Erweiterungen. Aufbereitung, Arzneimittel und andere besondere Kategorien benötigen bei Aufnahme in den Umfang eigene bestätigte Regeln.
