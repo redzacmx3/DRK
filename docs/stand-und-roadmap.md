@@ -30,7 +30,7 @@ Aktueller Stand: Schema 34. Diese Seite fasst den heutigen Funktionsumfang zusam
 1. Betriebsabsicherung und Pilotvorbereitung: Vorhandene rollen- und personenbezogene Packlistenfreigabe praktisch abnehmen; weitere Einsatzumfänge, insbesondere reine Materialpacklisten und Teamfreigaben, gesondert modellieren. Keine pauschale Freigabe aller Geräte / Personen.
 2. Restic-Sicherungsjob auf NAS / externem Speicher einrichten, vollständigen Wiederanlauf praktisch abnehmen und Betriebsüberwachung ergänzen. Verschlüsselte Sicherung und isolierte Rücksicherung sind als ausführbare Host-Jobs vorhanden.
 
-Gestaltungsvorschlag für die weitere Bedienungsentwicklung: [Vergleich mit InvenTree und OpenBoxes](design-referenzanalyse.md). Die dort beschriebenen Erweiterungen sind Empfehlungen, keine bereits implementierten Funktionen.
+Gestaltungsvorschlag für die weitere Bedienungsentwicklung: [Vergleich mit InvenTree, OpenBoxes und Shelf](design-referenzanalyse.md). Die dort beschriebenen Erweiterungen sind Empfehlungen, keine bereits implementierten Funktionen.
 
 ## Weitere offene Funktionen
 
