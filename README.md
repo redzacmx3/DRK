@@ -582,3 +582,5 @@ Die acht Pflichtbereiche werden mit aktuellen Teilnachweisen, vollständiger fac
 ### Personenbezogene Packlisten-Einsatzfreigabe (Schema 32)
 
 Material, physische Geräteprüfung, persönliche Nachweise und fachliche Produktpflichten-Erfüllung können für eine benannte Person und einen konkreten Einsatzumfang ausdrücklich zusammen freigegeben, abgelehnt oder widerrufen werden. Aktuelle eigene Freigabe setzt `overall_readiness=released_for_user`; fehlende / geänderte Voraussetzungen, Ablauf und Widerruf verhindern weitere Freigabe. Beide Fachverantwortungsrechte am tatsächlichen Standort sind nötig, keine pauschale Geräte-/Teamfreigabe. [Bedienung, Export und Migration](docs/einsatzfreigabe.md).
+
+Bedienung und Schema-35-Upgrade: [Inventar-Objektansicht, Einzelanlage und Fotos](docs/inventar-objektansicht.md).

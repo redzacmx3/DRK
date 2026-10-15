@@ -15,7 +15,7 @@ x-app: &app
 services:
   init:
     <<: *app
-    command: ["init", "--db", "/data/inventory.db"]
+    command: ["${DRK_INIT_COMMAND:-init}", "--db", "/data/inventory.db"]
     restart: "no"
   inventory:
     <<: *app

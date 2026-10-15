@@ -59,3 +59,9 @@ Die Oberfläche bietet eine dunkle, gruppierte Seitenleiste mit Symbolen, eine h
 Geräteimport, Inventarbearbeitung und Fristen haben eigene Ansichten. Administratoren finden Benutzer und Organisation sowie Module und Funktionen als getrennte Menüpunkte. Vorhandene Eingaben und unbestätigte Vorgänge bleiben beim Wechsel erhalten. Schlüsselerzeugung funktioniert weiterhin über lokales HTTP; Etikettendruck bleibt verfügbar. Schriften und Symbole werden ohne externe Dienste geladen.
 
 Nach erfolgreichem Release-Build in Dockhand `DRK_IMAGE=ghcr.io/redzacmx3/drk:v0.1.0-rc.4` setzen, Image laden und Stack neu bereitstellen. Das Datenvolume und alle übrigen Einstellungen beibehalten. Keine neue Datenbankmigration: weiterhin Schema 34. Anschließend die Browserseite vollständig neu laden.
+
+## Objektbezogenes Inventar ab v0.1.0-rc.5
+
+Geräte aus der Liste öffnen, Grunddaten und Fachnachweise über lokale Reiter nutzen, einzelne Gegenstände mit minimalen Angaben anlegen und ein eigenständiges Erkennungsfoto verwalten. Die Inventarliste sucht nun im vollständigen berechtigten Bestand und bietet Standort-/Artfilter, Sortierung und Seitenwechsel.
+
+**Dieses Update benötigt Schema 35.** Vorher konsistent sichern, den Stack stoppen und ausdrücklich migrieren. Die neue Release-Compose-Datei unterstützt dazu einmalig `DRK_INIT_COMMAND=migrate`; Standard bleibt `init`. Anschließend auf `init` zurückstellen. Das bestehende Datenvolume und alle übrigen Einstellungen beibehalten. [Bedienung und vollständiger Dockhand-Upgradeablauf](inventar-objektansicht.md).

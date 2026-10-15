@@ -7,7 +7,7 @@ Stand: 16.10.2026. Analyse von Quellcode, Dokumentation und den Original-Screens
 - Shelf: Commit `dd9b66f718f35c960b64329e4894795cacc16dc4`. Layout anhand UI-Code und Projektabbildung geprüft; keine laufende Shelf-Installation abgenommen.
 - Vergleichsbasis DRK: `8aa9b7a`, Oberfläche für `v0.1.0-rc.4`, Schema 34.
 
-Diese Analyse ist ein Gestaltungsvorschlag. Sie ergänzt keine Funktionen und verändert keine Datenmodelle, Berechtigungen oder Modulabhängigkeiten.
+Diese Analyse unterscheidet Empfehlungen und Umsetzung. Das erste Paket ist ab `v0.1.0-rc.5` mit Schema 35 umgesetzt: [Objektansicht, Einzelanlage, Inventarsuche und Fotoverwaltung](inventar-objektansicht.md). Ausleihe, Reservierungen, Scan-Inventur und weitere vorgeschlagene Funktionen bleiben nachfolgende Pakete. Der folgende Abgleich berücksichtigt das erste Umsetzungspaket; spätere Empfehlungen sind weiterhin offen.
 
 ## Einordnung
 
@@ -47,15 +47,15 @@ Ein verständlicher Status beschreibt seinen Umfang: „inventarisiert“, „Pr
 
 | Ansatz | Vorhandene Grundlage | Noch zu ergänzen |
 | --- | --- | --- |
-| Objektbezogene Geräteakte | Grunddaten, Fachnachweise, Dokumente und Historie vorhanden | Gemeinsame Objektseite und lokale Tabs; technische Auswahl über mehrere globale Bereiche ersetzen |
-| Tabellen und Suche | Kompakte Inventarliste mit lokaler Suche/Artfilter; begrenzte Serverübersicht | Serverseitige Suche, Sortierung, Pagination und weitere Filter; gefilterten Kontext beim Öffnen/Zurückkehren erhalten |
-| Schnelles Anlegen | Geräteanlage per API und Excel-/CSV-Erfassung vorhanden | Sichtbare einfache Webmaske „Gerät anlegen“ für einzelne Gegenstände |
+| Objektbezogene Geräteakte | Gemeinsame Objektseite mit Grunddaten, Fachnachweisen, Dokumenten und Historie in lokalen Reitern ab rc.5 umgesetzt | Weitere Vereinfachung einzelner Fachformulare nach Erprobung |
+| Tabellen und Suche | Serverseitige Inventarsuche, Art-/Standortfilter, Sortierung und Pagination mit erhaltener Listenauswahl ab rc.5 umgesetzt | Weitere Listen, gespeicherte Ansichten und Spaltenkonfiguration |
+| Schnelles Anlegen | Einzelanlage mit drei Mindestangaben im Browser ab rc.5 umgesetzt; Excel/CSV weiterhin vorhanden | Bedienungsabnahme mit echten Erfassungsrunden |
 | Materialkarte | Produkte/Kennungen, Chargen, Bestände, Buchungen und Journal vorhanden | Zusammenhängende Materialdetailseite und kontextbezogene Aktionen |
 | Aufgabenübersicht | Fristen, Sperren, Meldebewertungen und Erinnerungen vorhanden | Einheitlicher Einstieg mit direkten Verweisen auf die betroffenen Objekte; modulabhängige Anzeige |
 | Standortnavigation | Betriebsstätten, Lagerorte und zugeordnete Bestände vorhanden | Eigene übersichtliche Standortansicht; Hierarchie und Kategorien gesondert modellieren |
 | Nachfüllbedarf | Versionierte Packlisten und Fehlmengen vorhanden | Allgemeine Mindest-/Meldebestände und Nachfülllisten über Packlisten hinaus |
 | Verfallsorientierte Entnahme | Chargen/Verfall und Nutzbarkeitsprüfung vorhanden | FEFO-Auswahlhilfe und gesonderte Anbruchregeln; nicht als bereits fertige Funktion ausweisen |
-| Vorschau und Bilder | Aufklappbare Inventardetails und dokumentbezogene Anhänge vorhanden | Optionale seitliche Schnellansicht und eigens gestaltete Objektbilder; kein vorhandenes Fotoalbum behaupten |
+| Vorschau und Bilder | Erkennungsfoto mit eigener Versionshistorie und Rechteprüfung ab rc.5 umgesetzt | Optionale seitliche Schnellansicht, Bildvorschauen in weiteren Listen und Bildgalerie |
 
 ## Sinnvolle Reihenfolge
 
@@ -75,7 +75,7 @@ Für DRK empfiehlt sich damit eine klare Kombination: **Shelf für visuelle Einf
 
 | Shelf-Funktion | Nutzen für DRK | Einordnung zum bisherigen Stand |
 | --- | --- | --- |
-| Objektfotos und Bildvorschau | Gegenstände auch ohne Kenntnis der Inventarnummer wiedererkennen | Eigene Fotoansicht ergänzen; vorhandene Dokumentanhänge sind noch keine gestaltete Fotofunktion |
+| Objektfotos und Bildvorschau | Gegenstände auch ohne Kenntnis der Inventarnummer wiedererkennen | Eigenständige Fotoansicht mit Versionshistorie ab rc.5 umgesetzt; weitere Bildvorschauen bleiben offen |
 | Zuordnung / Custody | Sichtbar machen, wer einen Gegenstand übernommen hat; Ausgabe und Rücknahme nachvollziehen | Neues optionales Ausleihe-/Zuordnungsmodul. Fachrechte, Einweisungen und Betriebsverantwortung bleiben getrennt |
 | Reservierungen / Bookings | Ausrüstung für einen Zeitraum planen, Überschneidungen erkennen, Rückgabe und Überfälligkeit verfolgen | Neue fachliche Funktion mit Kalender, Verfügbarkeitsregeln und Übergabe-/Rückgabehistorie; keine bloße neue Gerätekennzeichnung |
 | Kits | Zusammengehörige Ausrüstung gemeinsam anzeigen und verwalten, etwa Gerät plus Zubehör | Mit vorhandenen Packlisten abstimmen. Ein physisches Set und eine versionierte Sollpackliste sind unterschiedliche Konzepte |

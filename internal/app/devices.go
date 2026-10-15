@@ -10,6 +10,7 @@ import (
 )
 
 type deviceInput struct {
+	AssetKind       string `json:"asset_kind,omitempty"`
 	LocationID      string `json:"location_id"`
 	InventoryNumber string `json:"inventory_number"`
 	Name            string `json:"name"`
@@ -70,10 +71,21 @@ func registeredDevice(input deviceInput, id, actor, created string) deviceRecord
 	return deviceRecord{Instructions: []instructionProof{}, ActiveBlocks: []deviceBlock{}, EffectiveRules: map[string]DeadlineRule{}, PassedDates: map[string]string{}, InspectionDates: map[string]string{}, PassedVersions: map[string]int{}, deviceInput: input, ID: id, CreatedBy: actor, CreatedAt: created, Lifecycle: "NOT_COMMISSIONED", Readiness: "not_assessed", Reasons: []string{"Inbetriebnahmenachweis fehlt", "Kontrollpflichten noch nicht bewertet"}, Controls: map[string]Deadline{"STK": {State: "UNKNOWN"}, "MTK": {State: "UNKNOWN"}, "electrical": {State: "UNKNOWN"}}}
 }
 func registerDevice(ctx context.Context, db *sql.DB, user, token, key string, input deviceInput, now time.Time) ([]byte, error) {
-	for _, v := range []string{input.LocationID, input.InventoryNumber, input.Name, input.Manufacturer, input.Model, input.SerialOrLot} {
+	for _, v := range []string{input.LocationID, input.InventoryNumber, input.Name} {
 		if strings.TrimSpace(v) != v || v == "" || len(v) > 160 {
-			return nil, &stockError{400, "invalid_device", "Lagerort, Inventarnummer und vollständige Geräteidentifikation erforderlich."}
+			return nil, &stockError{400, "invalid_device", "Lagerort, Inventarnummer und Bezeichnung erforderlich; unbekannte Identifikationsangaben leer lassen."}
 		}
+	}
+	if !intakeNumber.MatchString(input.InventoryNumber) {
+		return nil, &stockError{400, "invalid_device", "Inventarnummer enthält unzulässige Zeichen."}
+	}
+	for _, v := range []string{input.Name, input.Manufacturer, input.Model, input.SerialOrLot} {
+		if strings.TrimSpace(v) != v || !intakeValue(v, 160) {
+			return nil, &stockError{400, "invalid_device", "Grunddaten ohne Steuerzeichen oder Rand-Leerzeichen, höchstens 160 Zeichen."}
+		}
+	}
+	if input.AssetKind != "" && input.AssetKind != "unknown" && input.AssetKind != "device" && input.AssetKind != "equipment" {
+		return nil, &stockError{400, "invalid_device", "Art muss Gerät, Equipment oder ungeklärt sein."}
 	}
 	if !validReason(input.Note) {
 		return nil, &stockError{400, "invalid_device", "Begründung erforderlich."}
@@ -86,6 +98,9 @@ func registerDevice(ctx context.Context, db *sql.DB, user, token, key string, in
 	}
 	defer tx.Rollback()
 	if err = activeStockSession(ctx, tx, user, token, now); err != nil {
+		return nil, err
+	}
+	if err = requireModule(ctx, tx, "inventory"); err != nil {
 		return nil, err
 	}
 	var allowed bool
@@ -110,16 +125,24 @@ func registerDevice(ctx context.Context, db *sql.DB, user, token, key string, in
 		return nil, err
 	}
 	var duplicate bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM devices WHERE inventory_number=?)`, input.InventoryNumber).Scan(&duplicate); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM devices WHERE inventory_number=? COLLATE NOCASE)`, input.InventoryNumber).Scan(&duplicate); err != nil {
 		return nil, err
 	}
 	if duplicate {
 		return nil, conflict("inventory_number_exists", "Inventarnummer ist bereits vergeben.")
 	}
 	record := registeredDevice(input, newID(), user, now.UTC().Format(time.RFC3339Nano))
+	if input.AssetKind != "" {
+		record.Intake = &deviceIntake{Kind: input.AssetKind, Condition: "unknown"}
+	}
 	encoded, _ := json.Marshal(record)
 	if _, err = tx.ExecContext(ctx, `INSERT INTO devices VALUES(?,?,?,?,?,?,?,?,?,?)`, record.ID, input.LocationID, input.InventoryNumber, input.Name, input.Manufacturer, input.Model, input.SerialOrLot, user, record.CreatedAt, input.Note); err != nil {
 		return nil, err
+	}
+	if input.AssetKind != "" {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO device_intake VALUES(?,?,?,?,?,?)`, record.ID, input.AssetKind, "unknown", "", "", "manual:"+hash); err != nil {
+			return nil, err
+		}
 	}
 	event := newID()
 	if _, err = tx.ExecContext(ctx, `INSERT INTO device_events VALUES(?,?,?,?,?)`, event, record.ID, user, record.CreatedAt, string(encoded)); err != nil {
@@ -137,6 +160,8 @@ func registerDevice(ctx context.Context, db *sql.DB, user, token, key string, in
 	return encoded, nil
 }
 func deviceRoutes(mux *http.ServeMux, a *authService) {
+	inventorySearchRoutes(mux, a)
+	devicePhotoRoutes(mux, a)
 	deviceAttentionRoutes(mux, a)
 	deviceExportRoutes(mux, a)
 	deviceBookExportRoutes(mux, a)

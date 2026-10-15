@@ -94,7 +94,7 @@ jobs:
           In Dockhand importieren und die genaue Browseradresse als DRK_ORIGIN setzen.
           Danach im Browser die Ersteinrichtung durchführen; der private Einrichtungscode liegt im Datenvolume unter /data/setup-code.txt.
 
-          Bestehende Installation vor dem Update sichern und ausdrücklich auf Schema 34 migrieren.
+          Bestehende Installation vor dem Update sichern und ausdrücklich auf Schema 35 migrieren.
           Anleitung: https://github.com/redzacmx3/DRK/blob/{tag}/docs/image-release.md
 
           Eine Vorabversion dient der kontrollierten Erprobung.

@@ -65,7 +65,7 @@ try {
  window.endPosted=[];window.endReplies=new Map();window.endEvents=[];window.endVersion=0;window.loseEndReply=false;window.staleEnd=false;
  window.dutyPosted=[];window.dutyReplies=new Map();window.dutyEvents=[];window.dutyVersion=0;window.loseDutyReply=false;window.staleDuty=false;
  window.fetch = async (input,options={}) => {
-  const path = typeof input === 'string' ? input : input.url;
+  const actualPath = typeof input === 'string' ? input : input.url;const path=actualPath.startsWith('/api/v1/inventory/devices?')?'/api/v1/devices':actualPath;
   let data;
   if(path==='/api/v1/setup/status')data={pending:false};
   else if (path === '/api/v1/me') data = {id:'synthetic-user',username:'test',administrator:true,csrf_token:'synthetic-csrf',rights:[{site_id:'site',role:'material_manager'},{site_id:'site',role:'device_manager'}]};
@@ -206,6 +206,7 @@ try {
    window.testBalances[0].quantity = request.counted_quantity;window.testBalances[0].usable_quantity = request.counted_quantity;window.testBalances[0].version++;
    data = {movement_id:'synthetic-inventory'};
   } else return realFetch(input,options);
+  if(actualPath.startsWith('/api/v1/inventory/devices?'))data={items:data,total:data.length,equipment:0,limit:50,offset:0};
   return new Response(JSON.stringify(data),{status:options.method === 'POST' ? 201 : 200,headers:{'Content-Type':'application/json','X-Data-As-Of':new Date().toISOString(),'X-Has-More':'false'}});
  };
  `});
@@ -430,7 +431,7 @@ try {
  await evaluate("document.querySelector('#document-review-action').value='release';document.querySelector('#document-review-form').requestSubmit()");
  await until("document.querySelector('#document-review-status').textContent.includes('gespeichert: released')");
  assert.equal(await evaluate('JSON.parse(window.reviewPosts.at(-1).body).expected_version'),1);
- await evaluate("document.querySelector('#devices-list button').click()");
+ await evaluate("document.querySelector('#devices-list .asset-detail-body button').click()");
  await until("document.querySelector('#devices-list ul a')!==null");
  assert.equal(await evaluate("document.querySelector('#devices-list ul a').getAttribute('href')"),'/api/v1/devices/device/documents/document/download');
 

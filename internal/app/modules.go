@@ -248,7 +248,7 @@ func mutationModule(pattern string) string {
 		return "compliance"
 	case path == "devices/{id}/reprocessing":
 		return "reprocessing"
-	case strings.HasPrefix(path, "devices/{id}/") && path != "devices/{id}/details" && path != "devices/{id}/master-data":
+	case strings.HasPrefix(path, "devices/{id}/") && path != "devices/{id}/details" && path != "devices/{id}/master-data" && path != "devices/{id}/photo":
 		return "devices"
 	case path == "packlists/{id}/release":
 		return "release"

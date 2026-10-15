@@ -32,6 +32,7 @@ type bookIntakeProvenance struct {
 }
 
 type deviceBookExport struct {
+	PhotoHistory         []devicePhoto             `json:"recognition_photo_history"`
 	DutyFulfilmentEvents []bookExportEvent         `json:"duty_fulfilment_events"`
 	DutyFulfilment       *dutyFulfilmentAssessment `json:"duty_fulfilment_assessment,omitempty"`
 	Reprocessing         []bookExportEvent         `json:"reprocessing_events"`
@@ -323,6 +324,11 @@ func deviceBookExportRoutes(mux *http.ServeMux, a *authService) {
 		}
 		err = rows.Err()
 		rows.Close()
+		if err != nil {
+			sendExportError(w, err)
+			return
+		}
+		book.PhotoHistory, err = photoHistory(ctx, tx, id)
 		if err != nil {
 			sendExportError(w, err)
 			return

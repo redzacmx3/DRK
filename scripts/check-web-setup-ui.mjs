@@ -88,6 +88,7 @@ try {
  }
  if(path==='/api/v1/admin')return reply({objects:[{id:'operator',kind:'operator',name:'Organisation',version:1,rights:[]},{id:'site',kind:'site',name:'Betrieb',parent_id:'operator',version:1,rights:[]},{id:'location',kind:'location',name:'Lager',parent_id:'site',version:1,rights:[]},{id:'same-user',kind:'user',name:'Administrator',active:true,administrator:true,version:1,rights:[]}],events:[],more_events:false});
  if(path==='/api/v1/locations')return reply([{id:'location',name:'Lager',site_id:'site',site:'Betrieb',operator:'Organisation'}]);
+ if(path.startsWith('/api/v1/inventory/devices?'))return reply({items:[],total:0,equipment:0,limit:50,offset:0});
  if(path==='/api/v1/stock/catalog'||path==='/api/v1/stock/balances'||path.startsWith('/api/v1/stock/movements')||path==='/api/v1/product-identifiers'||path==='/api/v1/devices')return reply([]);
  if(path.startsWith('/api/v1/packlists?'))return reply([]);
  throw Error('Unexpected synthetic API '+path);
