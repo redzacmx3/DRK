@@ -2,7 +2,7 @@
 // real SQLite/HTTP behavior is covered by Go tests and the Compose smoke check.
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import assert from 'node:assert/strict';
@@ -48,6 +48,8 @@ try {
   throw new Error(`UI did not reach expected state: ${expression}`);
  }
  await call('Page.enable');
+ await call('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+ await call('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
 
  await call('Page.addScriptToEvaluateOnNewDocument',{source:`
  const dependencies={inventory:[],devices:[],documents:['devices'],compliance:['devices','documents'],reprocessing:['compliance'],packs:[],release:['packs','devices','documents','compliance','reprocessing','recalls'],recalls:[],reminders:['devices']};
@@ -90,6 +92,34 @@ try {
  await until("visible('#booking') && document.querySelector('#devices-list').children.length===1");
  assert.deepEqual(await evaluate("[...document.querySelector('#device-action').options].map(o=>o.value)"),['details','master_data']);
  assert.equal(await evaluate("document.querySelector('#devices').getClientRects().length>0 && document.querySelector('#material').getClientRects().length===0"),true);
+ assert.equal(await evaluate("document.querySelector('#workspace-title').textContent"),'Geräte und Equipment');
+ assert.equal(await evaluate("document.querySelector('#metric-devices').textContent"),'1');
+ assert.equal(await evaluate("document.querySelector('#device-import').parentElement.id"),'inventory');
+ await evaluate("document.querySelector('#inventory-search').value='not-present';document.querySelector('#inventory-search').dispatchEvent(new Event('input'))");
+ assert.equal(await evaluate("document.querySelector('#devices-list').children[0].hidden && !document.querySelector('#inventory-empty').hidden"),true);
+ await evaluate("document.querySelector('#inventory-search').value='Equipment';document.querySelector('#inventory-search').dispatchEvent(new Event('input'))");
+ assert.equal(await evaluate("!document.querySelector('#devices-list').children[0].hidden && document.querySelector('#inventory-empty').hidden"),true);
+ await evaluate("document.querySelector('#inventory-search').value='';document.querySelector('#inventory-search').dispatchEvent(new Event('input'))");
+ assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+ if(process.env.DRK_UI_SCREENSHOTS){const shot=await call('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.DRK_UI_SCREENSHOTS,'drk-desktop.png'),Buffer.from(shot.data,'base64'));}
+ for(const width of [320,390,768]){
+  await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:true});
+  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+  await evaluate("document.querySelector('#navigation-toggle').click()");
+  assert.equal(await evaluate("document.body.classList.contains('navigation-open') && document.querySelector('#navigation-toggle').getAttribute('aria-expanded')==='true'"),true);
+  if(process.env.DRK_UI_SCREENSHOTS&&width===390){const shot=await call('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.DRK_UI_SCREENSHOTS,'drk-mobile-menu.png'),Buffer.from(shot.data,'base64'));}
+  await evaluate("document.querySelector('#navigation-backdrop').click()");
+  assert.equal(await evaluate("!document.body.classList.contains('navigation-open')"),true);
+  if(process.env.DRK_UI_SCREENSHOTS&&width===390){const shot=await call('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.DRK_UI_SCREENSHOTS,'drk-mobile.png'),Buffer.from(shot.data,'base64'));}
+ }
+ await call('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+ await call('Emulation.setEmulatedMedia',{media:'print'});
+ assert.equal(await evaluate("document.querySelector('#workspace-header').getClientRects().length===0 && document.querySelector('#workspace-navigation').getClientRects().length===0 && document.querySelector('#label-panel').getClientRects().length>0"),true);
+ await call('Emulation.setEmulatedMedia',{media:'screen',features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+ await evaluate("document.querySelector('#inventory-import-open').click()");
+ assert.equal(await evaluate("document.querySelector('#workspace-title').textContent"),'Geräte importieren');
+ await evaluate("document.querySelector('[aria-controls=devices]').click()");
+
  await evaluate("document.querySelector('[aria-controls=material]').click()");
  assert.equal(await evaluate("document.querySelector('#material').getClientRects().length>0 && document.querySelector('#devices').getClientRects().length===0 && document.querySelector('[aria-controls=material]').getAttribute('aria-current')==='page'"),true);
  assert.equal(await evaluate("document.querySelector('[aria-controls=administration]')===null && document.querySelector('[aria-controls=packlists]')===null"),true);
@@ -159,7 +189,7 @@ try {
  const before=await evaluate('window.requests.length');
  await evaluate("document.querySelector('#release-load').click();document.querySelector('#usage-load').click();document.querySelector('#pack-refresh').click()");
  assert.equal(await evaluate('window.requests.length'),before);
- console.log('Module browser UI passed: core material/equipment inventory and edits, retained exact write retry, independent material packs and recalls, own-account document access without compliance, no discarded device requirements, no inactive endpoint loads, safe module text, missing/invalid config closed, same-account stale config rejected and role loaders cannot reveal inactive functions (simulated API).');
+ console.log('Module browser UI passed: desktop/mobile layout without horizontal overflow, inventory search and separate import workspace; core material/equipment inventory and edits, retained exact write retry, independent material packs and recalls, own-account document access without compliance, no discarded device requirements, no inactive endpoint loads, safe module text, missing/invalid config closed, same-account stale config rejected and role loaders cannot reveal inactive functions (simulated API).');
 } finally {
  socket?.close();browser.kill('SIGTERM');await new Promise(resolve=>{if(browser.exitCode!==null)resolve();else browser.once('exit',resolve);});await new Promise(resolve=>server.close(resolve));await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});
 }

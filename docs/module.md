@@ -6,7 +6,7 @@ Weitere Funktionen werden bei der [ersten Einrichtung](ersteinrichtung.md) im Br
 
 ## Auswahl in der Verwaltung
 
-Mit einem Administratorkonto anmelden und die Modulauswahl in der Verwaltung öffnen. Dort die benötigten Funktionsgruppen auswählen, ihre Abhängigkeiten beachten und die Änderung begründen. Inventarisierung kann nicht abgeschaltet werden. Die App prüft die geladene Konfigurationsrevision, Rechte, Abhängigkeiten und Wiederholungen; nach einem Konflikt die aktuelle Auswahl neu laden und abgleichen.
+Mit einem Administratorkonto anmelden und im Menü unter Organisation den Bereich **Module und Funktionen** öffnen. Dort die benötigten Funktionsgruppen auswählen, ihre Abhängigkeiten beachten und die Änderung begründen. Inventarisierung kann nicht abgeschaltet werden. Die App prüft die geladene Konfigurationsrevision, Rechte, Abhängigkeiten und Wiederholungen; nach einem Konflikt die aktuelle Auswahl neu laden und abgleichen.
 
 Änderungen gelten unmittelbar für die Oberfläche und API-Schreibzugriffe. Andere bereits geöffnete Tabs aktualisieren ihre Auswahl bei der nächsten Konfigurationsprüfung; serverseitig sind abgeschaltete Schreibaktionen bereits gesperrt. Ein Containerneustart ist dafür nicht notwendig. Die letzten 100 Konfigurationsrevisionen werden mit Herkunft, Zeitpunkt, Akteur und Begründung angezeigt; ältere Ereignisse bleiben in der Datenbank erhalten.
 

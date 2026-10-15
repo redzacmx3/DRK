@@ -87,7 +87,7 @@ async function moduleFetch(input,options){
 }
 for(const type of ['click','submit','change','input'])document.addEventListener(type,event=>{
  const node=event.target instanceof Element?event.target:null;
- if(node?.closest('[data-module-disabled="true"]')||node?.closest('#inventory.modules-unavailable')&&!node.closest('#module-overview')&&!node.closest('#logout')&&!node.closest('#administration')&&!node.closest('#workspace-navigation')){event.preventDefault();event.stopImmediatePropagation();document.querySelector('#module-status').textContent='Diese Funktion ist deaktiviert. Unbestätigte Vorgänge bleiben erhalten und benötigen denselben Funktionsumfang und dasselbe Konto.';}
+ if(node?.closest('[data-module-disabled="true"]')||node?.closest('#inventory.modules-unavailable')&&!node.closest('#module-overview')&&!node.closest('#logout')&&!node.closest('#administration')&&!node.closest('#admin-modules')&&!node.closest('#workspace-navigation')&&!node.closest('#workspace-header')&&!node.closest('#navigation-backdrop')){event.preventDefault();event.stopImmediatePropagation();document.querySelector('#module-status').textContent='Diese Funktion ist deaktiviert. Unbestätigte Vorgänge bleiben erhalten und benötigen denselben Funktionsumfang und dasselbe Konto.';}
 },true);
 
 const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Entnahme',inventory:'Inventur',reversal:'Gegenbuchung'};
@@ -103,6 +103,7 @@ function signedOut(message) {
  stockIntakeDraft=null;stockIntakeLoading=false;document.querySelector("#stock-import-file").value="";document.querySelector("#stock-import-rows").replaceChildren();document.querySelector("#stock-import-locations").replaceChildren();document.querySelector("#stock-import-status").textContent="";document.querySelector("#stock-import").hidden=true;
  intakeDraft=null;intakeLoading=false;document.querySelector("#device-import-file").value="";document.querySelector("#device-import-rows").replaceChildren();document.querySelector("#device-import-locations").replaceChildren();document.querySelector("#device-import-status").textContent="";document.querySelector("#device-import").hidden=true;
  deviceDraft = null; deviceRecords = []; document.querySelector('#document-file').value=''; document.querySelector('#document-list').replaceChildren(); document.querySelector('#document-status').textContent=''; document.querySelector('#document-upload-form').hidden=true; document.querySelector('#device-basis').textContent = ''; document.querySelector('#device-control-form').hidden = true; document.querySelector('#devices-list').replaceChildren(); document.querySelector('#devices-status').textContent = '';
+ document.querySelector('#inventory-search').value='';document.querySelector('#inventory-kind').value='all';
  csrf = ''; user = null; deviceCheckDraft = null; packAssessment = null; document.querySelector('#physical-device-results').replaceChildren();document.querySelector('#device-proof-history').replaceChildren();document.querySelector('#last-device-proof').textContent='';document.querySelector('#physical-device-check').hidden=true; countDraft = null; checkDraft = null; packDraft = null; scannerReset(); list.replaceChildren(); document.querySelector('#stock-rows').replaceChildren(); document.querySelector('#history-rows').replaceChildren();
  document.querySelector('#assessment-status').textContent='';document.querySelector('#assessment-reasons').replaceChildren();document.querySelector('#operating-evidence').replaceChildren();document.querySelector('#pack-devices').replaceChildren();
  login.hidden = false; inventory.hidden = true; status.textContent = message;
@@ -607,6 +608,8 @@ async function loadDevices() {if(!moduleEnabled('inventory'))return false;
  const owner = user?.id; if (!owner) return;intakeControls();
  const message = document.querySelector('#devices-status');
  const entries = document.querySelector('#devices-list'); entries.replaceChildren();
+ for(const id of ['metric-devices','metric-equipment','metric-locations'])document.getElementById(id).textContent='–';
+ document.querySelector('#inventory-filter-status').textContent='Inventar wird geladen …';document.querySelector('#inventory-empty').hidden=true;
  try {
  const response = await moduleFetch('/api/v1/devices');
  if (response.status === 401) {signedOut('Bitte erneut anmelden.');return;}
@@ -621,13 +624,25 @@ async function loadDevices() {if(!moduleEnabled('inventory'))return false;
  if(moduleEnabled('devices')){const archiveLink=document.createElement("a");archiveLink.href=`/api/v1/devices/${encodeURIComponent(device.id)}/export.zip`;archiveLink.download="geraeteakte.zip";archiveLink.textContent="Geräteakte mit Historie exportieren";const archiveLine=document.createElement("p");archiveLine.append(archiveLink);item.append(archiveLine);}
  if(moduleEnabled('documents')){const documentsButton=document.createElement('button');documentsButton.type='button';documentsButton.textContent='Anhänge und Freigabestatus anzeigen';const documentSummary=document.createElement('ul');item.append(documentsButton,documentSummary);documentsButton.addEventListener('click',async()=>{if(!user)return;const reader=user.id;documentsButton.disabled=true;try{const response=await moduleFetch(`/api/v1/devices/${encodeURIComponent(device.id)}/documents`,{cache:'no-store'});const result=await response.json();if(user?.id!==reader||!entries.contains(item))return;if(!response.ok)throw Error(result.message||'Anhänge nicht verfügbar.');documentSummary.replaceChildren();for(const doc of result){const line=document.createElement('li');line.textContent=doc.filename+' · '+doc.status+' · SHA-256 '+doc.sha256;if(doc.status==='released'){const link=document.createElement('a');link.textContent=' Freigegebenen Anhang herunterladen';link.href=`/api/v1/devices/${encodeURIComponent(device.id)}/documents/${encodeURIComponent(doc.id)}/download`;line.append(link);}documentSummary.append(line);}if(!result.length){const line=document.createElement('li');line.textContent='Keine Anhänge gespeichert.';documentSummary.append(line);}}catch(error){if(user?.id===reader&&entries.contains(item))documentSummary.textContent=error.message;}finally{documentsButton.disabled=false;}});}
  for(const instruction of moduleEnabled('devices')?device.instructions||[]:[]){const proof=document.createElement('p');proof.textContent=`Einweisung ${instruction.performed_on}: ${instruction.instructor} → ${instruction.trainee} · ${instruction.scope==='model'?'Bauart':'Gerät'} · Unterlage ${instruction.document_version} · Anhangstatus im Dokumentbereich prüfen`;item.append(proof);}
- entries.append(item);
+ const detail=document.createElement('details');detail.className='asset-details';
+ const summary=document.createElement('summary');summary.textContent='Details';detail.append(summary);
+ const detailBody=document.createElement('div');detailBody.className='asset-detail-body';
+ while(item.firstChild)detailBody.append(item.firstChild);detail.append(detailBody);
+ item.className='asset-row';item.dataset.search=[device.inventory_number,device.name,device.manufacturer,device.model,device.serial_or_lot,device.intake?.external_code,locations.find(location=>location.id===device.location_id)?.name].filter(Boolean).join(' ').toLocaleLowerCase('de');
+ item.dataset.kind=device.intake?.asset_kind||'unknown';
+ const number=document.createElement('span');number.className='asset-number';number.textContent=device.inventory_number;
+ const identity=document.createElement('div');identity.className='asset-identity';
+ const name=document.createElement('strong');name.textContent=device.name;
+ const model=document.createElement('small');model.textContent=[device.manufacturer,device.model].filter(Boolean).join(' · ')||'Hersteller / Modell ungeklärt';identity.append(name,model);
+ const location=document.createElement('span');location.className='asset-location';location.textContent=locations.find(location=>location.id===device.location_id)?.name||'Standort ungeklärt';
+ const kind=document.createElement('span');kind.className='asset-kind';kind.textContent=intakeKindNames[device.intake?.asset_kind]||'Art ungeklärt';
+ item.append(number,identity,location,kind,detail);entries.append(item);
  }
  if (!devicePending && !documentPending && !documentReviewPending) options(document.querySelector('#device-choice'),devices.filter(device => locations.some(location => location.id === device.location_id && can(location,['device_manager','helper']))).map(device => ({id:device.id,label:device.inventory_number+' · '+device.name})));
  if(!devicePending && !documentPending) deviceAllowedActions();
  document.querySelector('#device-control-form').hidden=!devicePending&&(!document.querySelector('#device-choice').options.length||!document.querySelector('#device-action').options.length);
  if(documentPending)document.querySelector('#document-upload-form').hidden=false;
- await loadDeviceAttention();if(user?.id!==owner)return;
+ updateInventoryView();await loadDeviceAttention();if(user?.id!==owner)return;
  message.textContent = devices.length ? `${devices.length} Geräte angezeigt.${response.headers.get('X-Has-More') === 'true' ? ' Weitere Geräte vorhanden; Übersicht begrenzt.' : ''}` : 'Keine Geräte im freigegebenen Bereich registriert.';
  } catch (error) { if (user?.id === owner) message.textContent = error.message; }
 }
@@ -682,7 +697,7 @@ function deviceActionFields(){
 document.querySelector('#device-action').addEventListener('change',deviceActionFields);
 document.querySelector('#device-choice').addEventListener('change',()=>{clearDocumentReview();document.querySelector('#document-list').replaceChildren();deviceDraft=null;clearDeviceHistory();deviceAllowedActions();lockDeviceForm();});
 document.querySelector('#device-begin').addEventListener('click',async()=>{
- if(!user || devicePending || documentPending)return;const owner=user.id,id=document.querySelector('#device-choice').value;deviceDraft=null;lockDeviceForm();
+ if(!user || devicePending || documentPending)return;const owner=user.id,id=document.querySelector('#device-choice').value;deviceDraft=null;document.querySelector('#correction-target').replaceChildren();lockDeviceForm();
  try{const response=await moduleFetch(`/api/v1/devices/${encodeURIComponent(id)}/book`);if(!response.ok)throw new Error('Geräteakte nicht verfügbar.');const record=await response.json();if(user?.id!==owner || document.querySelector('#device-choice').value!==id)return;deviceDraft={id,version:record.version,incidents:record.incidents||[]};options(document.querySelector("#report-incident"),[{id:"",label:"Störung ausdrücklich wählen"},...(record.incidents||[]).map(incident=>({id:String(incident.version),label:"Version "+incident.version+" · "+incidentKindNames[incident.kind]+" · "+incident.occurred_on+" · "+reportStatusNames[incident.report?.status||"ASSESSMENT_REQUIRED"]}))]);reportPrefill();for(const key of masterDataFields)document.querySelector('#master-'+key.replaceAll('_','-')).value=record.master_data?.[key]||'';for(const [field,key] of [['name','name'],['manufacturer','manufacturer'],['model','model'],['serial','serial_or_lot']])document.querySelector('#device-detail-'+field).value=record[key]||'';options(document.querySelector('#device-release-block'),(record.active_blocks || []).map(block=>({id:block.id,label:block.reason+' · '+block.note})));document.querySelector('#device-basis').textContent=`Geladene Geräteversion ${record.version}.${record.decommission?' Gerät außer Betrieb seit '+record.decommission.performed_on+'.':''} Änderungen erfordern einen neuen Abgleich.`;lockDeviceForm();if(moduleEnabled('documents'))await loadDeviceDocuments(id,owner);await loadDeviceHistory(id,owner);}catch(error){if(user?.id===owner)document.querySelector('#device-basis').textContent=error.message;}
 });
 document.querySelector('#device-control-form').addEventListener('submit',async event=>{
@@ -1277,33 +1292,92 @@ startInstallation();
 
 
 // Keep module and role visibility independent from the selected workspace.
-const workspaceNavigation=document.createElement('nav');
-workspaceNavigation.id='workspace-navigation';workspaceNavigation.setAttribute('aria-label','Bereiche');
-inventory.prepend(workspaceNavigation);
-const sectionOrder=['devices','material','scanner','stock-import','journal','packlists','manual-access','usage','product-duties','duty-fulfilment','end-user','reprocessing-cycles','pack-release','recalls','administration','module-overview'];
-const sectionLabels={devices:'Geräte und Equipment',material:'Material und Buchungen',scanner:'Barcode und Etiketten','stock-import':'Materialimport',journal:'Bewegungsjournal',packlists:'Packlisten','manual-access':'Gebrauchsanweisungen',usage:'Anwenderbewertung','product-duties':'Produktpflichten','duty-fulfilment':'Erfüllungsabnahme','end-user':'Endanwenderabnahme','reprocessing-cycles':'Aufbereitung','pack-release':'Einsatzfreigabe',recalls:'Rückrufe',administration:'Verwaltung','module-overview':'Funktionsübersicht'};
+// Move existing controls, preserving their listeners, drafts and permission guards.
+for(const id of ['device-attention','device-import','admin-modules'])inventory.append(document.getElementById(id));
+const deviceWorkspace=document.createElement('section');deviceWorkspace.id='device-record';deviceWorkspace.dataset.modules='inventory';
+const recordHeading=document.createElement('h2');recordHeading.textContent='Inventargegenstand bearbeiten';deviceWorkspace.append(recordHeading);
+const deviceForm=document.querySelector('#device-control-form');
+while(deviceForm.nextSibling)deviceWorkspace.append(deviceForm.nextSibling);
+deviceWorkspace.insertBefore(deviceForm,deviceWorkspace.children[1]||null);inventory.append(deviceWorkspace);
+
+const assets=document.querySelector('#devices');
+const assetActions=document.createElement('div');assetActions.className='inventory-actions';
+const refreshAssets=document.querySelector('#devices-refresh');refreshAssets.textContent='Aktualisieren';
+const assetExport=assets.querySelector('a[download]');assetExport.textContent='CSV exportieren';
+const exportHint=assetExport.nextElementSibling;
+const assetHelp=document.createElement('details');assetHelp.className='inventory-help';const helpTitle=document.createElement('summary');helpTitle.textContent='Hinweise zum Export';assetHelp.append(helpTitle,exportHint);assets.append(assetHelp);
+assetActions.append(document.querySelector('#inventory-filter-status'),refreshAssets,assetExport);assets.insertBefore(assetActions,document.querySelector('.asset-list-heading'));
+
+const workspaceHeader=document.createElement('header');workspaceHeader.id='workspace-header';
+workspaceHeader.innerHTML='<button id="navigation-toggle" type="button" aria-controls="workspace-navigation" aria-expanded="false">☰<span class="sr-only">Bereiche öffnen</span></button><div class="workspace-heading"><p>DRK Inventar <span aria-hidden="true">/</span> <span id="workspace-breadcrumb">Bestand</span></p><h1 id="workspace-title" tabindex="-1">Geräte und Equipment</h1></div><div class="account-area"><span class="account-avatar" aria-hidden="true">DRK</span><div id="account-slot"></div></div>';
+workspaceHeader.querySelector('#account-slot').append(document.querySelector('#account'),document.querySelector('#logout'));inventory.prepend(workspaceHeader);
+const workspaceNavigation=document.createElement('nav');workspaceNavigation.id='workspace-navigation';workspaceNavigation.setAttribute('aria-label','Bereiche');inventory.prepend(workspaceNavigation);
+const navigationBackdrop=document.createElement('button');navigationBackdrop.id='navigation-backdrop';navigationBackdrop.type='button';navigationBackdrop.setAttribute('aria-label','Bereiche schließen');navigationBackdrop.hidden=true;inventory.prepend(navigationBackdrop);
+const sectionGroups=[{label:'Bestand',ids:['devices','device-record','material','packlists','scanner']},{label:'Erfassung',ids:['device-import','stock-import','journal']},{label:'Geräteakten & Qualität',ids:['device-attention','manual-access','usage','product-duties','duty-fulfilment','end-user','reprocessing-cycles','pack-release','recalls']},{label:'Organisation',ids:['administration','admin-modules','module-overview']}];
+const sectionOrder=sectionGroups.flatMap(group=>group.ids);
+const sectionLabels={devices:'Geräte und Equipment','device-record':'Inventar bearbeiten',material:'Material und Buchungen',scanner:'Barcode und Etiketten','device-import':'Geräte importieren','device-attention':'Fristen und Hinweise','stock-import':'Material importieren',journal:'Bewegungsjournal',packlists:'Packlisten','manual-access':'Gebrauchsanweisungen',usage:'Anwenderbewertung','product-duties':'Produktpflichten','duty-fulfilment':'Erfüllungsabnahme','end-user':'Endanwenderabnahme','reprocessing-cycles':'Aufbereitung','pack-release':'Einsatzfreigabe',recalls:'Rückrufe',administration:'Benutzer und Organisation','admin-modules':'Module und Funktionen','module-overview':'Funktionsübersicht'};
+const sectionIcons={devices:'box','device-record':'edit',material:'layers',scanner:'scan','device-import':'upload','device-attention':'clock','stock-import':'upload',journal:'history',packlists:'list',administration:'settings','admin-modules':'grid','module-overview':'grid'};
+const iconPaths={box:'m12 3 9 5v8l-9 5-9-5V8l9-5Zm0 9 9-4M12 12 3 8m9 4v9',edit:'m15 5 4 4M4 20l4-1L20 7l-4-4L4 15v5Z',layers:'m12 3 10 5-10 5L2 8l10-5ZM2 12l10 5 10-5M2 16l10 5 10-5',scan:'M4 8V4h4m8 0h4v4m0 8v4h-4M8 20H4v-4m4-8v8m4-8v8m4-8v8',upload:'M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5',clock:'M12 7v5l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0',history:'M4 5v5h5M4 10a8 8 0 1 1 1 8m7-11v5l3 2',list:'M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1',settings:'M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6M8 15v6',grid:'M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7',shield:'m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Zm-4 9 3 3 5-6'};
+function navigationIcon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.7');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',iconPaths[name]||iconPaths.shield);svg.append(path);return svg;}
 let activeSection='devices',navigationInitialized=false;
-function sectionAvailable(node){return !node.hidden&&node.dataset.moduleDisabled!=='true'&&(!inventory.classList.contains('modules-unavailable')||['module-overview','administration'].includes(node.id));}
+function sectionAvailable(node){return !node.hidden&&node.dataset.moduleDisabled!=='true'&&(node.id!=='device-record'||!deviceForm.hidden)&&(!inventory.classList.contains('modules-unavailable')||['module-overview','administration','admin-modules'].includes(node.id));}
+function closeNavigation(){document.body.classList.remove('navigation-open');if(!navigationBackdrop.hidden)navigationBackdrop.hidden=true;document.querySelector('#navigation-toggle').setAttribute('aria-expanded','false');}
 function openSection(id,focus=false){
  const node=document.getElementById(id);if(!sectionOrder.includes(id)||!node||!sectionAvailable(node))return;
- activeSection=id;refreshNavigation();
- if(focus){const heading=node.querySelector('h2');if(heading){heading.tabIndex=-1;heading.focus();}}
+ activeSection=id;closeNavigation();refreshNavigation();
+ if(focus){document.querySelector('#workspace-title').focus();window.scrollTo({top:0,behavior:'instant'});}
 }
 function refreshNavigation(){
- // The initial authentication calls can run before the navigation is installed.
  const nav=document.getElementById('workspace-navigation');if(!nav)return;
+ const focusedSection=nav.contains(document.activeElement)?document.activeElement.getAttribute('aria-controls'):null;
+ document.body.classList.toggle('app-active',!inventory.hidden);
  const available=sectionOrder.filter(id=>sectionAvailable(document.getElementById(id)));
  if(moduleConfiguration&&!navigationInitialized){activeSection='devices';navigationInitialized=true;}
- if(!user)navigationInitialized=false;
- if(!available.includes(activeSection))activeSection=available[0]||'module-overview';
+ if(!user){navigationInitialized=false;closeNavigation();}
+ if(moduleConfiguration&&!available.includes(activeSection))activeSection=available[0]||'module-overview';
+ const visibleSection=available.includes(activeSection)?activeSection:'module-overview';
+ document.querySelector('#workspace-title').textContent=sectionLabels[visibleSection];
+ document.querySelector('#workspace-breadcrumb').textContent=sectionGroups.find(group=>group.ids.includes(visibleSection))?.label||'Bestand';
  nav.replaceChildren();
- for(const id of sectionOrder){
-  const section=document.getElementById(id);section.dataset.workspaceInactive=String(id!==activeSection);
-  if(!available.includes(id))continue;
-  const button=document.createElement('button');button.type='button';button.textContent=sectionLabels[id];button.setAttribute('aria-controls',id);
-  if(id===activeSection)button.setAttribute('aria-current','page');
-  button.addEventListener('click',()=>openSection(id,true));nav.append(button);
+ const brand=document.createElement('a');brand.className='brand';brand.href='#workspace-title';brand.innerHTML='<span class="brand-mark" aria-hidden="true">+</span><span>DRK<span class="brand-subtitle">Inventarverwaltung</span></span>';brand.addEventListener('click',event=>{event.preventDefault();openSection('devices',true);});nav.append(brand);
+ const caption=document.createElement('p');caption.className='workspace-caption';caption.textContent='DEIN ARBEITSBEREICH';nav.append(caption);
+ for(const group of sectionGroups){
+  const ids=group.ids.filter(id=>available.includes(id));if(!ids.length)continue;
+  const title=document.createElement('p');title.className='navigation-group';title.textContent=group.label;nav.append(title);
+  for(const id of ids){const button=document.createElement('button');button.type='button';button.append(navigationIcon(sectionIcons[id]),document.createTextNode(sectionLabels[id]));button.setAttribute('aria-controls',id);if(id===visibleSection)button.setAttribute('aria-current','page');button.addEventListener('click',()=>openSection(id,true));nav.append(button);}
  }
+ if(focusedSection)nav.querySelector(`[aria-controls="${focusedSection}"]`)?.focus();
+ const footer=document.createElement('p');footer.className='navigation-footer';footer.textContent='Vorabversion · Kontrollierte Erprobung';nav.append(footer);
+ for(const id of sectionOrder)document.getElementById(id).dataset.workspaceInactive=String(id!==visibleSection);
+ const importButton=document.querySelector('#inventory-import-open'),hideImport=!available.includes('device-import');if(importButton.hidden!==hideImport)importButton.hidden=hideImport;
 }
+function updateInventoryView(){
+ document.querySelector('#metric-devices').textContent=String(deviceRecords.length);
+ document.querySelector('#metric-equipment').textContent=String(deviceRecords.filter(device=>device.intake?.asset_kind==='equipment').length);
+ document.querySelector('#metric-locations').textContent=String(locations.length);
+ filterInventory();
+}
+function filterInventory(){
+ const text=document.querySelector('#inventory-search').value.trim().toLocaleLowerCase('de'),kind=document.querySelector('#inventory-kind').value;
+ const rows=[...document.querySelector('#devices-list').children];let shown=0;
+ for(const row of rows){row.hidden=Boolean((text&&!row.dataset.search.includes(text))||(kind!=='all'&&row.dataset.kind!==kind));if(!row.hidden)shown++;}
+ document.querySelector('#inventory-filter-status').textContent=rows.length?`${shown} von ${rows.length} geladenen Einträgen` : '';
+ const empty=document.querySelector('#inventory-empty');empty.hidden=shown>0;empty.textContent=rows.length?'Keine Treffer. Ändere den Suchbegriff oder den Filter.':'Noch kein Inventar vorhanden. Starte mit der Excel-Vorlage und importiere deine erste CSV-Datei.';
+}
+document.querySelector('#inventory-search').addEventListener('input',filterInventory);
+document.querySelector('#inventory-kind').addEventListener('change',filterInventory);
+document.querySelector('#inventory-import-open').addEventListener('click',()=>openSection('device-import',true));
+document.querySelector('#navigation-toggle').addEventListener('click',()=>{const open=document.body.classList.toggle('navigation-open');navigationBackdrop.hidden=!open;document.querySelector('#navigation-toggle').setAttribute('aria-expanded',String(open));if(open)workspaceNavigation.querySelector('[aria-current]')?.focus();});
+navigationBackdrop.addEventListener('click',closeNavigation);
+document.addEventListener('keydown',event=>{
+ if(!document.body.classList.contains('navigation-open'))return;
+ const toggle=document.querySelector('#navigation-toggle');
+ if(event.key==='Escape'){closeNavigation();toggle.focus();return;}
+ if(event.key==='Tab'&&window.innerWidth<900){
+  const controls=[toggle,...workspaceNavigation.querySelectorAll('a,button:not(:disabled)')];
+  const index=controls.indexOf(document.activeElement);
+  if(index<0||(event.shiftKey&&index===0)||(!event.shiftKey&&index===controls.length-1)){event.preventDefault();controls[event.shiftKey?controls.length-1:0].focus();}
+ }
+});
 new MutationObserver(refreshNavigation).observe(inventory,{subtree:true,attributes:true,attributeFilter:['hidden','data-module-disabled']});
 refreshNavigation();

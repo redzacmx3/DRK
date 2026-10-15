@@ -2,7 +2,7 @@
 // real SQLite/HTTP behavior is covered by Go tests and the Compose smoke check.
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import assert from 'node:assert/strict';
@@ -48,6 +48,7 @@ try {
   throw new Error(`UI did not reach expected state: ${expression}`);
  }
  await call('Page.enable');
+ await call('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
 
  await call('Page.addScriptToEvaluateOnNewDocument',{source:`
  const deps={inventory:[],devices:[],documents:['devices'],compliance:['devices','documents'],reprocessing:['compliance'],packs:[],release:['packs','devices','documents','compliance','reprocessing','recalls'],recalls:[],reminders:['devices']};
@@ -143,6 +144,9 @@ try {
  // The account is not logged in implicitly after setup.
  await evaluate("document.querySelector('#login [name=password]').value='synthetic-password-2026';document.querySelector('#login').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
  await until("visible('#admin-modules') && document.querySelector('#admin-modules-status').textContent.includes('geladen')");
+ await evaluate("openSection('admin-modules')");
+ if(process.env.DRK_UI_SCREENSHOTS){const shot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});await writeFile(join(process.env.DRK_UI_SCREENSHOTS,'drk-administration.png'),Buffer.from(shot.data,'base64'));}
+
  assert.equal(await evaluate("document.querySelector('#admin-modules-choices input[data-module=inventory]').disabled"),true);
  await evaluate("document.querySelector('#admin-modules-choices input[data-module=packs]').click();document.querySelector('#admin-modules-note').value='Synthetic lost reply';window.loseModuleReply=true;document.querySelector('#admin-modules-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
  await until("document.querySelector('#admin-modules-status').textContent.includes('nicht bestätigt')");

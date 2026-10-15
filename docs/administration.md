@@ -2,6 +2,8 @@
 
 Die Verwaltungsoberfläche erscheint nach Anmeldung mit eigenständigem Administratorrecht. Sie verwaltet Betreiber, Betriebsstätten, Lagerorte, Benutzer und die [aktivierten Module](module.md). Benutzer lassen sich anlegen, aktivieren/deaktivieren, mit Rollen je Betriebsstätte ausstatten und mit einem neuen Passwort versehen. Fachrechte für Material oder Geräte ergeben sich ausschließlich aus den ausgewählten Rollen je Betriebsstätte. Mehrere Rollen sind möglich; ohne Zuordnung besteht kein fachlicher Zugriff. Das Administratorrecht umfasst die organisatorische Verwaltung der gesamten Installation. Es ist keine fachliche Qualifikation.
 
+In der Navigation unter **Organisation → Benutzer und Organisation** werden Konten und Zuordnungen verwaltet. **Module und Funktionen** ist ein eigener Bereich für die Modulauswahl. Auf dem Handy zuerst die Menütaste in der Kopfzeile öffnen.
+
 ## Erstes Administratorkonto
 
 Eine neue, leere Installation führt beim ersten Browseraufruf durch die [Ersteinrichtung](ersteinrichtung.md). Dort das erste Administratorkonto, Organisation und Modulauswahl anlegen; der private Einrichtungscode schützt die Übernahme. Es gibt kein Standardpasswort. Nach Abschluss bleibt die Ersteinrichtung geschlossen.

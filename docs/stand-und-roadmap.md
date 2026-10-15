@@ -1,5 +1,7 @@
 # Stand und Roadmap
 
+Oberfläche ab `v0.1.0-rc.4`: gruppierte Seitenleiste, mobile Menünavigation, kompakte Inventarliste, Kennzahlen aus geladenen Daten, lokale Suche und Artfilter. Import, Bearbeitung, Fristen sowie Benutzer- und Modulverwaltung besitzen getrennte Ansichten. HTTP-Korrektur aus `v0.1.0-rc.3` bleibt enthalten; Datenbankschema unverändert 34. Release-Verfügbarkeit jeweils unter GitHub Actions / Releases prüfen.
+
 Aktueller Stand: Schema 34. Diese Seite fasst den heutigen Funktionsumfang zusammen; ältere Meilensteine sind in der [Entwicklungshistorie](entwicklungshistorie.md) dokumentiert. Der [Blueprint](blueprint-v2.md) bleibt die konzeptionelle Grundlage und ist keine Behauptung vollständig umgesetzter Funktionen.
 
 ## Vorhanden

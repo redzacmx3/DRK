@@ -51,3 +51,11 @@ Für das Update auf diese Oberfläche das Image auf `ghcr.io/redzacmx3/drk:v0.1.
 Die Benutzeranlage und weitere Speicheraktionen funktionieren auch unter einer lokalen HTTP-Adresse wie `http://192.168.178.42:8666`. Vorher verhinderte die nur in sicheren Browserkontexten verfügbare Funktion `crypto.randomUUID()` das Absenden. Wiederholungsschlüssel werden nun bei Bedarf mit `crypto.getRandomValues()` als kryptografisch zufällige UUID v4 erzeugt. Unbestätigte Vorgänge behalten denselben Schlüssel und unveränderten Inhalt.
 
 Nach erfolgreicher Veröffentlichung in Dockhand `DRK_IMAGE=ghcr.io/redzacmx3/drk:v0.1.0-rc.3` setzen, das Image neu laden und den Stack neu bereitstellen. Datenvolume und übrige Einstellungen beibehalten; Schema 34 bleibt unverändert. Anschließend die Browserseite vollständig neu laden.
+
+## Neue App-Oberfläche ab v0.1.0-rc.4
+
+Die Oberfläche bietet eine dunkle, gruppierte Seitenleiste mit Symbolen, eine helle Arbeitsfläche und eine Kopfzeile mit Bereich und Konto. Auf dem Handy öffnet die Menütaste die Navigation. Geräte und Equipment erscheinen als kompakte Liste mit getrennten Inventarnummern, Bezeichnungen, Standorten und Arten; Einzelheiten lassen sich je Eintrag aufklappen. Kennzahlen beziehen sich ausdrücklich auf den geladenen Bestand. Suche und Artfilter durchsuchen nur die geladene Übersicht, nicht den vollständigen Datenbestand hinter dem Serverlimit.
+
+Geräteimport, Inventarbearbeitung und Fristen haben eigene Ansichten. Administratoren finden Benutzer und Organisation sowie Module und Funktionen als getrennte Menüpunkte. Vorhandene Eingaben und unbestätigte Vorgänge bleiben beim Wechsel erhalten. Schlüsselerzeugung funktioniert weiterhin über lokales HTTP; Etikettendruck bleibt verfügbar. Schriften und Symbole werden ohne externe Dienste geladen.
+
+Nach erfolgreichem Release-Build in Dockhand `DRK_IMAGE=ghcr.io/redzacmx3/drk:v0.1.0-rc.4` setzen, Image laden und Stack neu bereitstellen. Das Datenvolume und alle übrigen Einstellungen beibehalten. Keine neue Datenbankmigration: weiterhin Schema 34. Anschließend die Browserseite vollständig neu laden.
