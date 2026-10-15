@@ -45,3 +45,9 @@ docker compose --env-file .env -f compose.release.yaml up -d --wait
 Jeder Bereich wird einzeln geöffnet. Auf großen Bildschirmen steht links eine Menüleiste; auf kleinen Bildschirmen ist die Bereichsauswahl horizontal scrollbar. Geräte und Equipment öffnen sich nach der Anmeldung zuerst. Deaktivierte Module erscheinen nicht im Menü; Verwaltung ist nur für Administratoren sichtbar. Ein Bereichswechsel erhält Formulareingaben und unbestätigte Vorgänge. Die Barcode-Übergabe öffnet automatisch die Materialbuchung beziehungsweise die passende Packliste.
 
 Für das Update auf diese Oberfläche das Image auf `ghcr.io/redzacmx3/drk:v0.1.0-rc.2` setzen, sobald das entsprechende Release erfolgreich gebaut wurde. Datenvolume und vorhandene Stack-Einstellungen beibehalten. Die Datenbank bleibt auf Schema 34; für diese reine Oberflächenänderung ist keine zusätzliche Migration erforderlich. Anschließend die Browserseite neu laden.
+
+## HTTP-Speicheraktionen ab v0.1.0-rc.3
+
+Die Benutzeranlage und weitere Speicheraktionen funktionieren auch unter einer lokalen HTTP-Adresse wie `http://192.168.178.42:8666`. Vorher verhinderte die nur in sicheren Browserkontexten verfügbare Funktion `crypto.randomUUID()` das Absenden. Wiederholungsschlüssel werden nun bei Bedarf mit `crypto.getRandomValues()` als kryptografisch zufällige UUID v4 erzeugt. Unbestätigte Vorgänge behalten denselben Schlüssel und unveränderten Inhalt.
+
+Nach erfolgreicher Veröffentlichung in Dockhand `DRK_IMAGE=ghcr.io/redzacmx3/drk:v0.1.0-rc.3` setzen, das Image neu laden und den Stack neu bereitstellen. Datenvolume und übrige Einstellungen beibehalten; Schema 34 bleibt unverändert. Anschließend die Browserseite vollständig neu laden.
