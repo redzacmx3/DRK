@@ -54,7 +54,7 @@ try {
  const names={inventory:'Inventarisierung',devices:'Geräteakten',documents:'Dokumente',compliance:'Produktpflichten',reprocessing:'Aufbereitung',packs:'Packlisten',release:'Einsatzfreigabe',recalls:'Rückrufe',reminders:'Erinnerungen'};
  window.config=(enabled,revision=1)=>({revision,editable:true,enabled_modules:enabled,modules:Object.entries(deps).map(([id,depends_on])=>({id,name:names[id],required:id==='inventory',enabled:enabled.includes(id),depends_on}))});
  window.moduleData=config(['inventory']);window.setupPending=true;window.noSetupCSRF=false;window.failStatus=true;window.failedChecks=false;window.requests=[];window.completePosts=[];window.modulePosts=[];window.moduleReplies=new Map();window.logged=false;window.admin=true;window.currentUsername='setup-admin';window.events=[];
- window.visible=selector=>{const node=document.querySelector(selector);return Boolean(node&&!node.hidden&&node.getClientRects().length);};
+ window.visible=selector=>{const node=document.querySelector(selector);return Boolean(node&&!node.closest('[hidden],[data-module-disabled=\"true\"]')&&!node.closest('#inventory.modules-unavailable'));};
  window.fetch=async(input,options={})=>{
  const path=typeof input==='string'?input:input.url;requests.push({path,method:options.method||'GET'});let data;
  const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});

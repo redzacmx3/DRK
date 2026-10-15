@@ -7,4 +7,15 @@ select{display:block;width:100%;padding:12px;margin-top:6px;font:inherit;border:
 
 [data-module-disabled="true"]{display:none!important}#inventory.modules-unavailable>:not(#module-overview):not(#account):not(#logout){display:none!important}#module-overview{padding:16px;margin:24px 0;border:1px solid #dce1e7;border-radius:8px;background:white}#module-list li{padding:8px;margin:6px 0;border:0}#module-status{font-weight:600}
 
-#setup,#admin-modules{padding:20px;margin:24px 0;border:1px solid #dce1e7;border-radius:8px;background:white}#setup-progress{font-weight:600}#setup-back{margin-right:8px}#setup-modules small,#admin-modules-choices small{display:block;margin:4px 0 0 28px;color:#526174}#setup-checks li{padding:12px}#setup-checks [data-check-status="error"]{border-left:4px solid #b51b2b}#setup-checks [data-check-status="warning"]{border-left:4px solid #ae7200}#inventory.modules-unavailable>#administration{display:block!important}
+#setup,#admin-modules{padding:20px;margin:24px 0;border:1px solid #dce1e7;border-radius:8px;background:white}#setup-progress{font-weight:600}#setup-back{margin-right:8px}#setup-modules small,#admin-modules-choices small{display:block;margin:4px 0 0 28px;color:#526174}#setup-checks li{padding:12px}#setup-checks [data-check-status="error"]{border-left:4px solid #b51b2b}#setup-checks [data-check-status="warning"]{border-left:4px solid #ae7200}#inventory.modules-unavailable>#administration:not([data-workspace-inactive="true"]){display:block!important}
+
+/* One workspace at a time, with a persistent navigation on wide screens. */
+[data-workspace-inactive="true"]{display:none!important}
+#workspace-navigation{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0}
+#workspace-navigation button{background:white;color:#263244;border:1px solid #dce1e7;text-align:left;padding:10px 12px}
+#workspace-navigation button[aria-current="page"]{background:#b51b2b;color:white;border-color:#b51b2b;font-weight:700}
+@media(min-width:1100px){main{max-width:1000px;padding-left:260px}#workspace-navigation{position:fixed;left:24px;top:24px;bottom:24px;width:220px;overflow-y:auto;display:flex;flex-direction:column;flex-wrap:nowrap;align-content:start;margin:0}#workspace-navigation button{flex-shrink:0}}
+@media(max-width:600px){main{margin:12px auto;padding:16px}h1{font-size:2rem}#workspace-navigation{display:flex;flex-wrap:nowrap;overflow-x:auto;padding:4px 0 12px}#workspace-navigation button{white-space:nowrap;flex-shrink:0}}
+@media print{#workspace-navigation{display:none!important}#inventory #scanner[data-workspace-inactive]{display:block!important}}
+
+#inventory.modules-unavailable>#workspace-navigation{display:flex!important}

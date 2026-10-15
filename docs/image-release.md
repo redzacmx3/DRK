@@ -39,3 +39,9 @@ docker compose --env-file .env -f compose.release.yaml up -d --wait
 ```
 
 `init` migriert vorhandene Datenbanken nicht automatisch. Die Rückkehr zu einem älteren Image nach einer Migration setzt eine passende geprüfte Sicherung voraus. [Sicherung und Wiederherstellung](verschluesselte-backups.md).
+
+## Navigation ab v0.1.0-rc.2
+
+Jeder Bereich wird einzeln geöffnet. Auf großen Bildschirmen steht links eine Menüleiste; auf kleinen Bildschirmen ist die Bereichsauswahl horizontal scrollbar. Geräte und Equipment öffnen sich nach der Anmeldung zuerst. Deaktivierte Module erscheinen nicht im Menü; Verwaltung ist nur für Administratoren sichtbar. Ein Bereichswechsel erhält Formulareingaben und unbestätigte Vorgänge. Die Barcode-Übergabe öffnet automatisch die Materialbuchung beziehungsweise die passende Packliste.
+
+Für das Update auf diese Oberfläche das Image auf `ghcr.io/redzacmx3/drk:v0.1.0-rc.2` setzen, sobald das entsprechende Release erfolgreich gebaut wurde. Datenvolume und vorhandene Stack-Einstellungen beibehalten. Die Datenbank bleibt auf Schema 34; für diese reine Oberflächenänderung ist keine zusätzliche Migration erforderlich. Anschließend die Browserseite neu laden.

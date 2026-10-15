@@ -27,6 +27,7 @@ function applyModuleVisibility(){
  for(const node of document.querySelectorAll('[data-modules]'))node.dataset.moduleDisabled=String(!node.dataset.modules.split(' ').every(moduleEnabled));
  for(const selector of ['#incident-document','#report-document','#correction-document','#maintenance-document'])document.querySelector(selector).closest('label').dataset.moduleDisabled=String(!moduleEnabled('documents'));
  for(const node of document.querySelectorAll('[data-reprocessing-input]'))node.dataset.moduleDisabled=String(!moduleEnabled('reprocessing'));
+ refreshNavigation();
  const reprocessingToggle=document.querySelector('#duty-reprocessing-enabled');if(moduleConfiguration&&!moduleEnabled('reprocessing')&&reprocessingToggle&&!dutyPending)reprocessingToggle.checked=false;
 }
 function invalidateModuleDrafts(){
@@ -77,7 +78,7 @@ async function moduleFetch(input,options){
 }
 for(const type of ['click','submit','change','input'])document.addEventListener(type,event=>{
  const node=event.target instanceof Element?event.target:null;
- if(node?.closest('[data-module-disabled="true"]')||node?.closest('#inventory.modules-unavailable')&&!node.closest('#module-overview')&&!node.closest('#logout')&&!node.closest('#administration')){event.preventDefault();event.stopImmediatePropagation();document.querySelector('#module-status').textContent='Diese Funktion ist deaktiviert. Unbestätigte Vorgänge bleiben erhalten und benötigen denselben Funktionsumfang und dasselbe Konto.';}
+ if(node?.closest('[data-module-disabled="true"]')||node?.closest('#inventory.modules-unavailable')&&!node.closest('#module-overview')&&!node.closest('#logout')&&!node.closest('#administration')&&!node.closest('#workspace-navigation')){event.preventDefault();event.stopImmediatePropagation();document.querySelector('#module-status').textContent='Diese Funktion ist deaktiviert. Unbestätigte Vorgänge bleiben erhalten und benötigen denselben Funktionsumfang und dasselbe Konto.';}
 },true);
 
 const kindNames = {receipt:'Wareneingang',transfer:'Umlagerung',consumption:'Entnahme',inventory:'Inventur',reversal:'Gegenbuchung'};
@@ -551,10 +552,10 @@ document.querySelector('#scan-handoff').addEventListener('submit',event => {
  if (action === 'receipts') {document.querySelector('#batch').value = batch.id;document.querySelector('#target').value = document.querySelector('#scan-target').value;}
  else {document.querySelector('#source').value = document.querySelector('#scan-source').value;if (!document.querySelector('#source').value) {status.textContent = 'Quellbestand neu laden und ausdrücklich auswählen.';return;}if (action === 'transfers') document.querySelector('#target').value = document.querySelector('#scan-target').value;}
  scanBookingBasis = scannerResult.identifier_id && quantity !== null ? {owner:user.id,batch:batch.id,identifier_id:scannerResult.identifier_id,pack_count:document.querySelector('#scan-packs').valueAsNumber,quantity} : null;
- document.querySelector('#quantity').value = quantity === null ? '' : String(quantity);lockBooking(false);booking.scrollIntoView({behavior:'smooth'});status.textContent = 'Scan in Buchungsformular übernommen. Menge, Orte und Zustand nochmals prüfen und dort ausdrücklich buchen.';
+ document.querySelector('#quantity').value = quantity === null ? '' : String(quantity);lockBooking(false);openSection('material');booking.scrollIntoView({behavior:'smooth'});status.textContent = 'Scan in Buchungsformular übernommen. Menge, Orte und Zustand nochmals prüfen und dort ausdrücklich buchen.';
 });
 for (const id of ['action','batch','source','quantity']) document.querySelector(`#${id}`).addEventListener('input',() => {if (scanBookingBasis && !pending) {scanBookingBasis = null;status.textContent = 'Scanner-Vorauswahl geändert. Menge wird nun als manuelle Basismenge gebucht.';}});
-document.querySelector('#scan-open-location').addEventListener('click',async () => {const id = scannerResult?.location?.id;if (!id) return;const pack = packVersions.find(pack => pack.location_id === id);if (!pack) {status.textContent = 'Für diesen Lagerort ist noch keine Sollpackliste hinterlegt.';return;}if (packPending) {status.textContent = 'Offenen Packlistenvorgang zuerst abschließen.';return;}checkDraft = null;document.querySelector('#pack-choice').value = pack.id;await loadMaterial();document.querySelector('#packlists').scrollIntoView({behavior:'smooth'});});
+document.querySelector('#scan-open-location').addEventListener('click',async () => {const id = scannerResult?.location?.id;if (!id) return;const pack = packVersions.find(pack => pack.location_id === id);if (!pack) {status.textContent = 'Für diesen Lagerort ist noch keine Sollpackliste hinterlegt.';return;}if (packPending) {status.textContent = 'Offenen Packlistenvorgang zuerst abschließen.';return;}checkDraft = null;document.querySelector('#pack-choice').value = pack.id;await loadMaterial();openSection('packlists');document.querySelector('#packlists').scrollIntoView({behavior:'smooth'});});
 document.querySelector('#identifier-form').addEventListener('submit',event => {event.preventDefault();sendIdentifier('add');});
 document.querySelector('#identifier-revoke').addEventListener('submit',event => {event.preventDefault();sendIdentifier('revoke');});
 function labelChoices() {
@@ -1264,3 +1265,36 @@ adminModulesForm.addEventListener('submit',async event=>{
 });
 
 startInstallation();
+
+
+// Keep module and role visibility independent from the selected workspace.
+const workspaceNavigation=document.createElement('nav');
+workspaceNavigation.id='workspace-navigation';workspaceNavigation.setAttribute('aria-label','Bereiche');
+inventory.prepend(workspaceNavigation);
+const sectionOrder=['devices','material','scanner','stock-import','journal','packlists','manual-access','usage','product-duties','duty-fulfilment','end-user','reprocessing-cycles','pack-release','recalls','administration','module-overview'];
+const sectionLabels={devices:'Geräte und Equipment',material:'Material und Buchungen',scanner:'Barcode und Etiketten','stock-import':'Materialimport',journal:'Bewegungsjournal',packlists:'Packlisten','manual-access':'Gebrauchsanweisungen',usage:'Anwenderbewertung','product-duties':'Produktpflichten','duty-fulfilment':'Erfüllungsabnahme','end-user':'Endanwenderabnahme','reprocessing-cycles':'Aufbereitung','pack-release':'Einsatzfreigabe',recalls:'Rückrufe',administration:'Verwaltung','module-overview':'Funktionsübersicht'};
+let activeSection='devices',navigationInitialized=false;
+function sectionAvailable(node){return !node.hidden&&node.dataset.moduleDisabled!=='true'&&(!inventory.classList.contains('modules-unavailable')||['module-overview','administration'].includes(node.id));}
+function openSection(id,focus=false){
+ const node=document.getElementById(id);if(!sectionOrder.includes(id)||!node||!sectionAvailable(node))return;
+ activeSection=id;refreshNavigation();
+ if(focus){const heading=node.querySelector('h2');if(heading){heading.tabIndex=-1;heading.focus();}}
+}
+function refreshNavigation(){
+ // The initial authentication calls can run before the navigation is installed.
+ const nav=document.getElementById('workspace-navigation');if(!nav)return;
+ const available=sectionOrder.filter(id=>sectionAvailable(document.getElementById(id)));
+ if(moduleConfiguration&&!navigationInitialized){activeSection='devices';navigationInitialized=true;}
+ if(!user)navigationInitialized=false;
+ if(!available.includes(activeSection))activeSection=available[0]||'module-overview';
+ nav.replaceChildren();
+ for(const id of sectionOrder){
+  const section=document.getElementById(id);section.dataset.workspaceInactive=String(id!==activeSection);
+  if(!available.includes(id))continue;
+  const button=document.createElement('button');button.type='button';button.textContent=sectionLabels[id];button.setAttribute('aria-controls',id);
+  if(id===activeSection)button.setAttribute('aria-current','page');
+  button.addEventListener('click',()=>openSection(id,true));nav.append(button);
+ }
+}
+new MutationObserver(refreshNavigation).observe(inventory,{subtree:true,attributes:true,attributeFilter:['hidden','data-module-disabled']});
+refreshNavigation();

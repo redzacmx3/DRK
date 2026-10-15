@@ -45,7 +45,7 @@ try {
  }
  async function until(expression) {
   for (let attempt=0;attempt<100;attempt++) {if (await evaluate(expression)) return;await new Promise(resolve => setTimeout(resolve,50));}
-  throw new Error(`UI did not reach expected state: ${expression}`);
+  throw new Error(`UI did not reach expected state: ${expression}; ${JSON.stringify(await evaluate("({active:activeSection,basis:document.querySelector('#device-basis').textContent,invalid:[...document.querySelectorAll('#device-control-form :invalid')].map(n=>n.id)})"))}`);
  }
  await call('Page.enable');
  await call('Page.addScriptToEvaluateOnNewDocument',{source:`

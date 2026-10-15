@@ -53,7 +53,7 @@ try {
  const dependencies={inventory:[],devices:[],documents:['devices'],compliance:['devices','documents'],reprocessing:['compliance'],packs:[],release:['packs','devices','documents','compliance','reprocessing','recalls'],recalls:[],reminders:['devices']};
  window.moduleConfig=(enabled)=>({revision:1,enabled_modules:enabled,modules:Object.entries(dependencies).map(([id,depends_on])=>({id,name:id==='inventory'?'Inventarisierung':'<img src=x> '+id,enabled:enabled.includes(id),required:id==='inventory',depends_on}))});
  window.config=window.moduleConfig(['inventory']);window.requests=[];window.deviceName='Equipment';window.detailPosts=[];window.replies=new Map();window.userName='test';window.packs=[];
- window.visible=(selector)=>{const node=document.querySelector(selector);return Boolean(node&&!node.hidden&&node.getClientRects().length);};
+ window.visible=(selector)=>{const node=document.querySelector(selector);return Boolean(node&&!node.closest('[hidden],[data-module-disabled=\"true\"]')&&!node.closest('#inventory.modules-unavailable'));};
  window.fetch=async(input,options={})=>{
   const path=typeof input==='string'?input:input.url;window.requests.push({path,method:options.method||'GET'});let data;
   if(path==='/api/v1/setup/status')data={pending:false};
@@ -89,6 +89,12 @@ try {
  await call('Page.navigate',{url});
  await until("visible('#booking') && document.querySelector('#devices-list').children.length===1");
  assert.deepEqual(await evaluate("[...document.querySelector('#device-action').options].map(o=>o.value)"),['details','master_data']);
+ assert.equal(await evaluate("document.querySelector('#devices').getClientRects().length>0 && document.querySelector('#material').getClientRects().length===0"),true);
+ await evaluate("document.querySelector('[aria-controls=material]').click()");
+ assert.equal(await evaluate("document.querySelector('#material').getClientRects().length>0 && document.querySelector('#devices').getClientRects().length===0 && document.querySelector('[aria-controls=material]').getAttribute('aria-current')==='page'"),true);
+ assert.equal(await evaluate("document.querySelector('[aria-controls=administration]')===null && document.querySelector('[aria-controls=packlists]')===null"),true);
+ await evaluate("document.querySelector('[aria-controls=devices]').click()");
+
  assert.ok(await evaluate("visible('#device-import') && !visible('#device-attention') && !visible('#document-upload-form') && !visible('#packlists') && !visible('#recalls') && !visible('#usage') && !visible('#pack-release')"));
  assert.equal(await evaluate("document.querySelector('#module-list img')===null"),true);
  assert.equal(await evaluate("requests.some(r=>/documents|attention|reminders|recalls|packlists|usage|product-duties|reprocessing|release/.test(r.path))"),false);
