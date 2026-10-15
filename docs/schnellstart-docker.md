@@ -53,6 +53,8 @@ Zertifikat und Schlüssel vorbereiten und Traefik wie in [nas-dockhand.md](nas-d
 
 ## Installation eines fertigen Images
 
+Für die einfache Installation die `compose.release.yaml` aus einem erfolgreich veröffentlichten [GitHub-Release](https://github.com/redzacmx3/DRK/releases) verwenden. Sie enthält keinen lokalen Build und ist auf die jeweilige Version voreingestellt. [Veröffentlichung, Dockhand und Updates](image-release.md).
+
 Der GitHub-Actions-Workflow `.github/workflows/container.yml` baut nach Push auf `main` ein amd64-Image für `ghcr.io/redzacmx3/drk:latest` und einen unveränderlichen Commit-Tag. Ein erfolgreicher Workflowlauf und die passende Package-Sichtbarkeit sind Voraussetzung; das Vorhandensein der Workflowdatei bestätigt noch keine Veröffentlichung. Für Downloads ohne Anmeldung muss das Package auf GitHub öffentlich sein; sonst vorab `docker login ghcr.io` mit einem berechtigten Konto.
 
 Nach bestätigter Veröffentlichung `DRK_IMAGE=ghcr.io/redzacmx3/drk:latest` in den Stack-Variablen setzen. Es genügt dann die Compose-Datei; der Quellcode wird nicht benötigt:

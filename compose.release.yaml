@@ -1,0 +1,42 @@
+# Ready-made image only: no source checkout or local build required.
+name: drk-release
+x-app: &app
+  image: ${DRK_IMAGE:-ghcr.io/redzacmx3/drk:latest}
+  user: "1000:1000"
+  read_only: true
+  init: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  volumes:
+    - inventory_data:/data
+    - ${DRK_TLS_DIR:-./tls}:/certs:ro
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m,uid=1000,gid=1000,mode=1770
+services:
+  init:
+    <<: *app
+    command: ["init", "--db", "/data/inventory.db"]
+    restart: "no"
+  inventory:
+    <<: *app
+    environment:
+      DRK_MODULES: ${DRK_MODULES:-all}
+      DRK_CLAMD_ADDRESS: ${DRK_CLAMD_ADDRESS:-}
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    command: ["serve", "--db", "/data/inventory.db", "--setup-code-file", "/data/setup-code.txt", "--device-reminders=${DRK_DEVICE_REMINDERS:-true}", "--listen", "0.0.0.0:8080", "--allow-network-listen", "--http=${DRK_HTTP:-true}", "--origin", "${DRK_ORIGIN:-http://localhost:8080}", "--tls-cert", "/certs/cert.pem", "--tls-key", "/certs/key.pem"]
+    ports:
+      - "${DRK_BIND_IP:-127.0.0.1}:${DRK_PORT:-8080}:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/app/inventory", "healthcheck", "--url", "${DRK_HEALTH_URL:-http://localhost:8080/health/ready}", "--ca", "${DRK_HEALTH_CA:-}"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 1s
+    stop_grace_period: 10s
+volumes:
+  inventory_data:
+    name: ${DRK_DATA_VOLUME:-drk_release_inventory_data}

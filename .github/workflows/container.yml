@@ -2,18 +2,48 @@ name: Container image
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 permissions:
   contents: read
   packages: write
 concurrency:
-  group: container-main
-  cancel-in-progress: true
+  group: container-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
 jobs:
   image:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - name: Test and vet
+        run: |
+          go test -mod=vendor -timeout 20m ./...
+          go vet -mod=vendor ./...
+      - name: Select image tags
+        id: tags
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]] && ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9][a-zA-Z0-9.-]*)?$ ]]; then
+            echo 'Unsupported release tag' >&2
+            exit 1
+          fi
+          {
+            echo 'tags<<DRK_TAGS'
+            echo "ghcr.io/redzacmx3/drk:$GITHUB_SHA"
+            if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+              echo 'ghcr.io/redzacmx3/drk:latest'
+            elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+              echo "ghcr.io/redzacmx3/drk:$GITHUB_REF_NAME"
+            fi
+            echo DRK_TAGS
+          } >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -21,13 +51,65 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
           push: true
           platforms: linux/amd64
-          tags: |
-            ghcr.io/redzacmx3/drk:latest
-            ghcr.io/redzacmx3/drk:${{ github.sha }}
+          tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/redzacmx3/DRK
             org.opencontainers.image.revision=${{ github.sha }}
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare installation files and notes
+        env:
+          DRK_RELEASE_TAG: ${{ github.ref_name }}
+          DRK_IMAGE_DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          tag = os.environ['DRK_RELEASE_TAG']
+          image = 'ghcr.io/redzacmx3/drk:' + tag
+          destination = Path('release-files')
+          destination.mkdir()
+          compose = Path('compose.release.yaml').read_text().replace('ghcr.io/redzacmx3/drk:latest', image)
+          (destination / 'compose.release.yaml').write_text(compose)
+          (destination / 'env.release.example').write_text(Path('env.release.example').read_text())
+          (destination / 'prepare-nas-tls.sh').write_bytes(Path('scripts/prepare-nas-tls.sh').read_bytes())
+          notes = f'''Fertiges Docker-Image für linux/amd64 (unter anderem Ugreen DXP2800):
+
+          `{image}`
+
+          Image-Digest: `{os.environ['DRK_IMAGE_DIGEST']}`
+
+          Die angehängte Compose-Datei verwendet diese Version ohne lokalen Build.
+          In Dockhand importieren und die genaue Browseradresse als DRK_ORIGIN setzen.
+          Danach im Browser die Ersteinrichtung durchführen; der private Einrichtungscode liegt im Datenvolume unter /data/setup-code.txt.
+
+          Bestehende Installation vor dem Update sichern und ausdrücklich auf Schema 34 migrieren.
+          Anleitung: https://github.com/redzacmx3/DRK/blob/{tag}/docs/image-release.md
+
+          Eine Vorabversion dient der kontrollierten Erprobung.
+          '''
+          (destination / 'notes.md').write_text(notes)
+          PY
+      - name: Publish GitHub release after image publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          options=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then options+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag \
+            --title "DRK $GITHUB_REF_NAME" --notes-file release-files/notes.md \
+            "${options[@]}" release-files/compose.release.yaml \
+            release-files/env.release.example release-files/prepare-nas-tls.sh

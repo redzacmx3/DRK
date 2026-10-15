@@ -1,5 +1,7 @@
 # DRK Warenbestand
 
+Fertiges Image ohne lokalen Build: [GitHub-Releases und Dockhand-Installation](docs/image-release.md).
+
 Einfacher HTTP/HTTPS-Teststart: [Docker-Schnellstart](docs/schnellstart-docker.md).
 
 Inventarisierung von Geräten, Equipment und Material ist der dauerhaft aktive Kern. Die [erste Einrichtung im Browser](docs/ersteinrichtung.md) legt Administratorkonto, Organisation und benötigte Module fest. Zusätzliche Geräteakten und weitere Funktionsgruppen lassen sich danach in der Verwaltung zuschalten. `DRK_MODULES` bleibt als Startvorgabe verfügbar; unveränderte Neustarts bewahren spätere Web-Änderungen. [Module, Abhängigkeiten und Umstellung](docs/module.md).
